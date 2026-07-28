@@ -165,15 +165,17 @@ Open [http://localhost:3000](http://localhost:3000)
 
 Navigate to [http://localhost:3000/case](http://localhost:3000/case)
 
-Fill in:
+**Quick start:** Click **Load Example Case** repeatedly to cycle through 4 scenarios (mTBI/stroke, cervical MVA, workplace fall). See [`docs/demo-case-example.md`](docs/demo-case-example.md).
+
+Fill in manually if preferred:
 
 | Section | Example |
 |---------|---------|
-| Patient | Jane Doe, 45, Female |
-| Accident | Motor vehicle collision, 2024-01-15 |
-| Diagnosis | Stroke |
-| Symptoms | Headache, cognitive difficulty |
-| Medical Question | *Can mild traumatic brain injury increase the risk of stroke?* |
+| Patient | Robert Chen, 52, Male |
+| Accident | Motor vehicle collision, 2023-09-14 |
+| Diagnosis | Acute ischemic stroke; mild TBI from collision |
+| Symptoms | Headache, confusion, then right-sided weakness on day 18 |
+| Medical Question | *Did the mild TBI materially contribute to the ischemic stroke?* |
 
 Optionally attach PDF/DOCX files (display only — not sent to API in this phase).
 

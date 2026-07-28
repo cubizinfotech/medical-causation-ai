@@ -7,7 +7,11 @@ export const caseFormSchema = z.object({
     .min(1, "Age is required")
     .regex(/^\d{1,3}$/, "Enter a valid age"),
   patientGender: z.string().min(1, "Gender is required"),
-  accidentDate: z.string().min(1, "Accident date is required"),
+  accidentDate: z
+    .string()
+    .min(1, "Accident date is required")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use format YYYY-MM-DD (e.g. 2023-09-14)")
+    .refine((value) => !Number.isNaN(Date.parse(value)), "Enter a valid date"),
   accidentType: z.string().min(2, "Accident type is required"),
   accidentDescription: z
     .string()

@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { appMetadata } from "@/lib/config";
-import { extensionHydrationFixScript } from "@/lib/extension-hydration-fix";
 import { QueryProvider } from "@/providers/query-provider";
 import { SiteFooter, SiteHeader } from "@/components/layout";
 import "@/styles/globals.css";
@@ -34,9 +32,6 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body suppressHydrationWarning className="min-h-full flex flex-col">
-        <Script id="extension-hydration-fix" strategy="beforeInteractive">
-          {extensionHydrationFixScript}
-        </Script>
         <QueryProvider>
           <SiteHeader />
           <div className="flex-1">{children}</div>

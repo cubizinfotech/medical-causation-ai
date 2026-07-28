@@ -4,11 +4,11 @@ export function Badge({
   className,
   variant = "default",
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & {
+}: React.HTMLAttributes<HTMLSpanElement> & {
   variant?: "default" | "secondary" | "outline";
 }) {
   return (
-    <div
+    <span
       className={cn(
         "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
         variant === "default" && "border-transparent bg-primary text-primary-foreground",
