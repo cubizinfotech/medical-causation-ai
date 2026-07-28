@@ -1,6 +1,65 @@
 import type { EvidenceClassificationType } from '../constants';
 import type { RetrievalFilters } from '@modules/rag/types';
 
+export type PublicSourceName =
+  | 'PubMed'
+  | 'PubMed Central'
+  | 'NIH'
+  | 'ClinicalTrials.gov'
+  | 'Semantic Scholar'
+  | 'Crossref'
+  | 'WHO'
+  | 'CDC';
+
+export interface PublicReference {
+  id: string;
+  title: string;
+  source: PublicSourceName;
+  url: string;
+  year?: number;
+  excerpt?: string;
+}
+
+export interface PrivateReference {
+  chunkId: string;
+  documentName: string;
+  pageNumber: number | null;
+  citationText: string;
+  sourceFile: string;
+  sourceType: 'private_kb';
+}
+
+export interface TimelineEvent {
+  date: string;
+  event: string;
+  significance: string;
+}
+
+export interface RiskFactor {
+  factor: string;
+  category: 'pre-existing' | 'lifestyle' | 'comorbidity' | 'other';
+  impact: string;
+}
+
+export interface CrossExamQuestion {
+  question: string;
+  purpose: string;
+}
+
+export interface CrossExamCategory {
+  name: string;
+  questions: CrossExamQuestion[];
+}
+
+export interface ResearchSourcesSummary {
+  private: Array<{ name: string; description: string; count: number }>;
+  public: Array<{
+    name: string;
+    description: string;
+    status: 'simulated' | 'live';
+  }>;
+}
+
 /**
  * Patient case input for medical analysis.
  */
@@ -91,7 +150,7 @@ export interface MedicalAnalysisLlmOutput {
   }>;
 }
 
-export interface MedicalAnalysisResult {
+export interface BaseMedicalAnalysisResult {
   executiveSummary: string;
   patientSummary: string;
   medicalQuestion: string;
@@ -111,6 +170,22 @@ export interface MedicalAnalysisResult {
     llmModel: string;
     chunkCount: number;
     generatedAt: string;
+  };
+}
+
+export interface MedicalAnalysisResult extends BaseMedicalAnalysisResult {
+  causationOpinion: string;
+  timelineEvents: TimelineEvent[];
+  riskFactors: RiskFactor[];
+  publicReferences: PublicReference[];
+  privateReferences: PrivateReference[];
+  crossExamination: CrossExamCategory[];
+  researchSources: ResearchSourcesSummary;
+  legalDisclaimer: string;
+  metadata: BaseMedicalAnalysisResult['metadata'] & {
+    publicReferenceCount?: number;
+    privateReferenceCount?: number;
+    crossExamQuestionCount?: number;
   };
 }
 

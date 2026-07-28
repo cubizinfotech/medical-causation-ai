@@ -129,6 +129,7 @@ describe('MedicalAnalysisService', () => {
   let aiService: jest.Mocked<Pick<AiService, 'complete'>>;
   let safetyValidator: AnalysisSafetyValidator;
   let responseMapper: jest.Mocked<Pick<AnalysisResponseMapper, 'mapToResult'>>;
+  let reportEnrichment: { enrich: jest.Mock };
 
   beforeEach(() => {
     retrievalService = {
@@ -145,6 +146,19 @@ describe('MedicalAnalysisService', () => {
     };
     safetyValidator = new AnalysisSafetyValidator();
     responseMapper = { mapToResult: jest.fn().mockReturnValue(mappedResult) };
+    reportEnrichment = {
+      enrich: jest.fn().mockImplementation((_result) => ({
+        ...mappedResult,
+        causationOpinion: mappedResult.conclusion,
+        timelineEvents: [],
+        riskFactors: [],
+        publicReferences: [],
+        privateReferences: [],
+        crossExamination: [],
+        researchSources: { private: [], public: [] },
+        legalDisclaimer: 'Disclaimer',
+      })),
+    };
 
     service = new MedicalAnalysisService(
       retrievalService as unknown as RetrievalService,
@@ -155,6 +169,7 @@ describe('MedicalAnalysisService', () => {
       } as unknown as AnalysisPromptBuilder,
       safetyValidator,
       responseMapper,
+      reportEnrichment as never,
     );
   });
 

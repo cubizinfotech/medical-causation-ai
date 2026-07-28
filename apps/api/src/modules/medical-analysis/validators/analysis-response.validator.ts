@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { CONFIDENCE_DISCLAIMER, EVIDENCE_CLASSIFICATIONS } from '../constants';
 import type {
   AnalysisCitation,
+  BaseMedicalAnalysisResult,
   ClassifiedEvidence,
   MedicalAnalysisLlmOutput,
-  MedicalAnalysisResult,
   RetrievedEvidenceItem,
 } from '../types';
 import type { RetrievalResult } from '@modules/rag/types';
@@ -68,7 +68,7 @@ export class AnalysisResponseMapper {
     analysisExecutionTimeMs: number;
     llmProvider: string;
     llmModel: string;
-  }): MedicalAnalysisResult {
+  }): BaseMedicalAnalysisResult {
     const {
       llmOutput,
       citationMap,

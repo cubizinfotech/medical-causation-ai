@@ -76,13 +76,14 @@ export default function AnalysisView() {
   useEffect(() => {
     if (analysis.isSuccess && analysis.data) {
       saveAnalysisResult(analysis.data);
+      router.push("/report");
     }
-  }, [analysis.isSuccess, analysis.data]);
+  }, [analysis.isSuccess, analysis.data, router]);
 
   const progressPercent = useMemo(() => {
     if (analysis.isSuccess) return 100;
     if (analysis.isError) return 0;
-    const stepDuration = 3500;
+    const stepDuration = 2800;
     const maxBeforeComplete = 92;
     const estimated = Math.min(
       maxBeforeComplete,
@@ -93,7 +94,7 @@ export default function AnalysisView() {
 
   const currentStepIndex = useMemo(() => {
     if (analysis.isSuccess) return ANALYSIS_PROGRESS_STEPS.length;
-    const stepDuration = 3500;
+    const stepDuration = 2800;
     return Math.min(
       ANALYSIS_PROGRESS_STEPS.length - 1,
       Math.floor(elapsedMs / stepDuration),
@@ -138,7 +139,7 @@ export default function AnalysisView() {
             }
             description={
               analysis.isPending
-                ? "Searching the knowledge base and generating evidence-based reasoning…"
+                ? "Searching private knowledge base and public medical literature, then generating your report…"
                 : undefined
             }
             progress={progressPercent}
@@ -156,6 +157,15 @@ export default function AnalysisView() {
               <Progress value={progressPercent} />
             </CardContent>
           </Card>
+
+          {analysis.isSuccess ? (
+            <Card className="border-primary/30">
+              <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+                Analysis complete — opening your report…
+              </CardContent>
+            </Card>
+          ) : null}
 
           {analysis.isError ? (
             <Card className="border-destructive/30 bg-destructive/5">
@@ -175,48 +185,6 @@ export default function AnalysisView() {
                       <Link href="/case">Edit Case</Link>
                     </Button>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {analysis.isSuccess && analysis.data ? (
-            <Card className="border-primary/30">
-              <CardHeader>
-                <div className="flex items-center gap-2 text-primary">
-                  <CheckCircle2 className="h-5 w-5" />
-                  <CardTitle>Analysis Ready</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm leading-7 text-muted-foreground">
-                  {analysis.data.executiveSummary}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge>
-                    Confidence: {analysis.data.confidenceScore.score}/100
-                  </Badge>
-                  <Badge variant="secondary">
-                    {analysis.data.metadata.chunkCount} sources retrieved
-                  </Badge>
-                  <Badge variant="outline">
-                    {analysis.data.supportingEvidence.length} supporting
-                  </Badge>
-                  <Badge variant="outline">
-                    {analysis.data.opposingEvidence.length} opposing
-                  </Badge>
-                </div>
-                <p className="rounded-lg bg-muted px-4 py-3 text-sm">
-                  <span className="font-medium">Conclusion: </span>
-                  {analysis.data.conclusion}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {analysis.data.confidenceScore.disclaimer}
-                </p>
-                <div className="flex gap-3">
-                  <Button variant="outline" asChild>
-                    <Link href="/case">New Case</Link>
-                  </Button>
                 </div>
               </CardContent>
             </Card>

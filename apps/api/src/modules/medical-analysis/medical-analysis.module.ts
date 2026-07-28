@@ -4,6 +4,7 @@ import { RagModule } from '@modules/rag/rag.module';
 import { MedicalPromptService } from './prompts';
 import { AnalysisPromptBuilder, MedicalQueryBuilder } from './builders';
 import { AnalysisResponseMapper, AnalysisSafetyValidator } from './validators';
+import { ReportEnrichmentService } from './services/report-enrichment.service';
 import { MedicalAnalysisService } from './services/medical-analysis.service';
 import { MedicalAnalysisController } from './controllers';
 
@@ -16,6 +17,7 @@ import { MedicalAnalysisController } from './controllers';
     AnalysisPromptBuilder,
     AnalysisSafetyValidator,
     AnalysisResponseMapper,
+    ReportEnrichmentService,
     MedicalAnalysisService,
   ],
   exports: [MedicalAnalysisService],

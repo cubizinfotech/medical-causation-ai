@@ -34,6 +34,7 @@ import {
   caseFormSchema,
   type CaseFormValues,
 } from "@/features/demo/schemas/case-form.schema";
+import { TERMS_ACKNOWLEDGMENT } from "@/features/medical-analysis/types";
 import {
   saveCaseForm,
   saveUploadedFileNames,
@@ -78,6 +79,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [exampleIndex, setExampleIndex] = useState(0);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [loadedExample, setLoadedExample] = useState<{
     title: string;
     summary: string;
@@ -352,6 +354,25 @@ export function CaseForm({ initialValues }: CaseFormProps) {
         </p>
       ) : null}
 
+      <Card className="border-amber-500/30 bg-amber-500/5">
+        <CardContent className="flex items-start gap-3 p-5">
+          <input
+            id="termsAccepted"
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(e) => setTermsAccepted(e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+          />
+          <label htmlFor="termsAccepted" className="text-sm leading-relaxed">
+            {TERMS_ACKNOWLEDGMENT}{" "}
+            <a href="/terms" className="font-medium text-primary hover:underline">
+              Terms of Use
+            </a>
+            .
+          </label>
+        </CardContent>
+      </Card>
+
       <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -362,7 +383,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             <Button type="button" variant="outline" onClick={() => router.push("/")}>
               Cancel
             </Button>
-            <Button type="submit" size="lg" disabled={isSubmitting}>
+            <Button type="submit" size="lg" disabled={isSubmitting || !termsAccepted}>
               {isSubmitting ? "Submitting…" : "Run AI Analysis"}
             </Button>
           </div>

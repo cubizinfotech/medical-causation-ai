@@ -198,16 +198,17 @@ Watch the animated progress steps:
 
 The page calls `POST /medical-analysis/analyze` on the real backend.
 
-### Step 4 — Review Results
+### Step 4 — Review Report
 
-On success, the analysis page shows:
+On success you are redirected to [http://localhost:3000/report](http://localhost:3000/report) with:
 
-- Executive summary
-- Confidence score (with disclaimer)
-- Supporting / opposing evidence counts
-- Conclusion
+- Executive summary with statistical conclusion (AI-generated)
+- Confidence score, causation opinion, supporting/opposing evidence
+- Timeline, risk factors, public & private references
+- 50 cross-examination questions by category
+- Export to Markdown or print
 
-> A dedicated full report page (`/report`) is planned for a future phase.
+> You must accept the Terms disclaimer on the case form before analysis runs.
 
 ## Expected AI Pipeline
 
@@ -253,7 +254,7 @@ npx ts-node -r tsconfig-paths/register scripts/run-medical-analysis.ts \
 | `AI_CHAT_MODEL` must be a chat model | Rerank models will fail |
 
 ## Future Roadmap
-
+ 
 | Phase | Focus |
 |-------|-------|
 | 2e | Health checks, Swagger, remaining REST APIs |

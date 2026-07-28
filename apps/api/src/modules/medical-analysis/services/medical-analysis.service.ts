@@ -5,6 +5,7 @@ import type { IMedicalAnalysisService } from '../interfaces';
 import type { MedicalAnalysisRequest, MedicalAnalysisResult } from '../types';
 import { MedicalQueryBuilder, AnalysisPromptBuilder } from '../builders';
 import { AnalysisResponseMapper, AnalysisSafetyValidator } from '../validators';
+import { ReportEnrichmentService } from './report-enrichment.service';
 import { parseMedicalAnalysisJson } from '../utils';
 import { AnalysisSafetyException } from '../exceptions';
 import type { MedicalAnalysisLlmOutput } from '../types';
@@ -25,6 +26,7 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
     private readonly promptBuilder: AnalysisPromptBuilder,
     private readonly safetyValidator: AnalysisSafetyValidator,
     private readonly responseMapper: AnalysisResponseMapper,
+    private readonly reportEnrichment: ReportEnrichmentService,
   ) {}
 
   async analyze(
@@ -54,15 +56,18 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       citationMap,
     });
 
-    const result = this.responseMapper.mapToResult({
+    const result = this.reportEnrichment.enrich(
+      this.responseMapper.mapToResult({
+        request,
+        llmOutput: llmResult.llmOutput,
+        citationMap,
+        retrieval,
+        analysisExecutionTimeMs: Date.now() - analysisStart,
+        llmProvider: llmResult.llmResponse.provider,
+        llmModel: llmResult.llmResponse.model,
+      }),
       request,
-      llmOutput: llmResult.llmOutput,
-      citationMap,
-      retrieval,
-      analysisExecutionTimeMs: Date.now() - analysisStart,
-      llmProvider: llmResult.llmResponse.provider,
-      llmModel: llmResult.llmResponse.model,
-    });
+    );
 
     this.logger.log(
       `Analysis complete: confidence=${result.confidenceScore.score}, ` +

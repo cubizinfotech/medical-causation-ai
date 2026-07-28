@@ -7,6 +7,16 @@ export type EvidenceClassificationType =
   | "neutral"
   | "unknown";
 
+export type PublicSourceName =
+  | "PubMed"
+  | "PubMed Central"
+  | "NIH"
+  | "ClinicalTrials.gov"
+  | "Semantic Scholar"
+  | "Crossref"
+  | "WHO"
+  | "CDC";
+
 export interface AnalysisCitation {
   chunkId: string;
   documentName: string;
@@ -15,6 +25,55 @@ export interface AnalysisCitation {
   similarityScore: number;
   citationText: string;
   sourceFile: string;
+}
+
+export interface PublicReference {
+  id: string;
+  title: string;
+  source: PublicSourceName;
+  url: string;
+  year?: number;
+  excerpt?: string;
+}
+
+export interface PrivateReference {
+  chunkId: string;
+  documentName: string;
+  pageNumber: number | null;
+  citationText: string;
+  sourceFile: string;
+  sourceType: "private_kb";
+}
+
+export interface TimelineEvent {
+  date: string;
+  event: string;
+  significance: string;
+}
+
+export interface RiskFactor {
+  factor: string;
+  category: "pre-existing" | "lifestyle" | "comorbidity" | "other";
+  impact: string;
+}
+
+export interface CrossExamQuestion {
+  question: string;
+  purpose: string;
+}
+
+export interface CrossExamCategory {
+  name: string;
+  questions: CrossExamQuestion[];
+}
+
+export interface ResearchSourcesSummary {
+  private: Array<{ name: string; description: string; count: number }>;
+  public: Array<{
+    name: string;
+    description: string;
+    status: "simulated" | "live";
+  }>;
 }
 
 export interface RetrievedEvidenceItem {
@@ -55,6 +114,14 @@ export interface MedicalAnalysisResult {
   limitations: string[];
   conclusion: string;
   citations: AnalysisCitation[];
+  causationOpinion: string;
+  timelineEvents: TimelineEvent[];
+  riskFactors: RiskFactor[];
+  publicReferences: PublicReference[];
+  privateReferences: PrivateReference[];
+  crossExamination: CrossExamCategory[];
+  researchSources: ResearchSourcesSummary;
+  legalDisclaimer: string;
   metadata: {
     retrievalExecutionTimeMs: number;
     analysisExecutionTimeMs: number;
@@ -62,6 +129,9 @@ export interface MedicalAnalysisResult {
     llmModel: string;
     chunkCount: number;
     generatedAt: string;
+    publicReferenceCount?: number;
+    privateReferenceCount?: number;
+    crossExamQuestionCount?: number;
   };
 }
 
@@ -79,3 +149,6 @@ export type AnalyzeCaseRequest = {
   timeline?: string;
   medicalQuestion: string;
 };
+
+export const TERMS_ACKNOWLEDGMENT =
+  "I understand that this software is intended for informational and legal research purposes only and does not constitute medical advice.";
