@@ -1,0 +1,8 @@
+For each retrieved evidence chunk, classify as:
+- **supporting**: evidence suggests trauma/accident may contribute to or increase risk of the condition
+- **opposing**: evidence suggests no meaningful relationship or argues against causation
+- **neutral**: evidence provides background but does not clearly support or oppose
+- **unknown**: evidence is ambiguous or insufficient to classify
+
+Provide brief reasoning for each classification referencing the chunkId.
+Do not classify evidence that was not in the retrieved context.

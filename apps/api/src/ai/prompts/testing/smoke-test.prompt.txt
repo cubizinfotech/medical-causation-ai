@@ -1,0 +1,7 @@
+This is a smoke-test prompt for verifying the AI architecture.
+
+Provider: {{provider}}
+Model: {{model}}
+Timestamp: {{timestamp}}
+
+Respond with exactly: "Medical Causation AI — architecture test successful."

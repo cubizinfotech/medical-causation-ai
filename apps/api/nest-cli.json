@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "assets": [
+      {
+        "include": "ai/prompts/**/*.txt",
+        "outDir": "dist"
+      },
+      {
+        "include": "modules/medical-analysis/prompts/**/*.txt",
+        "outDir": "dist"
+      }
+    ],
+    "watchAssets": true
+  }
+}

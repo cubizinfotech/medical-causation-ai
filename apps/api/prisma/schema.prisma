@@ -1,0 +1,87 @@
+// Medical Causation AI — Indexing schema (documents + vectors)
+// pgvector embedding column is created via migration SQL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["documents", "vectors"]
+}
+
+enum IndexStatus {
+  pending
+  processing
+  indexed
+  failed
+  skipped
+
+  @@schema("documents")
+}
+
+model IndexedDocument {
+  id                  String      @id @default(uuid()) @db.Uuid
+  knowledgeDocumentId String      @unique @map("knowledge_document_id")
+  documentTitle       String      @map("document_title")
+  filename            String
+  relativePath        String      @map("relative_path")
+  sourceFile          String      @map("source_file")
+  category            String
+  subCategory         String?     @map("sub_category")
+  extension           String
+  checksum            String
+  fileSize            BigInt      @map("file_size")
+  fileModifiedAt      DateTime    @map("file_modified_at")
+  pageCount           Int         @default(0) @map("page_count")
+  chunkCount          Int         @default(0) @map("chunk_count")
+  status              IndexStatus @default(pending)
+  errorMessage        String?     @map("error_message")
+  indexedAt           DateTime?   @map("indexed_at")
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
+
+  chunks DocumentChunk[]
+
+  @@index([status])
+  @@index([checksum])
+  @@map("indexed_documents")
+  @@schema("documents")
+}
+
+model DocumentChunk {
+  id              String   @id @default(uuid()) @db.Uuid
+  externalChunkId String   @unique @map("external_chunk_id")
+  documentId      String   @map("document_id") @db.Uuid
+  chunkIndex      Int      @map("chunk_index")
+  totalChunks     Int      @map("total_chunks")
+  pageNumber      Int?     @map("page_number")
+  section         String?
+  text            String
+  estimatedTokens Int      @map("estimated_tokens")
+  contentHash     String   @map("content_hash")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  document  IndexedDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  embedding ChunkEmbedding?
+
+  @@unique([documentId, chunkIndex])
+  @@unique([documentId, contentHash])
+  @@map("document_chunks")
+  @@schema("documents")
+}
+
+model ChunkEmbedding {
+  id         String   @id @default(uuid()) @db.Uuid
+  chunkId    String   @unique @map("chunk_id") @db.Uuid
+  provider   String
+  model      String
+  dimensions Int
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  chunk DocumentChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@map("chunk_embeddings")
+  @@schema("vectors")
+}

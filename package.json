@@ -1,0 +1,43 @@
+{
+  "name": "medical-causation-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Enterprise SaaS platform for medical causation analysis",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:infra && echo Run 'npm run dev:api' and 'npm run dev:web' in separate terminals",
+    "dev:api": "npm run start:dev --workspace=api",
+    "dev:web": "npm run dev --workspace=web",
+    "dev:infra": "docker compose up -d postgres redis pgadmin",
+    "build": "npm run build --workspace=api && npm run build --workspace=web",
+    "build:api": "npm run build --workspace=api",
+    "build:web": "npm run build --workspace=web",
+    "start:api": "npm run start:prod --workspace=api",
+    "start:web": "npm run start --workspace=web",
+    "lint": "npm run lint --workspace=api && npm run lint --workspace=web",
+    "lint:api": "npm run lint --workspace=api",
+    "lint:web": "npm run lint --workspace=web",
+    "format": "npm run format --workspace=api && npm run format --workspace=web",
+    "typecheck": "npm run typecheck --workspace=api && npm run typecheck --workspace=web",
+    "validate": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "test": "npm run test --workspace=api",
+    "test:e2e": "npm run test:e2e --workspace=api",
+    "prisma:migrate": "npm run prisma:migrate --workspace=api",
+    "prisma:generate": "npm run prisma:generate --workspace=api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up",
+    "docker:infra": "docker compose up -d postgres redis pgadmin",
+    "docker:build": "docker compose build",
+    "docker:logs": "docker compose logs -f",
+    "docker:ps": "docker compose ps",
+    "docker:validate": "docker compose config",
+    "docker:clean": "docker compose down -v --remove-orphans"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

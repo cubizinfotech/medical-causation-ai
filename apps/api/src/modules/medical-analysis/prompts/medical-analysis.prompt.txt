@@ -1,0 +1,21 @@
+Analyze the following medical causation research question using ONLY the retrieved evidence.
+
+## Medical Question
+{{medicalQuestion}}
+
+## Patient / Case Context
+{{caseContext}}
+
+## Retrieved Evidence (ONLY source you may use)
+{{retrievedContext}}
+
+## Citation Catalog (use these chunkIds only)
+{{citationCatalog}}
+
+Apply accepted medical causation principles:
+1. Temporal relationship between trauma and condition onset
+2. Biological plausibility of the causal mechanism
+3. Strength of epidemiological evidence in the retrieved context
+4. Consideration of alternative causes mentioned in the evidence
+
+Evaluate each piece of retrieved evidence and classify it as supporting, opposing, neutral, or unknown relative to the medical question.

@@ -1,0 +1,39 @@
+Return ONLY valid JSON matching this schema (no markdown, no extra text):
+
+{
+  "executiveSummary": "string — 2-4 sentence overview for attorney",
+  "patientSummary": "string — brief case summary from provided context",
+  "medicalQuestion": "string — restate the question",
+  "retrievedEvidence": [
+    {
+      "chunkId": "string — must match citation catalog",
+      "excerpt": "string — brief quote or paraphrase from chunk",
+      "classification": "supporting|opposing|neutral|unknown",
+      "classificationReasoning": "string"
+    }
+  ],
+  "supportingEvidence": [
+    { "chunkId": "string", "excerpt": "string", "reasoning": "string" }
+  ],
+  "opposingEvidence": [
+    { "chunkId": "string", "excerpt": "string", "reasoning": "string" }
+  ],
+  "neutralEvidence": [
+    { "chunkId": "string", "excerpt": "string", "reasoning": "string" }
+  ],
+  "aiReasoning": "string — step-by-step causation reasoning using only retrieved evidence",
+  "confidenceScore": 0,
+  "confidenceExplanation": "string — why this score (0-100), based on evidence quality and consistency",
+  "limitations": ["string — gaps, insufficient evidence, caveats"],
+  "conclusion": "string — evidence-based assessment, not a diagnosis",
+  "citations": [
+    { "chunkId": "string", "statement": "string — claim supported by this citation" }
+  ]
+}
+
+Rules:
+- confidenceScore must be integer 0-100
+- Every chunkId MUST be copied exactly from this allowed list (no modifications):
+{{allowedChunkIds}}
+- Never fabricate chunkIds, page numbers, or document names
+- If evidence is insufficient, set confidenceScore below 40 and explain in limitations
