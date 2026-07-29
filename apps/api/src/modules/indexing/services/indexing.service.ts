@@ -244,6 +244,12 @@ export class IndexingService implements IIndexingService {
     return results;
   }
 
+  async clearAllEmbeddings(): Promise<number> {
+    const deleted = await this.embeddingRepository.deleteAll();
+    this.logger.warn(`Cleared ${deleted} stored embedding vector(s)`);
+    return deleted;
+  }
+
   private async reembedDocument(
     indexedDocument: Awaited<
       ReturnType<IndexedDocumentRepository['findAllIndexed']>
@@ -261,7 +267,35 @@ export class IndexingService implements IIndexingService {
       );
     }
 
-    const chunkDrafts = storedChunks.map((chunk) => ({
+    const embeddedChunkIds = await this.embeddingRepository.findEmbeddedChunkIds(
+      indexedDocument.id,
+    );
+
+    const chunksToEmbed = storedChunks.filter(
+      (chunk) => !embeddedChunkIds.has(chunk.id),
+    );
+
+    if (chunksToEmbed.length === 0) {
+      this.logger.log(
+        `Skipping re-embed for "${indexedDocument.filename}" — all chunks already embedded`,
+      );
+      return {
+        documentId: indexedDocument.id,
+        knowledgeDocumentId: indexedDocument.knowledgeDocumentId,
+        status: INDEX_STATUS.INDEXED,
+        skipped: true,
+        chunkCount: storedChunks.length,
+        embeddingCount: embeddedChunkIds.size,
+        processingDurationMs: Date.now() - startTime,
+        indexedAt: indexedDocument.indexedAt ?? new Date(),
+      };
+    }
+
+    this.logger.log(
+      `Re-embedding "${indexedDocument.filename}": ${chunksToEmbed.length} remaining of ${storedChunks.length} chunks`,
+    );
+
+    const chunkDrafts = chunksToEmbed.map((chunk) => ({
       chunkId: chunk.externalChunkId,
       documentId: indexedDocument.knowledgeDocumentId,
       documentTitle: indexedDocument.documentTitle,
@@ -278,29 +312,40 @@ export class IndexingService implements IIndexingService {
       contentHash: chunk.contentHash,
     }));
 
-    const embeddings = await this.embeddingService.embedChunks(chunkDrafts);
-
     const externalToInternal = new Map(
-      storedChunks.map((chunk) => [chunk.externalChunkId, chunk.id]),
+      chunksToEmbed.map((chunk) => [chunk.externalChunkId, chunk.id]),
     );
 
-    const embeddingInputs = embeddings
-      .map((embedding) => {
-        const internalId = externalToInternal.get(embedding.chunkId);
-        if (!internalId) return null;
+    const persistBatchSize = Number(process.env.EMBEDDING_BATCH_SIZE ?? 32);
+    let embeddingCount = 0;
 
-        return {
-          chunkId: internalId,
-          provider: embedding.provider,
-          model: embedding.model,
-          dimensions: embedding.dimensions,
-          vector: embedding.vector,
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null);
+    for (let i = 0; i < chunkDrafts.length; i += persistBatchSize) {
+      const batch = chunkDrafts.slice(i, i + persistBatchSize);
+      const embeddings = await this.embeddingService.embedChunks(batch);
 
-    const embeddingCount =
-      await this.embeddingRepository.storeEmbeddings(embeddingInputs);
+      const embeddingInputs = embeddings
+        .map((embedding) => {
+          const internalId = externalToInternal.get(embedding.chunkId);
+          if (!internalId) return null;
+
+          return {
+            chunkId: internalId,
+            provider: embedding.provider,
+            model: embedding.model,
+            dimensions: embedding.dimensions,
+            vector: embedding.vector,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+
+      embeddingCount += await this.embeddingRepository.storeEmbeddings(
+        embeddingInputs,
+      );
+
+      this.logger.log(
+        `Re-embed progress "${indexedDocument.filename}": ${Math.min(i + persistBatchSize, chunkDrafts.length)}/${chunkDrafts.length} remaining chunks`,
+      );
+    }
 
     await this.documentRepository.update(indexedDocument.id, {
       status: INDEX_STATUS.INDEXED,
@@ -309,7 +354,11 @@ export class IndexingService implements IIndexingService {
     });
 
     this.logger.log(
-      `Re-embedded "${indexedDocument.filename}": ${storedChunks.length} chunks, ${embeddingCount} embeddings`,
+      `Re-embedded "${indexedDocument.filename}": ${storedChunks.length} chunks total, ${embeddingCount} new embeddings stored`,
+    );
+
+    const totalEmbeddings = await this.embeddingRepository.countForDocument(
+      indexedDocument.id,
     );
 
     return {
@@ -318,7 +367,7 @@ export class IndexingService implements IIndexingService {
       status: INDEX_STATUS.INDEXED,
       skipped: false,
       chunkCount: storedChunks.length,
-      embeddingCount,
+      embeddingCount: totalEmbeddings,
       processingDurationMs: Date.now() - startTime,
       indexedAt: new Date(),
     };

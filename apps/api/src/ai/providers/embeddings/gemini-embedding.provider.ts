@@ -12,6 +12,7 @@ import {
   postJsonEmbeddings,
   unavailable,
 } from '../base/openai-compatible-embedding.provider';
+import { createGeminiClient } from '@ai/utils/gemini-client.util';
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,41 +34,53 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
     this.validateConfiguration();
     const model = request.model ?? this.defaultModel;
     const startTime = Date.now();
+    const outputDimensionality =
+      request.dimensions ?? this.runtime.dimensions ?? this.defaultDimensions;
+    const ai = createGeminiClient(this.settings.apiKey);
     const embeddings: number[][] = [];
     let totalTokens = 0;
 
-    for (const input of request.inputs) {
+    for (let index = 0; index < request.inputs.length; index++) {
+      const input = request.inputs[index];
       let success = false;
       let lastError = 'Gemini embedding failed';
 
       for (let attempt = 1; attempt <= this.runtime.maxRetries; attempt++) {
         try {
-          const url = `${this.settings.baseUrl.replace(/\/$/, '')}/v1beta/models/${model}:embedContent?key=${this.settings.apiKey}`;
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              content: { parts: [{ text: input.text }] },
-            }),
-            signal: AbortSignal.timeout(this.runtime.timeoutMs),
+          const response = await ai.models.embedContent({
+            model,
+            contents: input.text,
+            config: {
+              outputDimensionality,
+              abortSignal: AbortSignal.timeout(this.runtime.timeoutMs),
+            },
           });
 
-          if (!response.ok) {
-            throw new Error(await response.text());
+          const values = response.embeddings?.[0]?.values ?? [];
+          if (values.length === 0) {
+            throw new Error('Gemini returned an empty embedding vector');
           }
 
-          const payload = (await response.json()) as {
-            embedding?: { values?: number[] };
-          };
-
-          embeddings.push(payload.embedding?.values ?? []);
+          embeddings.push(values);
           totalTokens += Math.ceil(input.text.length / 4);
           success = true;
+
+          if (index + 1 < request.inputs.length) {
+            await sleep(Number(process.env.GEMINI_EMBED_ITEM_DELAY_MS ?? 150));
+          }
           break;
         } catch (error) {
           lastError = error instanceof Error ? error.message : String(error);
+          const isRateLimit =
+            lastError.includes('429') ||
+            lastError.toLowerCase().includes('quota') ||
+            lastError.toLowerCase().includes('rate limit');
+
           if (attempt < this.runtime.maxRetries) {
-            await sleep(this.runtime.retryDelayMs * attempt);
+            const delay = isRateLimit
+              ? this.runtime.retryDelayMs * attempt * 6
+              : this.runtime.retryDelayMs * attempt;
+            await sleep(delay);
           }
         }
       }
@@ -89,7 +102,7 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
         embedding: embeddings[index],
         model,
         provider: this.name,
-        dimensions: embeddings[index]?.length ?? this.defaultDimensions,
+        dimensions: embeddings[index]?.length ?? outputDimensionality,
         usage,
         executionTimeMs: Date.now() - startTime,
       })),

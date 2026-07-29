@@ -1,6 +1,10 @@
 import type { ProviderConfigSettings } from './ai-config.types';
 import { DEFAULT_LLM_PROVIDER } from '@ai/constants';
 
+function resolveGoogleApiKey(): string {
+  return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
+}
+
 export const providerConfig = (): ProviderConfigSettings => ({
   activeProvider: process.env.AI_PROVIDER ?? DEFAULT_LLM_PROVIDER,
   chatModel: process.env.AI_CHAT_MODEL ?? '',
@@ -19,7 +23,7 @@ export const providerConfig = (): ProviderConfigSettings => ({
     baseUrl: process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com',
   },
   google: {
-    apiKey: process.env.GOOGLE_API_KEY ?? '',
+    apiKey: resolveGoogleApiKey(),
     baseUrl:
       process.env.GOOGLE_BASE_URL ??
       'https://generativelanguage.googleapis.com',

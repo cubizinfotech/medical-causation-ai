@@ -43,7 +43,7 @@ export const DEFAULT_LLM_MODELS: Record<LlmProviderName, string> = {
   [LLM_PROVIDERS.OPENROUTER]: 'openai/gpt-4o',
   [LLM_PROVIDERS.OPENAI]: 'gpt-4o',
   [LLM_PROVIDERS.ANTHROPIC]: 'claude-sonnet-4-20250514',
-  [LLM_PROVIDERS.GEMINI]: 'gemini-2.0-flash',
+  [LLM_PROVIDERS.GEMINI]: 'gemini-3.5-flash-lite',
   [LLM_PROVIDERS.GROQ]: 'llama-3.3-70b-versatile',
 };
 
@@ -53,7 +53,7 @@ export const DEFAULT_LLM_MODELS: Record<LlmProviderName, string> = {
 export const DEFAULT_EMBEDDING_MODELS: Record<EmbeddingProviderName, string> = {
   [EMBEDDING_PROVIDERS.OPENAI]: 'text-embedding-3-small',
   [EMBEDDING_PROVIDERS.OPENROUTER]: 'openai/text-embedding-3-small',
-  [EMBEDDING_PROVIDERS.GEMINI]: 'text-embedding-004',
+  [EMBEDDING_PROVIDERS.GEMINI]: 'gemini-embedding-2',
   [EMBEDDING_PROVIDERS.VOYAGE]: 'voyage-3',
   [EMBEDDING_PROVIDERS.JINA]: 'jina-embeddings-v3',
   [EMBEDDING_PROVIDERS.NOMIC]: 'nomic-embed-text',

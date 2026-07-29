@@ -22,10 +22,12 @@
     "prisma:generate": "node scripts/prisma-with-env.cjs generate",
     "index:kb": "ts-node -r tsconfig-paths/register scripts/run-indexing.ts",
     "reembed:kb": "ts-node -r tsconfig-paths/register scripts/run-indexing.ts --reembed-only",
+    "reembed:kb:full": "ts-node -r tsconfig-paths/register scripts/run-indexing.ts --reembed-only --replace-embeddings",
     "prisma:migrate": "node scripts/prisma-with-env.cjs migrate deploy",
     "prisma:migrate:dev": "node scripts/prisma-with-env.cjs migrate dev"
   },
   "dependencies": {
+    "@google/genai": "^2.13.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",

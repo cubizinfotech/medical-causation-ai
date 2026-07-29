@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import type { AnalysisCase } from '@prisma/client';
 import type { AnalyzeMedicalCaseDto } from '../dto/analyze-medical-case.dto';
 import type { MedicalAnalysisResult } from '../types';
 import type { MedicalAnalysisJobRecord } from '../jobs/medical-analysis-job.types';
 import { AnalysisCaseRepository } from '../repositories/analysis-case.repository';
+import { MedicalAnalysisJobService } from '../jobs/medical-analysis-job.service';
 
 export interface AnalysisHistoryListItem {
   id: string;
@@ -35,9 +36,15 @@ export interface AnalysisHistoryDetail extends AnalysisHistoryListItem {
   updatedAt: string;
 }
 
+const STALE_RUNNING_MS = 90 * 60 * 1000;
+
 @Injectable()
 export class AnalysisHistoryService {
-  constructor(private readonly repository: AnalysisCaseRepository) {}
+  constructor(
+    private readonly repository: AnalysisCaseRepository,
+    @Inject(forwardRef(() => MedicalAnalysisJobService))
+    private readonly jobService: MedicalAnalysisJobService,
+  ) {}
 
   async createCase(
     jobId: string,
@@ -65,7 +72,10 @@ export class AnalysisHistoryService {
 
   async listHistories(): Promise<AnalysisHistoryListItem[]> {
     const rows = await this.repository.listRecent();
-    return rows.map((row) => this.toListItem(row));
+    const reconciled = await Promise.all(
+      rows.map((row) => this.reconcileRow(row)),
+    );
+    return reconciled.map((row) => this.toListItem(row));
   }
 
   async getHistory(id: string): Promise<AnalysisHistoryDetail> {
@@ -73,7 +83,49 @@ export class AnalysisHistoryService {
     if (!row) {
       throw new NotFoundException(`Analysis history "${id}" not found`);
     }
-    return this.toDetail(row);
+    const reconciled = await this.reconcileRow(row);
+    return this.toDetail(reconciled);
+  }
+
+  async reconcileStaleCases(): Promise<number> {
+    const rows = await this.repository.listRecent(200);
+    let updated = 0;
+
+    for (const row of rows) {
+      const before = row.status;
+      const after = (await this.reconcileRow(row)).status;
+      if (before !== after) {
+        updated++;
+      }
+    }
+
+    return updated;
+  }
+
+  private async reconcileRow(row: AnalysisCase): Promise<AnalysisCase> {
+    if (row.status !== 'queued' && row.status !== 'running') {
+      return row;
+    }
+
+    const record = await this.jobService.tryGetJob(row.jobId);
+    if (record) {
+      await this.syncFromJobRecord(record);
+      return (await this.repository.findById(row.id)) ?? row;
+    }
+
+    const ageMs = Date.now() - row.updatedAt.getTime();
+    if (ageMs < STALE_RUNNING_MS) {
+      return row;
+    }
+
+    return this.repository.update(row.id, {
+      status: 'failed',
+      errorMessage:
+        'Analysis was interrupted or expired before completion. Submit the case again.',
+      message:
+        'Analysis was interrupted or expired before completion. Submit the case again.',
+      completedAt: new Date(),
+    });
   }
 
   private toListItem(row: AnalysisCase): AnalysisHistoryListItem {

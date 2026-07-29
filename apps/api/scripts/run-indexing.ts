@@ -5,6 +5,7 @@
  *   npx ts-node -r tsconfig-paths/register scripts/run-indexing.ts
  *   npx ts-node -r tsconfig-paths/register scripts/run-indexing.ts --force
  *   npx ts-node -r tsconfig-paths/register scripts/run-indexing.ts --reembed-only
+ *   npx ts-node -r tsconfig-paths/register scripts/run-indexing.ts --reembed-only --replace-embeddings
  */
 import { config } from 'dotenv';
 import { resolve } from 'path';
@@ -20,6 +21,7 @@ config({ path: resolve(apiDir, '.env'), override: false });
 async function main(): Promise<void> {
   const forceReindex = process.argv.includes('--force');
   const reembedOnly = process.argv.includes('--reembed-only');
+  const replaceEmbeddings = process.argv.includes('--replace-embeddings');
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
@@ -29,6 +31,11 @@ async function main(): Promise<void> {
     const indexing = app.get(IndexingService);
 
     if (reembedOnly) {
+      if (replaceEmbeddings) {
+        console.log('Clearing all existing embeddings before re-embed…');
+        await indexing.clearAllEmbeddings();
+      }
+
       const results = await indexing.reembedAllMissingEmbeddings();
       console.log(`Re-embedded ${results.length} document(s).`);
       for (const result of results) {

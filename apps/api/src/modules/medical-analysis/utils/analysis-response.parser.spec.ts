@@ -25,6 +25,20 @@ describe('analysis-response.parser', () => {
     expect(output.conclusion).toBe('Conclusion');
   });
 
+  it('should parse JSON wrapped in prose', () => {
+    const output = parseMedicalAnalysisJson(
+      'Here is the analysis:\n' +
+        JSON.stringify({
+          executiveSummary: 'Summary',
+          conclusion: 'Conclusion',
+        }) +
+        '\nEnd of response.',
+    );
+
+    expect(output.executiveSummary).toBe('Summary');
+    expect(output.conclusion).toBe('Conclusion');
+  });
+
   it('should parse medical analysis output', () => {
     const output = parseMedicalAnalysisJson(
       JSON.stringify({
@@ -45,5 +59,35 @@ describe('analysis-response.parser', () => {
 
     expect(output.confidenceScore).toBe(65);
     expect(output.executiveSummary).toBe('Summary');
+  });
+
+  it('should prefer root analysis object over nested citation objects', () => {
+    const output = parseMedicalAnalysisJson(
+      JSON.stringify({
+        executiveSummary: 'Summary',
+        patientSummary: 'Patient',
+        medicalQuestion: 'Question?',
+        retrievedEvidence: [
+          {
+            chunkId: 'chunk-1',
+            excerpt: 'Evidence excerpt',
+            classification: 'supporting',
+            classificationReasoning: 'Supports causation',
+          },
+        ],
+        supportingEvidence: [],
+        opposingEvidence: [],
+        aiReasoning: 'Reasoning',
+        confidenceScore: 65,
+        confidenceExplanation: 'Moderate evidence',
+        limitations: ['Limited studies'],
+        conclusion: 'Possible association',
+        citations: [{ chunkId: 'chunk-1', statement: 'Supported claim' }],
+      }),
+    );
+
+    expect(output.executiveSummary).toBe('Summary');
+    expect(output.conclusion).toBe('Possible association');
+    expect(output.citations).toHaveLength(1);
   });
 });

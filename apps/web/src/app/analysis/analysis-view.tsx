@@ -255,9 +255,9 @@ export default function AnalysisView() {
                       {error?.message ?? job?.error ?? "An unexpected error occurred."}
                     </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Common causes: OpenRouter free-tier rate limits, invalid JSON from the LLM, or Redis not running (`npm run docker:infra`).
-                  </p>
+                    <p className="text-xs text-muted-foreground">
+                      Common causes: knowledge base not re-embedded after switching embedding models (`npm run reembed:kb`), Gemini API quota limits, invalid JSON from the LLM, or Redis not running (`npm run docker:infra`).
+                    </p>
                   <div className="flex flex-wrap gap-3">
                     <Button onClick={() => runAnalysis()}>
                       <RotateCcw className="h-4 w-4" />
@@ -281,6 +281,7 @@ export default function AnalysisView() {
             <ProgressTimeline
               steps={[...ANALYSIS_PROGRESS_STEPS]}
               currentStepIndex={currentStepIndex}
+              failed={isFailed}
             />
           </CardContent>
         </Card>

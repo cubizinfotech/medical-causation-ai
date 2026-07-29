@@ -288,6 +288,7 @@ export default function HistoryDetailView({ id }: { id: string }) {
               <ProgressTimeline
                 steps={[...ANALYSIS_PROGRESS_STEPS]}
                 currentStepIndex={currentStepIndex}
+                failed={isFailed}
               />
             </CardContent>
           </Card>

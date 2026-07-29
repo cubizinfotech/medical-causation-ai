@@ -4,6 +4,8 @@ import {
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
@@ -34,6 +36,7 @@ export class MedicalAnalysisJobService implements OnModuleInit, OnModuleDestroy 
 
   constructor(
     private readonly redisService: RedisService,
+    @Inject(forwardRef(() => AnalysisHistoryService))
     private readonly historyService: AnalysisHistoryService,
   ) {}
 
@@ -112,6 +115,10 @@ export class MedicalAnalysisJobService implements OnModuleInit, OnModuleDestroy 
     return record;
   }
 
+  async tryGetJob(jobId: string): Promise<MedicalAnalysisJobRecord | null> {
+    return this.loadRecord(jobId);
+  }
+
   async markRunning(jobId: string): Promise<void> {
     await this.patch(jobId, {
       status: ANALYSIS_JOB_STATUS.RUNNING,
@@ -153,9 +160,10 @@ export class MedicalAnalysisJobService implements OnModuleInit, OnModuleDestroy 
 
   async markFailed(jobId: string, error: string): Promise<void> {
     const now = new Date().toISOString();
+    const existing = await this.loadRecord(jobId);
     await this.patch(jobId, {
       status: ANALYSIS_JOB_STATUS.FAILED,
-      progress: 0,
+      progress: existing?.progress ?? 0,
       error,
       message: error,
       completedAt: now,

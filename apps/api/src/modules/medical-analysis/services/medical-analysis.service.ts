@@ -23,7 +23,7 @@ import type { LlmCompletionResponse } from '@ai/types';
 @Injectable()
 export class MedicalAnalysisService implements IMedicalAnalysisService {
   private readonly logger = new Logger(MedicalAnalysisService.name);
-  private static readonly MAX_COMPLETION_ATTEMPTS = 3;
+  private static readonly MAX_COMPLETION_ATTEMPTS = 5;
   private static readonly JSON_RETRY_INSTRUCTION =
     '\n\nCORRECTION: Your previous response was not valid JSON. Return ONLY a single raw JSON object matching the schema. Do not include markdown fences, explanations, or reasoning tags.';
 

@@ -26,6 +26,7 @@
     "test:e2e": "npm run test:e2e --workspace=api",
     "index:kb": "npm run index:kb --workspace=api",
     "reembed:kb": "npm run reembed:kb --workspace=api",
+    "reembed:kb:full": "npm run reembed:kb:full --workspace=api",
     "prisma:migrate": "npm run prisma:migrate --workspace=api",
     "prisma:generate": "npm run prisma:generate --workspace=api",
     "docker:up": "docker compose up -d",

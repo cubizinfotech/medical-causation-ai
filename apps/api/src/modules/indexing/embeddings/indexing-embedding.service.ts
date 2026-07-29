@@ -63,6 +63,12 @@ export class IndexingEmbeddingService {
       this.logger.debug(
         `Embedded batch ${Math.floor(i / batchSize) + 1}: ${batch.length} chunks`,
       );
+
+      if (i + batchSize < chunks.length) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, Number(process.env.EMBEDDING_BATCH_DELAY_MS ?? 500)),
+        );
+      }
     }
 
     return results;

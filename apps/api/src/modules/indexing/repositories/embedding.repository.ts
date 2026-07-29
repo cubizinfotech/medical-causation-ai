@@ -53,6 +53,21 @@ export class EmbeddingRepository {
     });
   }
 
+  async findEmbeddedChunkIds(documentId: string): Promise<Set<string>> {
+    const rows = await this.prisma.chunkEmbedding.findMany({
+      where: { chunk: { documentId } },
+      select: { chunkId: true },
+    });
+    return new Set(rows.map((row) => row.chunkId));
+  }
+
+  async deleteAll(): Promise<number> {
+    const result = await this.prisma.$executeRawUnsafe(
+      'DELETE FROM vectors.chunk_embeddings',
+    );
+    return Number(result);
+  }
+
   private toVectorLiteral(vector: number[]): string {
     return `[${vector.join(',')}]`;
   }

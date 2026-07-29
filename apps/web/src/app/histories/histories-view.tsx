@@ -119,6 +119,11 @@ export default function HistoriesView() {
         </Button>
       </div>
 
+      <p className="text-sm text-muted-foreground">
+        Cases run one at a time in the background. Additional submissions stay
+        queued until the current analysis finishes.
+      </p>
+
       <div className="overflow-hidden rounded-lg border border-border">
         <div className="hidden grid-cols-12 gap-4 border-b border-border bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
           <div className="col-span-3">Patient</div>

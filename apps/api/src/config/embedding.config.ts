@@ -1,6 +1,10 @@
 import type { EmbeddingConfigSettings } from './ai-config.types';
 import { DEFAULT_EMBEDDING_PROVIDER } from '@ai/constants';
 
+function resolveGoogleApiKey(): string {
+  return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
+}
+
 export const embeddingConfig = (): EmbeddingConfigSettings => ({
   provider: process.env.EMBEDDING_PROVIDER ?? DEFAULT_EMBEDDING_PROVIDER,
   model: process.env.AI_EMBEDDING_MODEL ?? '',
@@ -16,7 +20,7 @@ export const embeddingConfig = (): EmbeddingConfigSettings => ({
     baseUrl: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
   },
   google: {
-    apiKey: process.env.GOOGLE_API_KEY ?? '',
+    apiKey: resolveGoogleApiKey(),
     baseUrl:
       process.env.GOOGLE_BASE_URL ??
       'https://generativelanguage.googleapis.com',
