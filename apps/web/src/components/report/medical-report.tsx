@@ -40,15 +40,17 @@ function SectionCard({
 }) {
   return (
     <Card className="report-section report-export-block border-border/80 shadow-sm">
-      <CardHeader className="border-b border-border/60 bg-muted/20 pb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      <CardHeader className="report-section-header border-b border-border/60 bg-muted/20 px-5 py-4">
+        <div className="flex w-full items-center gap-3">
+          <div className="report-section-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Icon className="h-4 w-4" />
           </div>
-          <CardTitle className="text-lg">{title}</CardTitle>
+          <CardTitle className="report-section-title min-w-0 flex-1 text-lg font-semibold leading-snug whitespace-nowrap">
+            {title}
+          </CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="pt-6">{children}</CardContent>
+      <CardContent className="report-section-body px-5 py-5">{children}</CardContent>
     </Card>
   );
 }
@@ -100,10 +102,10 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
       <div
         id="medical-report-export"
         ref={reportRef}
-        className="report-export-root space-y-8 bg-background print:space-y-6"
+        className="report-export-root space-y-6 bg-background print:space-y-6"
       >
         <Card className="report-export-block report-export-hero overflow-hidden border-primary/30 bg-gradient-to-br from-primary/5 via-card to-card shadow-md">
-          <CardContent className="p-8 sm:p-10">
+          <CardContent className="px-5 py-6 sm:px-8 sm:py-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
@@ -314,26 +316,26 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
         </SectionCard>
 
         <SectionCard icon={BookOpen} title="Private Knowledge Base Sources">
-          <p className="mb-4 text-sm text-muted-foreground">
+          <p className="mb-4 text-sm text-slate-700">
             Evidence retrieved from your firm&apos;s indexed medical library,
             including AMA guides, textbooks, and uploaded reference documents.
           </p>
-          <div className="mb-6 grid gap-3 sm:grid-cols-2">
+          <div className="mb-5 grid gap-3 sm:grid-cols-2">
             {result.researchSources.private.map((source) => (
               <div
                 key={source.name}
-                className="rounded-lg border border-border bg-muted/20 px-4 py-3 text-sm"
+                className="rounded-lg border border-border bg-slate-50 px-4 py-3 text-sm"
               >
-                <p className="font-medium">{source.name}</p>
-                <p className="text-muted-foreground">{source.description}</p>
-                <p className="mt-1 text-xs font-medium text-primary">
+                <p className="font-semibold text-slate-900">{source.name}</p>
+                <p className="text-slate-700">{source.description}</p>
+                <p className="mt-1 text-xs font-semibold text-teal-800">
                   {source.count} {source.count === 1 ? "source" : "sources"}{" "}
                   used
                 </p>
               </div>
             ))}
           </div>
-          <ul className="space-y-3">
+          <ul className="space-y-2">
             {result.privateReferences.map((ref) => {
               const classificationLabel = getPrivateSourceClassificationLabel(
                 ref.classification,
@@ -342,29 +344,33 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
               return (
                 <li
                   key={ref.chunkId}
-                  className="rounded-lg border border-border bg-card px-4 py-4 text-sm"
+                  className="report-kb-item rounded-lg border border-border bg-card px-4 py-3 text-sm"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-foreground">
+                  <div className="flex flex-nowrap items-center gap-2">
+                    <p className="report-kb-item-title shrink-0 font-semibold text-slate-900">
                       {ref.documentName}
                     </p>
-                    {classificationLabel ? (
-                      <Badge variant="secondary">{classificationLabel}</Badge>
-                    ) : null}
                     {ref.pageNumber ? (
-                      <Badge variant="outline">Page {ref.pageNumber}</Badge>
+                      <Badge variant="outline" className="shrink-0">
+                        Page {ref.pageNumber}
+                      </Badge>
+                    ) : null}
+                    {classificationLabel ? (
+                      <Badge variant="secondary" className="shrink-0">
+                        {classificationLabel}
+                      </Badge>
                     ) : null}
                     {typeof ref.relevanceScore === "number" ? (
-                      <span className="text-xs text-muted-foreground">
-                        Relevance {(ref.relevanceScore * 100).toFixed(0)}%
+                      <span className="shrink-0 text-xs text-slate-600">
+                        {(ref.relevanceScore * 100).toFixed(0)}% match
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-2 leading-relaxed text-foreground">
+                  <p className="report-kb-item-summary mt-2 leading-relaxed text-slate-800">
                     {getPrivateSourceSummary(ref)}
                   </p>
                   {ref.excerpt ? (
-                    <blockquote className="mt-3 border-l-2 border-primary/30 pl-3 text-muted-foreground italic">
+                    <blockquote className="report-kb-item-excerpt mt-2 border-l-2 border-teal-600 pl-3 text-sm text-slate-700 italic">
                       &ldquo;{ref.excerpt}&rdquo;
                     </blockquote>
                   ) : null}
@@ -422,7 +428,7 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
 
         <ReportTermsSection />
 
-        <footer className="report-export-block report-footer border-t border-border/70 pt-4 text-center text-xs text-muted-foreground">
+        <footer className="report-export-block report-footer border-t border-border/70 pt-3 pb-0 text-center text-xs text-slate-600">
           Medical Causation AI · Report generated{" "}
           {formatReportDate(result.metadata.generatedAt)} ·{" "}
           {result.metadata.chunkCount} knowledge-base passages reviewed

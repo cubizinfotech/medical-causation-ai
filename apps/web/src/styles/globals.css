@@ -135,13 +135,24 @@ body {
   }
 }
 
-/* PDF export capture mode — explicit hex colors, single column, no gradients */
+/* PDF export capture mode — full-width layout, readable contrast */
 .pdf-export-mode {
   width: 794px !important;
   max-width: 794px !important;
+  min-width: 794px !important;
   background: #ffffff !important;
   color: #0f172a !important;
-  padding: 8px !important;
+  padding: 0 !important;
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+}
+
+.pdf-export-mode.report-export-root {
+  gap: 12px !important;
+}
+
+.pdf-export-mode.report-export-root > * + * {
+  margin-top: 12px !important;
 }
 
 .pdf-export-mode * {
@@ -149,16 +160,91 @@ body {
 }
 
 .pdf-export-mode .report-export-block {
-  margin-bottom: 12px;
-  border: 1px solid #e2e8f0 !important;
-  border-radius: 12px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-bottom: 12px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
   background: #ffffff !important;
-  overflow: hidden;
+  overflow: visible !important;
 }
 
 .pdf-export-mode .report-export-hero {
-  background: #f0fdfa !important;
-  border-color: #99f6e4 !important;
+  background: #ecfdf5 !important;
+  border-color: #5eead4 !important;
+  padding: 0 !important;
+}
+
+.pdf-export-mode .report-section-header {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  padding: 12px 18px !important;
+  background: #f1f5f9 !important;
+  border-bottom: 1px solid #cbd5e1 !important;
+  width: 100% !important;
+}
+
+.pdf-export-mode .report-section-header > div {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  width: 100% !important;
+  gap: 10px !important;
+}
+
+.pdf-export-mode .report-section-icon {
+  flex-shrink: 0 !important;
+  width: 32px !important;
+  height: 32px !important;
+  background: #ccfbf1 !important;
+  color: #0f766e !important;
+}
+
+.pdf-export-mode .report-section-title {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  letter-spacing: -0.01em !important;
+}
+
+.pdf-export-mode .report-section-body {
+  padding: 14px 18px !important;
+  color: #1e293b !important;
+}
+
+.pdf-export-mode p,
+.pdf-export-mode li,
+.pdf-export-mode blockquote {
+  color: #1e293b !important;
+}
+
+.pdf-export-mode [class*="text-muted-foreground"] {
+  color: #334155 !important;
+}
+
+.pdf-export-mode [class*="text-slate-700"],
+.pdf-export-mode [class*="text-slate-800"] {
+  color: #1e293b !important;
+}
+
+.pdf-export-mode [class*="text-slate-600"] {
+  color: #334155 !important;
+}
+
+.pdf-export-mode [class*="text-foreground"] {
+  color: #0f172a !important;
+}
+
+.pdf-export-mode [class*="text-primary"] {
+  color: #0f766e !important;
+  font-weight: 600 !important;
 }
 
 .pdf-export-mode .report-evidence-grid {
@@ -173,30 +259,97 @@ body {
 
 .pdf-export-mode .sm\:grid-cols-2,
 .pdf-export-mode .lg\:grid-cols-2 {
-  grid-template-columns: 1fr !important;
+  grid-template-columns: 1fr 1fr !important;
 }
 
 .pdf-export-mode [class*="bg-gradient"] {
-  background: #f0fdfa !important;
+  background: #ecfdf5 !important;
 }
 
 .pdf-export-mode [class*="bg-muted"] {
   background: #f8fafc !important;
 }
 
-.pdf-export-mode [class*="text-primary"] {
-  color: #0f766e !important;
-}
-
-.pdf-export-mode [class*="text-muted-foreground"] {
-  color: #64748b !important;
-}
-
 .pdf-export-mode [class*="border-primary"] {
-  border-color: #99f6e4 !important;
+  border-color: #5eead4 !important;
+}
+
+.pdf-export-mode .report-kb-item {
+  padding: 10px 12px !important;
+  margin-bottom: 6px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  background: #ffffff !important;
+}
+
+.pdf-export-mode .report-kb-item > div:first-child {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+
+.pdf-export-mode .report-kb-item-title {
+  flex: 0 1 auto !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  white-space: nowrap !important;
+}
+
+.pdf-export-mode .report-kb-item-summary {
+  font-size: 13px !important;
+  color: #1e293b !important;
+  margin-top: 4px !important;
+  line-height: 1.5 !important;
+}
+
+.pdf-export-mode .report-kb-item-excerpt {
+  font-size: 12px !important;
+  color: #334155 !important;
+  border-left: 3px solid #0f766e !important;
+  padding-left: 10px !important;
+  margin-top: 6px !important;
+  font-style: italic !important;
 }
 
 .pdf-export-mode .report-terms {
   background: #f8fafc !important;
-  border: 1px solid #e2e8f0 !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 16px 18px !important;
+}
+
+.pdf-export-mode .report-terms-heading,
+.pdf-export-mode .report-terms-subheading {
+  color: #0f172a !important;
+  white-space: nowrap !important;
+  font-weight: 700 !important;
+}
+
+.pdf-export-mode .report-terms-intro,
+.pdf-export-mode .report-terms-body {
+  color: #1e293b !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+}
+
+.pdf-export-mode .report-terms-footer {
+  color: #334155 !important;
+  font-size: 11px !important;
+  line-height: 1.5 !important;
+  margin-top: 12px !important;
+  padding-top: 10px !important;
+}
+
+.pdf-export-mode .report-footer {
+  padding: 10px 0 0 !important;
+  margin-top: 4px !important;
+  margin-bottom: 0 !important;
+  border-top: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  font-size: 11px !important;
+  background: transparent !important;
+  border-radius: 0 !important;
 }

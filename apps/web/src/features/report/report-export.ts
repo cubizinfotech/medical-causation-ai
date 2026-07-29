@@ -1,11 +1,11 @@
 import { domToCanvas } from "modern-screenshot";
 
-const PDF_MARGIN_MM = 12;
+const PDF_MARGIN_MM = 10;
 const PDF_PAGE_WIDTH_MM = 210;
 const PDF_PAGE_HEIGHT_MM = 297;
 const PDF_CONTENT_WIDTH_MM = PDF_PAGE_WIDTH_MM - PDF_MARGIN_MM * 2;
 const PDF_CONTENT_HEIGHT_MM = PDF_PAGE_HEIGHT_MM - PDF_MARGIN_MM * 2;
-/** A4 content width at 96 DPI — keeps layout stable during capture */
+/** Full A4 content width at 96 DPI */
 const EXPORT_WIDTH_PX = 794;
 
 function shouldIncludeInPdfExport(node: Node): boolean {
@@ -22,10 +22,9 @@ async function waitForPaint(): Promise<void> {
   await new Promise<void>((resolve) => {
     requestAnimationFrame(() => resolve());
   });
-}
-
-function canvasHeightMm(canvas: HTMLCanvasElement): number {
-  return (canvas.height * PDF_CONTENT_WIDTH_MM) / canvas.width;
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 50);
+  });
 }
 
 function drawCanvasSlice(
@@ -70,47 +69,44 @@ function drawCanvasSlice(
   );
 }
 
-function appendCanvasToPdf(
+function renderFullCanvasToPdf(
   pdf: import("jspdf").jsPDF,
   canvas: HTMLCanvasElement,
-  startYmm: number,
-): number {
+): void {
   const scale = PDF_CONTENT_WIDTH_MM / canvas.width;
   let offsetY = 0;
-  let yMm = startYmm;
+  let yMm = 0;
+  let isFirstSlice = true;
 
   while (offsetY < canvas.height) {
     const remainingPageMm = PDF_CONTENT_HEIGHT_MM - yMm;
-    if (remainingPageMm < 6) {
+    if (!isFirstSlice && remainingPageMm < 8) {
       pdf.addPage();
       yMm = 0;
       continue;
     }
 
-    const maxSlicePx = Math.floor(remainingPageMm / scale);
+    const maxSlicePx = Math.floor(
+      (PDF_CONTENT_HEIGHT_MM - yMm) / scale,
+    );
     const slicePx = Math.min(maxSlicePx, canvas.height - offsetY);
+    if (slicePx <= 0) {
+      pdf.addPage();
+      yMm = 0;
+      continue;
+    }
 
     drawCanvasSlice(pdf, canvas, offsetY, slicePx, yMm);
 
     offsetY += slicePx;
     yMm += slicePx * scale;
+    isFirstSlice = false;
 
-    if (offsetY < canvas.height && yMm >= PDF_CONTENT_HEIGHT_MM - 2) {
+    if (offsetY < canvas.height && yMm >= PDF_CONTENT_HEIGHT_MM - 4) {
       pdf.addPage();
       yMm = 0;
     }
   }
-
-  return yMm + 6;
-}
-
-async function captureBlock(block: HTMLElement): Promise<HTMLCanvasElement> {
-  return domToCanvas(block, {
-    scale: 2,
-    backgroundColor: "#ffffff",
-    width: EXPORT_WIDTH_PX,
-    filter: shouldIncludeInPdfExport,
-  });
 }
 
 export async function downloadReportPdf(
@@ -119,50 +115,36 @@ export async function downloadReportPdf(
 ): Promise<void> {
   const { jsPDF } = await import("jspdf");
 
-  element.classList.add("pdf-export-mode");
-  element.style.width = `${EXPORT_WIDTH_PX}px`;
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.classList.add("pdf-export-mode");
+  clone.style.width = `${EXPORT_WIDTH_PX}px`;
+  clone.style.maxWidth = `${EXPORT_WIDTH_PX}px`;
+  clone.style.position = "fixed";
+  clone.style.left = "-10000px";
+  clone.style.top = "0";
+  clone.style.zIndex = "-1";
+  clone.style.background = "#ffffff";
+  document.body.appendChild(clone);
 
   await waitForPaint();
 
   try {
-    const blocks = Array.from(
-      element.querySelectorAll<HTMLElement>(".report-export-block"),
-    );
-
-    if (blocks.length === 0) {
-      throw new Error("No report sections found for PDF export");
-    }
+    const canvas = await domToCanvas(clone, {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      width: EXPORT_WIDTH_PX,
+      filter: shouldIncludeInPdfExport,
+      style: {
+        width: `${EXPORT_WIDTH_PX}px`,
+        maxWidth: `${EXPORT_WIDTH_PX}px`,
+        backgroundColor: "#ffffff",
+      },
+    });
 
     const pdf = new jsPDF("p", "mm", "a4");
-    let yMm = 0;
-
-    for (const block of blocks) {
-      const canvas = await captureBlock(block);
-      const blockHeightMm = canvasHeightMm(canvas);
-
-      if (yMm > 0 && yMm + blockHeightMm > PDF_CONTENT_HEIGHT_MM) {
-        pdf.addPage();
-        yMm = 0;
-      }
-
-      if (blockHeightMm <= PDF_CONTENT_HEIGHT_MM - yMm) {
-        pdf.addImage(
-          canvas.toDataURL("image/png"),
-          "PNG",
-          PDF_MARGIN_MM,
-          PDF_MARGIN_MM + yMm,
-          PDF_CONTENT_WIDTH_MM,
-          blockHeightMm,
-        );
-        yMm += blockHeightMm + 6;
-      } else {
-        yMm = appendCanvasToPdf(pdf, canvas, yMm);
-      }
-    }
-
+    renderFullCanvasToPdf(pdf, canvas);
     pdf.save(filename ?? `medical-causation-report-${Date.now()}.pdf`);
   } finally {
-    element.classList.remove("pdf-export-mode");
-    element.style.width = "";
+    document.body.removeChild(clone);
   }
 }
