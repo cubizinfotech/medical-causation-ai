@@ -98,3 +98,105 @@ body {
 .animate-progress-shimmer {
   animation: progress-shimmer 1.5s ease-in-out infinite;
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .report-export-root {
+    background: #ffffff !important;
+  }
+
+  .report-section,
+  .report-terms {
+    break-inside: avoid-page;
+    box-shadow: none !important;
+  }
+
+  .report-terms {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .report-footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e2e8f0;
+  }
+}
+
+/* PDF export capture mode — explicit hex colors, single column, no gradients */
+.pdf-export-mode {
+  width: 794px !important;
+  max-width: 794px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  padding: 8px !important;
+}
+
+.pdf-export-mode * {
+  box-shadow: none !important;
+}
+
+.pdf-export-mode .report-export-block {
+  margin-bottom: 12px;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  overflow: hidden;
+}
+
+.pdf-export-mode .report-export-hero {
+  background: #f0fdfa !important;
+  border-color: #99f6e4 !important;
+}
+
+.pdf-export-mode .report-evidence-grid {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.pdf-export-mode .report-evidence-grid > * {
+  width: 100% !important;
+}
+
+.pdf-export-mode .sm\:grid-cols-2,
+.pdf-export-mode .lg\:grid-cols-2 {
+  grid-template-columns: 1fr !important;
+}
+
+.pdf-export-mode [class*="bg-gradient"] {
+  background: #f0fdfa !important;
+}
+
+.pdf-export-mode [class*="bg-muted"] {
+  background: #f8fafc !important;
+}
+
+.pdf-export-mode [class*="text-primary"] {
+  color: #0f766e !important;
+}
+
+.pdf-export-mode [class*="text-muted-foreground"] {
+  color: #64748b !important;
+}
+
+.pdf-export-mode [class*="border-primary"] {
+  border-color: #99f6e4 !important;
+}
+
+.pdf-export-mode .report-terms {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+}

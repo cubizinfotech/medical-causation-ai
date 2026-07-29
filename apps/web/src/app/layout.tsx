@@ -34,7 +34,9 @@ export default function RootLayout({
       <body suppressHydrationWarning className="min-h-full flex flex-col">
         <QueryProvider>
           <SiteHeader />
-          <div className="flex-1">{children}</div>
+          <div className="flex-1" suppressHydrationWarning>
+            {children}
+          </div>
           <SiteFooter />
         </QueryProvider>
       </body>

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -44,6 +45,12 @@ export class MedicalAnalysisController {
   @Get('histories/:id')
   getHistory(@Param('id') id: string) {
     return this.historyService.getHistory(id);
+  }
+
+  @Delete('histories/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteHistory(@Param('id') id: string): Promise<void> {
+    await this.historyService.deleteHistory(id);
   }
 
   @Post('jobs')

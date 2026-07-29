@@ -2,21 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Progress } from "@/components/ui/progress";
-import {
-  medicalAnalysisClient,
-} from "@/features/medical-analysis/medical-analysis.service";
+import { medicalAnalysisClient } from "@/features/medical-analysis/medical-analysis.service";
+import { formatReportDate } from "@/utils/format-date";
 import type { AnalysisHistoryListItem } from "@/features/medical-analysis/history.types";
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return formatReportDate(iso);
 }
 
 function statusVariant(
@@ -51,6 +48,9 @@ export default function HistoriesView() {
   const [histories, setHistories] = useState<AnalysisHistoryListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] =
+    useState<AnalysisHistoryListItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,6 +72,30 @@ export default function HistoriesView() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const handleDelete = async () => {
+    if (!pendingDelete) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await medicalAnalysisClient.deleteHistory(pendingDelete.id);
+      setHistories((rows) =>
+        rows.filter((row) => row.id !== pendingDelete.id),
+      );
+      setPendingDelete(null);
+    } catch (deleteError) {
+      const message =
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Failed to delete history";
+      setError(message);
+      setPendingDelete(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -111,77 +135,110 @@ export default function HistoriesView() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={() => void load()}>
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
-      </div>
-
-      <p className="text-sm text-muted-foreground">
-        Cases run one at a time in the background. Additional submissions stay
-        queued until the current analysis finishes.
-      </p>
-
-      <div className="overflow-hidden rounded-lg border border-border">
-        <div className="hidden grid-cols-12 gap-4 border-b border-border bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
-          <div className="col-span-3">Patient</div>
-          <div className="col-span-4">Medical Question</div>
-          <div className="col-span-2">Status</div>
-          <div className="col-span-2">Submitted</div>
-          <div className="col-span-1 text-right">Progress</div>
+    <>
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => void load()}>
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
         </div>
 
-        {histories.map((row) => (
-          <Link
-            key={row.id}
-            href={`/histories/${row.id}`}
-            className="block border-b border-border last:border-b-0 transition-colors hover:bg-muted/30"
-          >
-            <div className="grid gap-3 px-4 py-4 sm:grid-cols-12 sm:items-center sm:gap-4">
-              <div className="sm:col-span-3">
-                <p className="font-medium text-foreground">{row.patientName}</p>
-                <p className="text-xs text-muted-foreground sm:hidden">
-                  {formatDate(row.createdAt)}
-                </p>
-              </div>
-              <div className="sm:col-span-4">
-                <p className="line-clamp-2 text-sm text-muted-foreground">
-                  {row.medicalQuestion}
-                </p>
-              </div>
-              <div className="sm:col-span-2">
-                <Badge variant={statusVariant(row.status)}>
-                  {statusLabel(row.status)}
-                </Badge>
-                {row.stepLabel &&
-                (row.status === "running" || row.status === "queued") ? (
-                  <p className="mt-1 text-xs text-muted-foreground line-clamp-1">
-                    {row.stepLabel}
+        <p className="text-sm text-muted-foreground">
+          Cases run one at a time in the background. Additional submissions stay
+          queued until the current analysis finishes.
+        </p>
+
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="hidden grid-cols-12 gap-4 border-b border-border bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
+            <div className="col-span-3">Patient</div>
+            <div className="col-span-4">Medical Question</div>
+            <div className="col-span-2">Status</div>
+            <div className="col-span-2">Submitted</div>
+            <div className="col-span-1 text-right">Actions</div>
+          </div>
+
+          {histories.map((row) => (
+            <div
+              key={row.id}
+              className="grid gap-3 border-b border-border px-4 py-4 last:border-b-0 sm:grid-cols-12 sm:items-center sm:gap-4"
+            >
+              <Link
+                href={`/histories/${row.id}`}
+                className="contents transition-colors hover:bg-muted/30"
+              >
+                <div className="sm:col-span-3">
+                  <p className="font-medium text-foreground">{row.patientName}</p>
+                  <p className="text-xs text-muted-foreground sm:hidden">
+                    {formatDate(row.createdAt)}
                   </p>
-                ) : null}
-              </div>
-              <div className="hidden text-sm text-muted-foreground sm:col-span-2 sm:block">
-                {formatDate(row.createdAt)}
-              </div>
-              <div className="sm:col-span-1">
-                <div className="flex items-center gap-2 sm:justify-end">
-                  <span className="text-xs text-muted-foreground sm:hidden">
-                    {row.progress}%
-                  </span>
-                  <div className="hidden w-16 sm:block">
-                    <Progress value={row.progress} className="h-1.5" />
-                  </div>
-                  <span className="hidden text-xs text-muted-foreground sm:inline">
-                    {row.progress}%
-                  </span>
                 </div>
+                <div className="sm:col-span-4">
+                  <p className="line-clamp-2 text-sm text-muted-foreground">
+                    {row.medicalQuestion}
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <Badge variant={statusVariant(row.status)}>
+                    {statusLabel(row.status)}
+                  </Badge>
+                  {row.stepLabel &&
+                  (row.status === "running" || row.status === "queued") ? (
+                    <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+                      {row.stepLabel}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="hidden text-sm text-muted-foreground sm:col-span-2 sm:block">
+                  {formatDate(row.createdAt)}
+                </div>
+                <div className="hidden sm:col-span-1 sm:block">
+                  <div className="flex items-center justify-end gap-2">
+                    <Progress value={row.progress} className="h-1.5 w-16" />
+                    <span className="text-xs text-muted-foreground">
+                      {row.progress}%
+                    </span>
+                  </div>
+                </div>
+              </Link>
+
+              <div className="flex items-center justify-between sm:col-span-12 sm:justify-end sm:pl-0">
+                <span className="text-xs text-muted-foreground sm:hidden">
+                  {row.progress}% complete
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setPendingDelete(row)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
               </div>
             </div>
-          </Link>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete case history?"
+        description={
+          pendingDelete
+            ? `This permanently removes the case for ${pendingDelete.patientName} and its analysis report. This action cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete Case"
+        destructive
+        loading={deleting}
+        onCancel={() => {
+          if (!deleting) {
+            setPendingDelete(null);
+          }
+        }}
+        onConfirm={() => void handleDelete()}
+      />
+    </>
   );
 }

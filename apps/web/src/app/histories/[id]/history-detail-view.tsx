@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   ArrowLeft,
@@ -9,6 +10,7 @@ import {
   Clock,
   Loader2,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout";
 import { LoadingCard, ProgressTimeline } from "@/components/demo";
@@ -16,11 +18,13 @@ import { MedicalReport } from "@/components/report/medical-report";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Progress } from "@/components/ui/progress";
 import { ANALYSIS_PROGRESS_STEPS } from "@/features/demo/constants";
 import { useMedicalAnalysisJob } from "@/features/demo/hooks/use-medical-analysis-job";
 import { medicalAnalysisClient } from "@/features/medical-analysis/medical-analysis.service";
 import type { AnalysisHistoryDetail } from "@/features/medical-analysis/history.types";
+import { formatReportDate } from "@/utils/format-date";
 
 function formatElapsed(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -40,11 +44,14 @@ function isProcessing(status: AnalysisHistoryDetail["status"]): boolean {
 }
 
 export default function HistoryDetailView({ id }: { id: string }) {
+  const router = useRouter();
   const [history, setHistory] = useState<AnalysisHistoryDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const {
     job,
@@ -170,6 +177,23 @@ export default function HistoryDetailView({ id }: { id: string }) {
 
   const result = history?.result ?? job?.result ?? null;
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await medicalAnalysisClient.deleteHistory(id);
+      router.push("/histories");
+    } catch (deleteError) {
+      const message =
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Failed to delete history";
+      setLoadError(message);
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading && !history) {
     return (
       <PageContainer className="py-20 text-center text-muted-foreground">
@@ -203,12 +227,23 @@ export default function HistoryDetailView({ id }: { id: string }) {
   return (
     <PageContainer className="py-10">
       <div className="mb-8">
-        <Button variant="ghost" size="sm" asChild className="mb-4 -ml-2">
-          <Link href="/histories">
-            <ArrowLeft className="h-4 w-4" />
-            All Histories
-          </Link>
-        </Button>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <Button variant="ghost" size="sm" asChild className="-ml-2">
+            <Link href="/histories">
+              <ArrowLeft className="h-4 w-4" />
+              All Histories
+            </Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete Case
+          </Button>
+        </div>
         <Badge variant="secondary" className="mb-3">
           {processing
             ? "Background Processing"
@@ -304,7 +339,7 @@ export default function HistoryDetailView({ id }: { id: string }) {
                 <p className="font-semibold text-primary">Report ready</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Confidence score: {result.confidenceScore.score}% · Submitted{" "}
-                  {new Date(history.createdAt).toLocaleString()}
+                  {formatReportDate(history.createdAt)}
                 </p>
               </div>
             </CardContent>
@@ -352,6 +387,21 @@ export default function HistoryDetailView({ id }: { id: string }) {
           ) : null}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete case history?"
+        description={`This permanently removes the case for ${history.patientName} and its analysis report. This action cannot be undone.`}
+        confirmLabel="Delete Case"
+        destructive
+        loading={deleting}
+        onCancel={() => {
+          if (!deleting) {
+            setShowDeleteConfirm(false);
+          }
+        }}
+        onConfirm={() => void handleDelete()}
+      />
     </PageContainer>
   );
 }

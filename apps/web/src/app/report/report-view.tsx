@@ -11,22 +11,28 @@ import type { MedicalAnalysisResult } from "@/features/medical-analysis/types";
 
 export default function ReportView() {
   const router = useRouter();
-  const [result] = useState<MedicalAnalysisResult | null>(() =>
-    loadAnalysisResult(),
-  );
+  const [result, setResult] = useState<MedicalAnalysisResult | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!result) {
+    const loaded = loadAnalysisResult();
+    setResult(loaded);
+    setReady(true);
+    if (!loaded) {
       router.replace("/case");
     }
-  }, [result, router]);
+  }, [router]);
 
-  if (!result) {
+  if (!ready) {
     return (
       <PageContainer className="py-20 text-center text-muted-foreground">
         Loading report…
       </PageContainer>
     );
+  }
+
+  if (!result) {
+    return null;
   }
 
   return (

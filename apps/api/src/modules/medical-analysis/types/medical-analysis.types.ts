@@ -25,6 +25,11 @@ export interface PrivateReference {
   documentName: string;
   pageNumber: number | null;
   citationText: string;
+  /** Human-readable description for report display (no chunk IDs). */
+  summary: string;
+  excerpt?: string;
+  classification?: EvidenceClassificationType;
+  relevanceScore?: number;
   sourceFile: string;
   sourceType: 'private_kb';
 }

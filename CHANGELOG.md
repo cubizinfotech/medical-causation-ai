@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Case history delete — `DELETE /medical-analysis/histories/:id` with confirmation dialog in UI
+- PDF report export (replaces Markdown export) with terms & policy footer
+- Human-readable private knowledge base source summaries in reports
+- Client demo guide with step-by-step presentation flow ([DEMO_GUIDE.md](./DEMO_GUIDE.md))
+
+### Changed
+
+- Updated README, frontend-demo, and medical-analysis docs to reflect current features
+- Analysis completion redirects to `/histories/{caseId}` instead of session-only report
+- Session cache cleanup utilities for demo flow
+
+### Removed
+
+- Deprecated frontend `useMedicalAnalysis` hook and sync `analyze()` client method
+- Unused `loadUploadedFileNames()` session storage helper
+
+### Added
+
 - Final demonstration review — validation fixes, documentation, demo/deployment guides
 - `DEMO_GUIDE.md` and `DEPLOYMENT.md` at project root
 - Root `npm run validate` script for full CI-style checks

@@ -23,6 +23,7 @@ import {
   loadActiveAnalysis,
   saveActiveAnalysis,
   saveAnalysisResult,
+  clearActiveAnalysis,
 } from "@/features/demo/storage/case-storage";
 import type { CaseFormValues } from "@/features/demo/schemas/case-form.schema";
 
@@ -150,7 +151,13 @@ export default function AnalysisView() {
 
   const openReport = useCallback(() => {
     if (job?.result) {
+      const active = loadActiveAnalysis();
       saveAnalysisResult(job.result);
+      clearActiveAnalysis();
+      if (active?.caseId) {
+        router.push(`/histories/${active.caseId}`);
+        return;
+      }
       router.push("/report");
     }
   }, [job?.result, router]);

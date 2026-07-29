@@ -1,4 +1,4 @@
-import HistoryDetailView from "./history-detail-view";
+import HistoryDetailPageClient from "./history-detail-page-client";
 
 export default async function HistoryDetailPage({
   params,
@@ -6,5 +6,5 @@ export default async function HistoryDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <HistoryDetailView id={id} />;
+  return <HistoryDetailPageClient id={id} />;
 }

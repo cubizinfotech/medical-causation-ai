@@ -41,6 +41,10 @@ export interface PrivateReference {
   documentName: string;
   pageNumber: number | null;
   citationText: string;
+  summary?: string;
+  excerpt?: string;
+  classification?: EvidenceClassificationType;
+  relevanceScore?: number;
   sourceFile: string;
   sourceType: "private_kb";
 }

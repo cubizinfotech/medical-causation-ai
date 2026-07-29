@@ -1,5 +1,5 @@
 import { apiUrl } from "@/lib/config";
-import type { AnalyzeCaseRequest, MedicalAnalysisResult } from "./types";
+import type { AnalyzeCaseRequest } from "./types";
 import type {
   CreateMedicalAnalysisJobResponse,
   MedicalAnalysisJobRecord,
@@ -8,8 +8,6 @@ import type {
   AnalysisHistoryDetail,
   AnalysisHistoryListItem,
 } from "./history.types";
-
-const ANALYSIS_TIMEOUT_MS = 300_000;
 
 export class ApiError extends Error {
   constructor(
@@ -66,34 +64,13 @@ export class MedicalAnalysisClient {
     return parseApiResponse<AnalysisHistoryDetail>(response);
   }
 
-  /** @deprecated Use submitJob + WebSocket/polling for long-running analysis */
-  async analyze(request: AnalyzeCaseRequest): Promise<MedicalAnalysisResult> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
+  async deleteHistory(id: string): Promise<void> {
+    const response = await fetch(apiUrl(`/medical-analysis/histories/${id}`), {
+      method: "DELETE",
+    });
 
-    try {
-      const response = await fetch(apiUrl("/medical-analysis/analyze"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
-        signal: controller.signal,
-      });
-
-      return parseApiResponse<MedicalAnalysisResult>(response);
-    } catch (error) {
-      if (error instanceof ApiError) throw error;
-      if (error instanceof DOMException && error.name === "AbortError") {
-        throw new ApiError(
-          "Analysis timed out. The knowledge base search may still be running — please try again.",
-          408,
-        );
-      }
-      throw new ApiError(
-        "Unable to reach the analysis API. Ensure the backend is running.",
-        0,
-      );
-    } finally {
-      clearTimeout(timeout);
+    if (!response.ok) {
+      await parseApiResponse<never>(response);
     }
   }
 }

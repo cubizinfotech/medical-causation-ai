@@ -1,6 +1,6 @@
 # Medical Causation AI — Demonstration Guide
 
-This guide walks you through installing, configuring, and demonstrating the **Medical Causation AI Platform** for stakeholders and developers.
+This guide walks you through installing, configuring, and demonstrating the **Medical Causation AI Platform** for clients and stakeholders.
 
 ## Project Overview
 
@@ -9,7 +9,9 @@ Medical Causation AI helps personal injury attorneys evaluate whether trauma or 
 - A **private knowledge base** (indexed medical textbooks and documents)
 - **Hybrid RAG retrieval** (pgvector + PostgreSQL full-text search)
 - **LLM-powered medical analysis** with citation validation
-- A **polished web UI** for case intake and live analysis
+- **Persistent case history** stored in PostgreSQL
+- **Background job processing** with live WebSocket progress
+- A **polished web UI** for case intake, analysis, reports, and history
 
 > This is legal research assistance — not medical diagnosis or treatment advice.
 
@@ -22,7 +24,9 @@ Medical Causation AI helps personal injury attorneys evaluate whether trauma or 
 | Docker | 24.x or later |
 | Docker Compose | v2 |
 
-You also need API keys for at least one AI provider (OpenRouter recommended).
+You also need API keys for:
+- **Chat/reasoning** — Groq (free tier) or OpenRouter
+- **Embeddings** — OpenRouter (recommended; no Gemini 1,000/day cap)
 
 ## Installation
 
@@ -37,7 +41,7 @@ npm install
 cp .env.example .env
 ```
 
-> **Warning:** Do not run `npm audit fix --force` — it can downgrade Next.js/NestJS and break the dev server. If dependencies get corrupted, delete `node_modules` and `package-lock.json`, restore `package.json` files from git, then run `npm install` again.
+> **Warning:** Do not run `npm audit fix --force` — it can downgrade Next.js/NestJS and break the dev server.
 
 ## Environment Configuration
 
@@ -45,21 +49,18 @@ Edit `.env` with these **critical** settings:
 
 ```env
 # Database (Docker defaults work for local demo)
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=mca_user
-POSTGRES_PASSWORD=mca_password
-POSTGRES_DB=medical_causation_ai
 DATABASE_URL=postgresql://mca_user:mca_password@localhost:5432/medical_causation_ai
 
-# AI — use a CHAT model, not a rerank model
-AI_PROVIDER=openrouter
-AI_CHAT_MODEL=openai/gpt-4o-mini
-OPENROUTER_API_KEY=your-key-here
+# AI — chat/reasoning (Groq free tier recommended)
+AI_PROVIDER=groq
+AI_CHAT_MODEL=llama-3.3-70b-versatile
+GROQ_API_KEY=your-groq-key
 
-# Embeddings (must match indexed data)
+# Embeddings (OpenRouter — batched, no daily cap)
 EMBEDDING_PROVIDER=openrouter
 AI_EMBEDDING_MODEL=openai/text-embedding-3-small
+EMBEDDING_DIMENSIONS=768
+OPENROUTER_API_KEY=your-openrouter-key
 
 # Frontend ↔ Backend
 FRONTEND_URL=http://localhost:3000
@@ -74,59 +75,39 @@ See `.env.example` for the full variable reference.
 
 ## Knowledge Base Setup
 
-### Where to Place Medical Books
-
-Place licensed PDF textbooks and documents under:
+Place licensed PDF textbooks under:
 
 ```
 knowledge-base/
 ├── books/        ← Medical textbooks (PDF)
 ├── articles/     ← Research articles
 ├── reports/      ← Internal reference reports
-├── templates/    ← Report templates
 └── uploads/      ← Staging for future uploads
 ```
 
 **Example:** `knowledge-base/books/ama 6th book.pdf`
 
-See [knowledge-base/README.md](./knowledge-base/README.md) for organization guidelines.
-
-## Indexing Documents
-
-Before RAG retrieval works, documents must be indexed (chunked + embedded + stored in pgvector).
-
-### 1. Start infrastructure
+### Index & embed documents
 
 ```bash
+# 1. Start infrastructure
 npm run docker:infra
-```
 
-### 2. Run Prisma migrations (if not already applied)
-
-From the project root or `apps/api` (both load the root `.env` automatically):
-
-```bash
+# 2. Apply database migrations
 npm run prisma:migrate
+
+# 3. Index + embed knowledge base (first time or after adding docs)
+npm run reembed:kb:full
 ```
 
-Or from `apps/api`:
+Verify embeddings:
 
 ```bash
-cd apps/api
-npm run prisma:migrate
+docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai -c \
+  "SELECT COUNT(*) AS chunks FROM documents.document_chunks; SELECT COUNT(*) AS embeddings FROM vectors.chunk_embeddings;"
 ```
 
-### 3. Index the knowledge base
-
-Use the indexing pipeline via the NestJS application context or existing indexing scripts/workflows documented in [docs/indexing.md](./docs/indexing.md).
-
-Verify indexed data:
-
-```bash
-docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai -c "SELECT COUNT(*) AS chunks FROM documents.document_chunks; SELECT COUNT(*) AS embeddings FROM vectors.chunk_embeddings;"
-```
-
-You should see chunk rows for each indexed document (embeddings count should match chunks).
+Both counts should match (e.g. 1,486).
 
 ## Starting the Application
 
@@ -136,7 +117,7 @@ You should see chunk rows for each indexed document (embeddings count should mat
 npm run dev:api
 ```
 
-API listens on [http://localhost:3001](http://localhost:3001)
+API: [http://localhost:3001](http://localhost:3001)
 
 ### Terminal 2 — Frontend
 
@@ -144,71 +125,124 @@ API listens on [http://localhost:3001](http://localhost:3001)
 npm run dev:web
 ```
 
-Web app at [http://localhost:3000](http://localhost:3000)
+Web app: [http://localhost:3000](http://localhost:3000)
 
-### Optional — Full Docker stack
+---
 
-```bash
-docker compose up -d --build
-```
+## Client Demo — Step-by-Step Flow
 
-## Demonstration Workflow
+Use this script when presenting to a client. Total demo time: **5–10 minutes** per case.
 
 ### Step 1 — Landing Page
 
-Open [http://localhost:3000](http://localhost:3000)
+**URL:** [http://localhost:3000](http://localhost:3000)
 
-- Review platform overview, features, and workflow
+**Say:** *"This platform helps attorneys evaluate medical causation using your firm's private medical library plus AI reasoning."*
+
+**Show:**
+- Platform overview and capabilities
+- How-it-works workflow
 - Click **Start AI Demonstration**
 
-### Step 2 — Medical Case Form
+---
 
-Navigate to [http://localhost:3000/case](http://localhost:3000/case)
+### Step 2 — Case Intake Form
 
-**Quick start:** Click **Load Example Case** repeatedly to cycle through 4 scenarios (mTBI/stroke, cervical MVA, workplace fall). See [`docs/demo-case-example.md`](docs/demo-case-example.md).
+**URL:** [http://localhost:3000/case](http://localhost:3000/case)
 
-Fill in manually if preferred:
+**Say:** *"The attorney enters patient and accident details, then asks a specific medical causation question."*
+
+**Quick start:** Click **Load Example Case** to cycle through 4 pre-built scenarios (mTBI/stroke, cervical MVA, workplace fall).
+
+**Or fill manually:**
 
 | Section | Example |
 |---------|---------|
 | Patient | Robert Chen, 52, Male |
 | Accident | Motor vehicle collision, 2023-09-14 |
-| Diagnosis | Acute ischemic stroke; mild TBI from collision |
-| Symptoms | Headache, confusion, then right-sided weakness on day 18 |
+| Diagnosis | Acute ischemic stroke; mild TBI |
+| Symptoms | Headache, confusion, right-sided weakness on day 18 |
 | Medical Question | *Did the mild TBI materially contribute to the ischemic stroke?* |
 
-Optionally attach PDF/DOCX files (display only — not sent to API in this phase).
+**Important:** Check the **Terms of Use** acknowledgment box.
 
 Click **Run AI Analysis**.
 
-### Step 3 — AI Processing Screen
+---
 
-You are redirected to [http://localhost:3000/analysis](http://localhost:3000/analysis)
+### Step 3 — Live Analysis Progress
 
-Watch the animated progress steps:
+**URL:** [http://localhost:3000/analysis](http://localhost:3000/analysis)
+
+**Say:** *"Analysis runs in the background — one case at a time. Progress updates live via WebSocket."*
+
+**Show the processing steps:**
 
 1. Preparing Medical Case
-2. Searching Knowledge Base
-3. Searching Scientific Evidence
+2. Searching Private Knowledge Base
+3. Searching Public Medical Literature
 4. Ranking Medical Sources
-5. Building Context
-6. Analyzing Medical Literature
-7. Generating Medical Reasoning
-8. Preparing Professional Report
+5. Medical Reasoning
+6. Generating Statistical Summary
+7. Cross-Examination Questions
+8. Final Report
 
-The page calls `POST /medical-analysis/analyze` on the real backend.
+**Typical duration:** 1–3 minutes (Groq) depending on model and rate limits.
 
-### Step 4 — Review Report
+On success, click **View Report** (opens the case in Histories).
 
-On success you are redirected to [http://localhost:3000/report](http://localhost:3000/report) with:
+---
 
-- Executive summary with statistical conclusion (AI-generated)
-- Confidence score, causation opinion, supporting/opposing evidence
-- Timeline, risk factors, public & private references
-- 50 cross-examination questions by category
-- Export to Markdown or print
+### Step 4 — Case History
 
-> You must accept the Terms disclaimer on the case form before analysis runs.
+**URL:** [http://localhost:3000/histories](http://localhost:3000/histories)
+
+**Say:** *"Every submitted case is saved permanently. Attorneys can return to any prior analysis."*
+
+**Show:**
+- List of all cases with status (Queued / Processing / Completed / Failed)
+- Progress percentage for in-flight cases
+- Click a row to open the full case detail
+
+**Delete (optional demo):** Click **Delete** on a row → confirm in the dialog. The case and report are permanently removed.
+
+---
+
+### Step 5 — Full Report
+
+**URL:** [http://localhost:3000/histories/{case-id}](http://localhost:3000/histories)
+
+**Say:** *"The report is evidence-based, cites your private knowledge base, and is ready for attorney review."*
+
+**Walk through report sections:**
+
+| Section | What to highlight |
+|---------|-------------------|
+| Executive Summary | 2–4 sentence attorney overview |
+| Confidence Score | 0–100 evidence alignment (not a diagnosis) |
+| Causation Opinion | Evidence-based conclusion |
+| Supporting / Opposing Evidence | Classified excerpts with page references |
+| Medical Reasoning | Step-by-step causation logic |
+| Timeline & Risk Factors | Case chronology and competing etiologies |
+| Private Knowledge Base Sources | Human-readable citations from AMA guides / textbooks |
+| Cross-Examination Questions | 50+ questions by category |
+| Legal Disclaimer | No medical advice / limitations |
+
+**Export:**
+- **Export PDF** — downloads a styled multi-page PDF
+- **Print** — browser print with terms & policy on the last page
+
+---
+
+### Step 6 — Wrap Up
+
+**Say:** *"The platform searches your indexed medical library, applies accepted causation methodology, and produces a citable report — without replacing a licensed medical expert."*
+
+Point to:
+- [Terms of Use](/terms) and [Privacy Policy](/privacy)
+- Knowledge base can be expanded by adding PDFs and re-running `npm run reembed:kb`
+
+---
 
 ## Expected AI Pipeline
 
@@ -219,7 +253,7 @@ Document Processing (PDF/DOCX/TXT/MD parsing)
         ↓
 Chunking (token-aware splits)
         ↓
-Embeddings (OpenRouter / OpenAI / etc.)
+Embeddings (OpenRouter text-embedding-3-small)
         ↓
 Vector Indexing (PostgreSQL + pgvector)
         ↓
@@ -227,59 +261,50 @@ Hybrid Retrieval (vector + keyword + RRF fusion)
         ↓
 Context Builder (dedup, token limits, citations)
         ↓
-Medical Analysis (LLM + citation validation)
+Medical Analysis (Groq LLM + citation validation)
         ↓
-Structured JSON result → UI preview
+Report Enrichment (timeline, cross-exam, references)
+        ↓
+PostgreSQL case history + full report UI
 ```
 
-## Manual API Test
+## API Endpoints (Demo)
 
-```bash
-cd apps/api
-npx ts-node -r tsconfig-paths/register scripts/run-medical-analysis.ts \
-  "Can mild traumatic brain injury increase the risk of stroke?"
-```
+| Method | Route | Purpose |
+|--------|-------|---------|
+| `POST` | `/medical-analysis/jobs` | Submit case for background analysis |
+| `GET` | `/medical-analysis/jobs/:jobId` | Poll job status |
+| `GET` | `/medical-analysis/histories` | List case history |
+| `GET` | `/medical-analysis/histories/:id` | Case detail + report |
+| `DELETE` | `/medical-analysis/histories/:id` | Delete case (with confirmation in UI) |
+| WebSocket | `/medical-analysis` | Live job progress events |
 
 ## Known Limitations
 
 | Limitation | Notes |
 |------------|-------|
 | No authentication | Open demo — no user accounts |
-| No PDF report export | Analysis preview only on `/analysis` |
-| No dedicated `/report` page | Full report viewer not yet built |
-| File upload is display-only | Uploaded files are not processed |
-| No PubMed / external literature | Private KB only in current demo |
-| No case history | Session storage only |
-| Analysis latency | 20–60+ seconds depending on model and KB size |
-| `AI_CHAT_MODEL` must be a chat model | Rerank models will fail |
-
-## Future Roadmap
- 
-| Phase | Focus |
-|-------|-------|
-| 2e | Health checks, Swagger, remaining REST APIs |
-| 4 | Full analysis report viewer |
-| 5 | Authentication + multi-tenant law firms |
-| 6 | PubMed / PMC / Semantic Scholar integration |
-| 7 | Professional PDF report generator |
-| 8 | Admin panel, audit logs |
+| File upload is display-only | Uploaded files are not sent to the API |
+| Public literature is simulated | PubMed/NIH references are demo placeholders |
+| One analysis at a time | Queue processes cases sequentially |
+| Groq free tier limits | ~1,000 requests/day, 100K tokens/day on llama-3.3-70b |
+| Analysis latency | 1–5 minutes depending on model and rate limits |
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| `No retrieved evidence available` | Index knowledge base documents first |
-| Analysis timeout | Increase `NEXT_PUBLIC_API_TIMEOUT_MS` to `180000` (sync endpoint only; jobs use WebSocket) |
-| Analysis stuck / canceled | Ensure Redis is running (`npm run docker:infra`); use background jobs at `POST /medical-analysis/jobs` |
-| LLM errors | Set `AI_CHAT_MODEL` to a valid chat model |
-| Rate limit exceeded (free models) | Use `AI_CHAT_MODEL=openrouter/free`, increase `AI_RETRY_MAX_ATTEMPTS` / `AI_RETRY_DELAY_MS`, or add Groq/OpenRouter credits |
-| CORS errors | Ensure `FRONTEND_URL=http://localhost:3000` |
+| `No retrieved evidence available` | Run `npm run reembed:kb:full` after embedding model changes |
+| Analysis fails at Medical Reasoning | Restart API; ensure Groq key is set; check JSON parse fix is deployed |
+| Gemini embedding quota (429) | Use OpenRouter for embeddings (`EMBEDDING_PROVIDER=openrouter`) |
+| Analysis stuck / canceled | Run `npm run docker:infra` (Redis required) |
+| CORS errors | Set `FRONTEND_URL=http://localhost:3000` |
 | Database connection failed | Run `npm run docker:infra` |
 
 ## Related Documentation
 
 - [README.md](./README.md)
-- [DEPLOYMENT.md](./DEPLOYMENT.md)
 - [docs/frontend-demo.md](./docs/frontend-demo.md)
 - [docs/medical-analysis.md](./docs/medical-analysis.md)
 - [docs/indexing.md](./docs/indexing.md)
+- [DEPLOYMENT.md](./DEPLOYMENT.md)

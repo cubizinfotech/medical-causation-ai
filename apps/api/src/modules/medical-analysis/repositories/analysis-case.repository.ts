@@ -68,6 +68,10 @@ export class AnalysisCaseRepository {
       .catch(() => null);
   }
 
+  delete(id: string): Promise<AnalysisCase> {
+    return this.prisma.analysisCase.delete({ where: { id } });
+  }
+
   mapStatus(status: string): AnalysisCaseStatus {
     if (
       status === 'queued' ||

@@ -6,7 +6,9 @@ import type {
 } from '../types';
 import {
   LEGAL_DISCLAIMER_TEXT,
+  buildPrivateSourceSummary,
   buildTimelineEvents,
+  formatKnowledgeBaseDocumentName,
   generateCrossExamination,
   inferRiskFactors,
   simulatePublicReferences,
@@ -23,14 +25,32 @@ export class ReportEnrichmentService {
       request.diagnosis,
     );
 
-    const privateReferences = result.citations.map((citation) => ({
-      chunkId: citation.chunkId,
-      documentName: citation.documentName,
-      pageNumber: citation.pageNumber,
-      citationText: citation.citationText,
-      sourceFile: citation.sourceFile,
-      sourceType: 'private_kb' as const,
-    }));
+    const evidenceByChunk = new Map(
+      result.retrievedEvidence.map((item) => [item.chunkId, item]),
+    );
+
+    const privateReferences = result.citations.map((citation) => {
+      const evidence = evidenceByChunk.get(citation.chunkId);
+      return {
+        chunkId: citation.chunkId,
+        documentName: formatKnowledgeBaseDocumentName(citation.documentName),
+        pageNumber: citation.pageNumber,
+        citationText: citation.citationText,
+        summary: buildPrivateSourceSummary({
+          citation,
+          classification: evidence?.classification,
+        }),
+        excerpt: evidence?.excerpt,
+        classification: evidence?.classification,
+        relevanceScore: citation.similarityScore,
+        sourceFile: citation.sourceFile,
+        sourceType: 'private_kb' as const,
+      };
+    });
+
+    const uniqueDocumentCount = new Set(
+      result.citations.map((citation) => citation.documentName),
+    ).size;
 
     const crossExamination = generateCrossExamination(
       request.medicalQuestion,
@@ -56,14 +76,16 @@ export class ReportEnrichmentService {
       researchSources: {
         private: [
           {
-            name: 'Internal Knowledge Base',
-            description: 'Uploaded books, medical PDFs, and indexed textbooks',
-            count: result.metadata.chunkCount,
+            name: 'Indexed Medical Library',
+            description:
+              'AMA guides, medical textbooks, and firm-uploaded reference documents',
+            count: uniqueDocumentCount,
           },
           {
-            name: 'AMA Guides & Private Library',
-            description: 'Proprietary medical references and firm-uploaded documents',
-            count: result.citations.length,
+            name: 'Retrieved Evidence Passages',
+            description:
+              'Knowledge-base excerpts matched to this case via hybrid search',
+            count: privateReferences.length,
           },
         ],
         public: [

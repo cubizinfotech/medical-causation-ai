@@ -157,6 +157,29 @@ EMBEDDING_PROVIDER=openrouter
 RAG_TOP_K=10
 ```
 
+## Background Jobs & Case History
+
+Analysis runs as a **background job** (BullMQ + Redis) with live WebSocket progress. Each submitted case is persisted in PostgreSQL (`cases.analysis_cases`).
+
+### REST Endpoints
+
+| Method | Route | Purpose |
+|--------|-------|---------|
+| `POST` | `/medical-analysis/jobs` | Submit case → returns `{ caseId, jobId }` |
+| `GET` | `/medical-analysis/jobs/:jobId` | Poll job status from Redis |
+| `GET` | `/medical-analysis/histories` | List recent cases (limit 50) |
+| `GET` | `/medical-analysis/histories/:id` | Case detail + full report JSON |
+| `DELETE` | `/medical-analysis/histories/:id` | Delete case and Redis job record |
+
+### WebSocket
+
+Namespace `/medical-analysis` (Socket.IO) emits `job:update` events with step, progress, and result.
+
+### Case Storage
+
+- **PostgreSQL** — durable case intake, status, and completed report (`result` JSON column)
+- **Redis** — ephemeral job state (`analysis:job:{jobId}`), TTL configurable via `ANALYSIS_JOB_TTL_SECONDS`
+
 ## Related Documentation
 
 - [RAG Workflow](./rag-workflow.md)

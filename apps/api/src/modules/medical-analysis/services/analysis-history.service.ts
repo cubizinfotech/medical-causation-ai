@@ -87,6 +87,16 @@ export class AnalysisHistoryService {
     return this.toDetail(reconciled);
   }
 
+  async deleteHistory(id: string): Promise<void> {
+    const row = await this.repository.findById(id);
+    if (!row) {
+      throw new NotFoundException(`Analysis history "${id}" not found`);
+    }
+
+    await this.jobService.deleteJobRecord(row.jobId);
+    await this.repository.delete(id);
+  }
+
   async reconcileStaleCases(): Promise<number> {
     const rows = await this.repository.listRecent(200);
     let updated = 0;

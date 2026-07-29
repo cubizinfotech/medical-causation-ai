@@ -119,6 +119,22 @@ export class MedicalAnalysisJobService implements OnModuleInit, OnModuleDestroy 
     return this.loadRecord(jobId);
   }
 
+  async deleteJobRecord(jobId: string): Promise<void> {
+    await this.redisService.getClient().del(this.jobKey(jobId));
+
+    try {
+      const job = await this.queue.getJob(jobId);
+      if (job) {
+        await job.remove();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Unable to remove queued BullMQ job ${jobId}: ${message}`,
+      );
+    }
+  }
+
   async markRunning(jobId: string): Promise<void> {
     await this.patch(jobId, {
       status: ANALYSIS_JOB_STATUS.RUNNING,

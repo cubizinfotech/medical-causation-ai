@@ -252,8 +252,10 @@ npm run dev:web
 - Landing: [http://localhost:3000](http://localhost:3000)
 - Case form: [http://localhost:3000/case](http://localhost:3000/case)
 - Analysis: [http://localhost:3000/analysis](http://localhost:3000/analysis)
+- Histories: [http://localhost:3000/histories](http://localhost:3000/histories)
+- Report: [http://localhost:3000/report](http://localhost:3000/report)
 
-See [docs/frontend-demo.md](./docs/frontend-demo.md) for the full demonstration workflow.
+See [DEMO_GUIDE.md](./DEMO_GUIDE.md) for the full client demonstration script (step-by-step).
 
 ## Backend Commands
 
@@ -312,10 +314,10 @@ npm run typecheck    # TypeScript check
 | **Phase 2d** | Medical analysis — RAG + LLM structured causation reasoning | ✅ Complete |
 | **Phase 2e** | Prisma schema, health checks, Swagger, KB/AI API endpoints | Planned |
 | **Phase 3** | Demonstration UI — landing, case form, analysis workflow | ✅ Complete |
-| **Phase 4** | Analysis report viewer + remaining REST APIs | Planned |
+| **Phase 4** | Case history, report viewer, PDF export | ✅ Complete |
 | **Phase 5** | Authentication, multi-tenant law firm management | Planned |
 | **Phase 6** | Medical literature search (PubMed, PMC, Semantic Scholar) | Planned |
-| **Phase 7** | Professional PDF report generator | Planned |
+| **Phase 7** | Enhanced PDF report templates | Planned |
 | **Phase 8** | Admin panel, audit logs, notifications | Planned |
 | **Phase 9** | Subscription and billing | Planned |
 
