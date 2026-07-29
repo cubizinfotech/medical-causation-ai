@@ -8,6 +8,9 @@ export interface ProviderConfigSettings {
   chatModel: string;
   temperature: number;
   maxTokens: number;
+  retryMaxAttempts: number;
+  requestTimeoutMs: number;
+  retryDelayMs: number;
   openai: AIProviderSettings;
   anthropic: AIProviderSettings;
   google: AIProviderSettings;

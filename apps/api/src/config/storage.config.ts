@@ -5,14 +5,24 @@ import type { KnowledgeBasePaths, StorageSettings } from './config.types';
 function resolveKnowledgeBaseRoot(): string {
   const envPath = process.env.KNOWLEDGE_BASE_PATH;
 
-  if (envPath) {
-    return isAbsolute(envPath) ? envPath : resolve(process.cwd(), envPath);
-  }
+  const candidates: string[] = [];
 
-  const candidates = [
-    resolve(process.cwd(), 'knowledge-base'),
-    resolve(process.cwd(), '..', '..', 'knowledge-base'),
-  ];
+  if (envPath) {
+    if (isAbsolute(envPath)) {
+      candidates.push(envPath);
+    } else {
+      candidates.push(resolve(process.cwd(), envPath));
+      candidates.push(resolve(process.cwd(), '..', '..', envPath));
+      candidates.push(
+        resolve(process.cwd(), '..', '..', envPath.replace(/^\.\//, '')),
+      );
+    }
+  } else {
+    candidates.push(
+      resolve(process.cwd(), 'knowledge-base'),
+      resolve(process.cwd(), '..', '..', 'knowledge-base'),
+    );
+  }
 
   for (const candidate of candidates) {
     if (existsSync(candidate)) {

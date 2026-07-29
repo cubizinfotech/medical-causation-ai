@@ -214,4 +214,28 @@ describe('MedicalAnalysisService', () => {
       service.analyze({ medicalQuestion: 'Test question?' }),
     ).rejects.toThrow('No retrieved evidence available');
   });
+
+  it('should retry when LLM returns invalid JSON', async () => {
+    aiService.complete
+      .mockResolvedValueOnce({
+        content: 'Here is my analysis in plain text without JSON.',
+        model: 'test-model',
+        provider: 'openrouter',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        executionTimeMs: 10,
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify(llmJson),
+        model: 'test-model',
+        provider: 'openrouter',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        executionTimeMs: 10,
+      });
+
+    await service.analyze({
+      medicalQuestion: 'Can mild TBI increase stroke risk?',
+    });
+
+    expect(aiService.complete).toHaveBeenCalledTimes(2);
+  });
 });

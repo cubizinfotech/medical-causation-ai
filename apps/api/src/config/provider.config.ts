@@ -6,6 +6,9 @@ export const providerConfig = (): ProviderConfigSettings => ({
   chatModel: process.env.AI_CHAT_MODEL ?? '',
   temperature: Number(process.env.AI_TEMPERATURE ?? 0.2),
   maxTokens: Number(process.env.AI_MAX_TOKENS ?? 4096),
+  retryMaxAttempts: Number(process.env.AI_RETRY_MAX_ATTEMPTS ?? 8),
+  requestTimeoutMs: Number(process.env.AI_REQUEST_TIMEOUT_MS ?? 120000),
+  retryDelayMs: Number(process.env.AI_RETRY_DELAY_MS ?? 5000),
   openai: {
     apiKey: process.env.OPENAI_API_KEY ?? '',
     baseUrl: process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',

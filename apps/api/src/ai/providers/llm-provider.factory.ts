@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   DEFAULT_LLM_MODELS,
   LLM_PROVIDERS,
@@ -7,7 +6,7 @@ import {
 } from '@ai/constants';
 import type { ILlmProvider } from '@ai/interfaces';
 import { ConfigurationErrorException } from '@ai/exceptions';
-import type { IndexingConfigSettings } from '@config/config.types';
+import type { ProviderConfigSettings } from '@config/ai-config.types';
 import { AiConfigService } from '@ai/config';
 import { OpenRouterProvider } from './openrouter.provider';
 import { OpenAiProvider } from './openai.provider';
@@ -20,13 +19,9 @@ import type { LlmRuntimeOptions } from './base/openai-compatible-llm.provider';
 export class LlmProviderFactory {
   private readonly providers: Map<LlmProviderName, ILlmProvider>;
 
-  constructor(
-    private readonly aiConfigService: AiConfigService,
-    configService: ConfigService,
-  ) {
+  constructor(private readonly aiConfigService: AiConfigService) {
     const config = aiConfigService.provider;
-    const indexing = configService.get<IndexingConfigSettings>('indexing')!;
-    const runtime = this.buildRuntimeOptions(indexing);
+    const runtime = this.buildRuntimeOptions(config);
 
     this.providers = new Map<LlmProviderName, ILlmProvider>([
       [
@@ -84,12 +79,12 @@ export class LlmProviderFactory {
   }
 
   private buildRuntimeOptions(
-    indexing: IndexingConfigSettings,
+    provider: ProviderConfigSettings,
   ): LlmRuntimeOptions {
     return {
-      timeoutMs: indexing.embeddingRequestTimeoutMs,
-      maxRetries: indexing.embeddingRetryMaxAttempts,
-      retryDelayMs: indexing.embeddingRetryDelayMs,
+      timeoutMs: provider.requestTimeoutMs,
+      maxRetries: provider.retryMaxAttempts,
+      retryDelayMs: provider.retryDelayMs,
     };
   }
 }

@@ -55,11 +55,21 @@ export class IndexingService implements IIndexingService {
         knowledgeDocumentId,
       );
 
+    const embeddingCount = existing
+      ? await this.embeddingRepository.countForDocument(existing.id)
+      : 0;
+
+    const hasCompleteEmbeddings =
+      existing !== null &&
+      embeddingCount > 0 &&
+      embeddingCount >= existing.chunkCount;
+
     const isUnchanged =
       existing &&
       existing.checksum === kbDocument.checksum &&
       existing.fileModifiedAt.getTime() === kbDocument.modifiedAt.getTime() &&
-      existing.status === INDEX_STATUS.INDEXED;
+      existing.status === INDEX_STATUS.INDEXED &&
+      hasCompleteEmbeddings;
 
     if (!options.forceReindex && isUnchanged) {
       this.logger.log(
@@ -212,6 +222,106 @@ export class IndexingService implements IIndexingService {
 
       throw new IndexingFailedException(knowledgeDocumentId, message);
     }
+  }
+
+  async reembedAllMissingEmbeddings(): Promise<IndexDocumentResult[]> {
+    const documents = await this.documentRepository.findAllIndexed();
+    const results: IndexDocumentResult[] = [];
+
+    for (const document of documents) {
+      const embeddingCount = await this.embeddingRepository.countForDocument(
+        document.id,
+      );
+
+      if (embeddingCount >= document.chunkCount && embeddingCount > 0) {
+        continue;
+      }
+
+      const result = await this.reembedDocument(document);
+      results.push(result);
+    }
+
+    return results;
+  }
+
+  private async reembedDocument(
+    indexedDocument: Awaited<
+      ReturnType<IndexedDocumentRepository['findAllIndexed']>
+    >[number],
+  ): Promise<IndexDocumentResult> {
+    const startTime = Date.now();
+    const storedChunks = await this.chunkRepository.findByDocumentId(
+      indexedDocument.id,
+    );
+
+    if (storedChunks.length === 0) {
+      throw new IndexingFailedException(
+        indexedDocument.knowledgeDocumentId,
+        'No stored chunks found for re-embedding',
+      );
+    }
+
+    const chunkDrafts = storedChunks.map((chunk) => ({
+      chunkId: chunk.externalChunkId,
+      documentId: indexedDocument.knowledgeDocumentId,
+      documentTitle: indexedDocument.documentTitle,
+      category: indexedDocument.category,
+      subCategory: indexedDocument.subCategory,
+      pageNumber: chunk.pageNumber,
+      chunkIndex: chunk.chunkIndex,
+      totalChunks: chunk.totalChunks,
+      text: chunk.text,
+      estimatedTokens: chunk.estimatedTokens,
+      section: chunk.section,
+      sourceFile: indexedDocument.sourceFile,
+      createdAt: chunk.createdAt,
+      contentHash: chunk.contentHash,
+    }));
+
+    const embeddings = await this.embeddingService.embedChunks(chunkDrafts);
+
+    const externalToInternal = new Map(
+      storedChunks.map((chunk) => [chunk.externalChunkId, chunk.id]),
+    );
+
+    const embeddingInputs = embeddings
+      .map((embedding) => {
+        const internalId = externalToInternal.get(embedding.chunkId);
+        if (!internalId) return null;
+
+        return {
+          chunkId: internalId,
+          provider: embedding.provider,
+          model: embedding.model,
+          dimensions: embedding.dimensions,
+          vector: embedding.vector,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    const embeddingCount =
+      await this.embeddingRepository.storeEmbeddings(embeddingInputs);
+
+    await this.documentRepository.update(indexedDocument.id, {
+      status: INDEX_STATUS.INDEXED,
+      indexedAt: new Date(),
+      errorMessage: null,
+    });
+
+    this.logger.log(
+      `Re-embedded "${indexedDocument.filename}": ${storedChunks.length} chunks, ${embeddingCount} embeddings`,
+    );
+
+    return {
+      documentId: indexedDocument.id,
+      knowledgeDocumentId: indexedDocument.knowledgeDocumentId,
+      status: INDEX_STATUS.INDEXED,
+      skipped: false,
+      chunkCount: storedChunks.length,
+      embeddingCount,
+      processingDurationMs: Date.now() - startTime,
+      indexedAt: new Date(),
+    };
   }
 
   getStats() {

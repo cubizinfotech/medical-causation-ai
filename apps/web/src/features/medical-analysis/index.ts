@@ -7,6 +7,13 @@ export type {
   MedicalAnalysisResult,
   AnalyzeCaseRequest,
 } from "./types";
+export type {
+  AnalysisJobStatus,
+  AnalysisJobStep,
+  MedicalAnalysisJobRecord,
+  CreateMedicalAnalysisJobResponse,
+  MedicalAnalysisJobUpdate,
+} from "./job.types";
 export {
   MedicalAnalysisClient,
   medicalAnalysisClient,

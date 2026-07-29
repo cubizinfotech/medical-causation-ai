@@ -45,8 +45,7 @@ export async function fetchOpenAiCompatibleEmbeddings(
     );
   }
 
-  // const url = `${options.baseUrl.replace(/\/$/, '')}/embeddings`;
-  const url = `${options.baseUrl.replace(/\/$/, '')}/rerank`;
+  const url = `${options.baseUrl.replace(/\/$/, '')}/embeddings`;
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= options.maxRetries; attempt++) {

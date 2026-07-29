@@ -1,12 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '@ai/services';
 import { RetrievalService } from '@modules/rag/services';
-import type { IMedicalAnalysisService } from '../interfaces';
+import type { IMedicalAnalysisService, AnalyzeOptions } from '../interfaces';
 import type { MedicalAnalysisRequest, MedicalAnalysisResult } from '../types';
+import {
+  ANALYSIS_JOB_STEPS,
+  ANALYSIS_JOB_STEP_LABELS,
+} from '../jobs/medical-analysis-job.constants';
+import type { AnalysisJobStep } from '../jobs/medical-analysis-job.constants';
 import { MedicalQueryBuilder, AnalysisPromptBuilder } from '../builders';
 import { AnalysisResponseMapper, AnalysisSafetyValidator } from '../validators';
 import { ReportEnrichmentService } from './report-enrichment.service';
-import { parseMedicalAnalysisJson } from '../utils';
+import { parseMedicalAnalysisJson, AnalysisResponseParseError } from '../utils';
 import { AnalysisSafetyException } from '../exceptions';
 import type { MedicalAnalysisLlmOutput } from '../types';
 import type { LlmCompletionResponse } from '@ai/types';
@@ -18,6 +23,9 @@ import type { LlmCompletionResponse } from '@ai/types';
 @Injectable()
 export class MedicalAnalysisService implements IMedicalAnalysisService {
   private readonly logger = new Logger(MedicalAnalysisService.name);
+  private static readonly MAX_COMPLETION_ATTEMPTS = 3;
+  private static readonly JSON_RETRY_INSTRUCTION =
+    '\n\nCORRECTION: Your previous response was not valid JSON. Return ONLY a single raw JSON object matching the schema. Do not include markdown fences, explanations, or reasoning tags.';
 
   constructor(
     private readonly retrievalService: RetrievalService,
@@ -31,17 +39,49 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
 
   async analyze(
     request: MedicalAnalysisRequest,
+    options?: AnalyzeOptions,
   ): Promise<MedicalAnalysisResult> {
     const analysisStart = Date.now();
+    const report = async (
+      step: AnalysisJobStep,
+      progress: number,
+      message: string,
+    ): Promise<void> => {
+      await options?.onProgress?.({
+        step,
+        stepLabel: ANALYSIS_JOB_STEP_LABELS[step],
+        progress,
+        message,
+      });
+    };
 
     this.logger.log(
       `Starting medical analysis for question: "${request.medicalQuestion.slice(0, 80)}..."`,
     );
 
+    await report(
+      ANALYSIS_JOB_STEPS.INTAKE,
+      12,
+      'Preparing medical case…',
+    );
+
     const retrievalRequest = this.queryBuilder.buildRetrievalRequest(request);
+
+    await report(
+      ANALYSIS_JOB_STEPS.PRIVATE_KB,
+      28,
+      'Searching private knowledge base…',
+    );
+
     const retrieval = await this.retrievalService.retrieve(retrievalRequest);
 
     this.safetyValidator.validateRetrievalHasContext(retrieval);
+
+    await report(
+      ANALYSIS_JOB_STEPS.EVIDENCE,
+      45,
+      'Ranking medical sources and building context…',
+    );
 
     const builtPrompts = await this.promptBuilder.build(request, retrieval);
     const citationMap = new Map(
@@ -49,12 +89,24 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
     );
     const allowedChunkIds = new Set(builtPrompts.allowedChunkIds);
 
+    await report(
+      ANALYSIS_JOB_STEPS.REASONING,
+      62,
+      'Analyzing medical literature with AI…',
+    );
+
     const llmResult = await this.completeWithCitationValidation({
       systemPrompt: builtPrompts.systemPrompt,
       userPrompt: builtPrompts.userPrompt,
       allowedChunkIds,
       citationMap,
     });
+
+    await report(
+      ANALYSIS_JOB_STEPS.SUMMARY,
+      82,
+      'Generating statistical summary and citations…',
+    );
 
     const result = this.reportEnrichment.enrich(
       this.responseMapper.mapToResult({
@@ -67,6 +119,12 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
         llmModel: llmResult.llmResponse.model,
       }),
       request,
+    );
+
+    await report(
+      ANALYSIS_JOB_STEPS.REPORT,
+      95,
+      'Finalizing professional report…',
     );
 
     this.logger.log(
@@ -88,7 +146,7 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
   }> {
     let userPrompt = params.userPrompt;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < MedicalAnalysisService.MAX_COMPLETION_ATTEMPTS; attempt++) {
       const llmResponse = await this.aiService.complete({
         messages: [
           { role: 'system', content: params.systemPrompt },
@@ -98,7 +156,33 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
         temperature: 0.2,
       });
 
-      const llmOutput = parseMedicalAnalysisJson(llmResponse.content);
+      if (!llmResponse.content?.trim()) {
+        if (attempt < MedicalAnalysisService.MAX_COMPLETION_ATTEMPTS - 1) {
+          this.logger.warn(
+            `Empty LLM response on attempt ${attempt + 1}, retrying`,
+          );
+          userPrompt += MedicalAnalysisService.JSON_RETRY_INSTRUCTION;
+          continue;
+        }
+        throw new AnalysisResponseParseError('LLM returned an empty response');
+      }
+
+      let llmOutput: MedicalAnalysisLlmOutput;
+      try {
+        llmOutput = parseMedicalAnalysisJson(llmResponse.content);
+      } catch (error) {
+        if (
+          attempt < MedicalAnalysisService.MAX_COMPLETION_ATTEMPTS - 1 &&
+          error instanceof AnalysisResponseParseError
+        ) {
+          this.logger.warn(
+            `JSON parse failed on attempt ${attempt + 1}: ${error.message}`,
+          );
+          userPrompt += MedicalAnalysisService.JSON_RETRY_INSTRUCTION;
+          continue;
+        }
+        throw error;
+      }
 
       try {
         this.safetyValidator.validateCitations(
@@ -109,7 +193,7 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
         return { llmOutput, llmResponse };
       } catch (error) {
         if (
-          attempt === 0 &&
+          attempt < MedicalAnalysisService.MAX_COMPLETION_ATTEMPTS - 1 &&
           error instanceof AnalysisSafetyException &&
           error.message.includes('chunkId')
         ) {

@@ -7,18 +7,35 @@ export class AnalysisResponseParseError extends Error {
   }
 }
 
+function stripModelReasoning(content: string): string {
+  return content
+    .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '')
+    .replace(/```thinking[\s\S]*?```/gi, '')
+    .trim();
+}
+
+function repairCommonJsonIssues(jsonText: string): string {
+  return jsonText
+    .replace(/^\uFEFF/, '')
+    .replace(/,\s*([}\]])/g, '$1');
+}
+
 export function extractJsonFromLlmResponse(content: string): string {
-  const trimmed = content.trim();
+  const trimmed = stripModelReasoning(content.trim());
+
+  if (!trimmed) {
+    throw new AnalysisResponseParseError('LLM returned an empty response');
+  }
 
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced?.[1]) {
-    return fenced[1].trim();
+    return repairCommonJsonIssues(fenced[1].trim());
   }
 
   const start = trimmed.indexOf('{');
   const end = trimmed.lastIndexOf('}');
   if (start >= 0 && end > start) {
-    return trimmed.slice(start, end + 1);
+    return repairCommonJsonIssues(trimmed.slice(start, end + 1));
   }
 
   throw new AnalysisResponseParseError(
@@ -26,17 +43,23 @@ export function extractJsonFromLlmResponse(content: string): string {
   );
 }
 
+function parseJsonObject(jsonText: string): unknown {
+  try {
+    return JSON.parse(jsonText);
+  } catch {
+    try {
+      return JSON.parse(repairCommonJsonIssues(jsonText));
+    } catch {
+      throw new AnalysisResponseParseError('Failed to parse LLM JSON output');
+    }
+  }
+}
+
 export function parseMedicalAnalysisJson(
   content: string,
 ): MedicalAnalysisLlmOutput {
   const jsonText = extractJsonFromLlmResponse(content);
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch {
-    throw new AnalysisResponseParseError('Failed to parse LLM JSON output');
-  }
+  const parsed = parseJsonObject(jsonText);
 
   if (!parsed || typeof parsed !== 'object') {
     throw new AnalysisResponseParseError('LLM JSON output is not an object');

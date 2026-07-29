@@ -269,8 +269,10 @@ npx ts-node -r tsconfig-paths/register scripts/run-medical-analysis.ts \
 | Issue | Solution |
 |-------|----------|
 | `No retrieved evidence available` | Index knowledge base documents first |
-| Analysis timeout | Increase `NEXT_PUBLIC_API_TIMEOUT_MS` to `180000` |
+| Analysis timeout | Increase `NEXT_PUBLIC_API_TIMEOUT_MS` to `180000` (sync endpoint only; jobs use WebSocket) |
+| Analysis stuck / canceled | Ensure Redis is running (`npm run docker:infra`); use background jobs at `POST /medical-analysis/jobs` |
 | LLM errors | Set `AI_CHAT_MODEL` to a valid chat model |
+| Rate limit exceeded (free models) | Use `AI_CHAT_MODEL=openrouter/free`, increase `AI_RETRY_MAX_ATTEMPTS` / `AI_RETRY_DELAY_MS`, or add Groq/OpenRouter credits |
 | CORS errors | Ensure `FRONTEND_URL=http://localhost:3000` |
 | Database connection failed | Run `npm run docker:infra` |
 

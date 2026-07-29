@@ -47,6 +47,12 @@ export class EmbeddingRepository {
     return this.prisma.chunkEmbedding.count();
   }
 
+  countForDocument(documentId: string): Promise<number> {
+    return this.prisma.chunkEmbedding.count({
+      where: { chunk: { documentId } },
+    });
+  }
+
   private toVectorLiteral(vector: number[]): string {
     return `[${vector.join(',')}]`;
   }

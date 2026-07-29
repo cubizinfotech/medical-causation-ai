@@ -32,6 +32,7 @@
       "@integrations/*": ["src/integrations/*"],
       "@shared/*": ["src/shared/*"],
       "@queues/*": ["src/queues/*"],
+      "@redis/*": ["src/redis/*"],
       "@utils/*": ["src/utils/*"]
     }
   }

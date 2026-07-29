@@ -79,4 +79,11 @@ export class IndexedDocumentRepository {
       })
       .then((row) => row?.indexedAt ?? null);
   }
+
+  findAllIndexed(): Promise<IndexedDocument[]> {
+    return this.prisma.indexedDocument.findMany({
+      where: { status: 'indexed' },
+      orderBy: { filename: 'asc' },
+    });
+  }
 }

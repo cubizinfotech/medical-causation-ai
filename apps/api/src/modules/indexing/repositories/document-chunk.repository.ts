@@ -44,4 +44,11 @@ export class DocumentChunkRepository {
       .aggregate({ _avg: { estimatedTokens: true } })
       .then((result) => result._avg.estimatedTokens ?? 0);
   }
+
+  findByDocumentId(documentId: string): Promise<DocumentChunk[]> {
+    return this.prisma.documentChunk.findMany({
+      where: { documentId },
+      orderBy: { chunkIndex: 'asc' },
+    });
+  }
 }

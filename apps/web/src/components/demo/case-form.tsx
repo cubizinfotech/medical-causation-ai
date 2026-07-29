@@ -39,6 +39,7 @@ import {
   saveCaseForm,
   saveUploadedFileNames,
   clearAnalysisResult,
+  clearActiveAnalysis,
 } from "@/features/demo/storage/case-storage";
 
 interface CaseFormProps {
@@ -107,6 +108,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
     setSubmitError(null);
     try {
       clearAnalysisResult();
+      clearActiveAnalysis();
       saveCaseForm(values);
       saveUploadedFileNames(files.map((f) => f.name));
       router.push("/analysis");

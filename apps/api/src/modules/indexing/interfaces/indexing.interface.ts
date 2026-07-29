@@ -12,6 +12,9 @@ export interface IIndexingService {
   ): Promise<IndexDocumentResult>;
 
   getStats(): Promise<IndexingStats>;
+
+  /** Re-generate embeddings for indexed documents that have chunks but missing vectors. */
+  reembedAllMissingEmbeddings(): Promise<IndexDocumentResult[]>;
 }
 
 export interface IIndexingJobService {

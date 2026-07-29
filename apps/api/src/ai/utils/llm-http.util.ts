@@ -52,8 +52,7 @@ export async function fetchOpenAiCompatibleChat(
     );
   }
 
-  // const url = `${options.baseUrl.replace(/\/$/, '')}/chat/completions`;
-  const url = `${options.baseUrl.replace(/\/$/, '')}/rerank`;
+  const url = `${options.baseUrl.replace(/\/$/, '')}/chat/completions`;
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= options.maxRetries; attempt++) {
@@ -93,9 +92,12 @@ export async function fetchOpenAiCompatibleChat(
       });
 
       if (response.status === 429) {
+        const retryAfter = Number(response.headers.get('retry-after') ?? 0);
         throw new RateLimitExceededException(
           options.providerName,
-          options.retryDelayMs * attempt,
+          retryAfter > 0
+            ? retryAfter * 1000
+            : options.retryDelayMs * attempt,
         );
       }
 
@@ -128,11 +130,15 @@ export async function fetchOpenAiCompatibleChat(
       lastError = error instanceof Error ? error : new Error(String(error));
 
       if (attempt < options.maxRetries) {
-        const delay = options.retryDelayMs * attempt;
+        const rateLimitDelay =
+          error instanceof RateLimitExceededException
+            ? (error.retryAfterMs ?? options.retryDelayMs * attempt * 2)
+            : options.retryDelayMs * attempt;
+
         logger.warn(
-          `LLM request failed for ${options.providerName}, retrying in ${delay}ms: ${lastError.message}`,
+          `LLM request failed for ${options.providerName}, retrying in ${rateLimitDelay}ms (attempt ${attempt}/${options.maxRetries}): ${lastError.message}`,
         );
-        await sleep(delay);
+        await sleep(rateLimitDelay);
       }
     } finally {
       clearTimeout(timeout);

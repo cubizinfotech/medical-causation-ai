@@ -24,6 +24,8 @@
     "validate": "npm run lint && npm run typecheck && npm run test && npm run build",
     "test": "npm run test --workspace=api",
     "test:e2e": "npm run test:e2e --workspace=api",
+    "index:kb": "npm run index:kb --workspace=api",
+    "reembed:kb": "npm run reembed:kb --workspace=api",
     "prisma:migrate": "npm run prisma:migrate --workspace=api",
     "prisma:generate": "npm run prisma:generate --workspace=api",
     "docker:up": "docker compose up -d",

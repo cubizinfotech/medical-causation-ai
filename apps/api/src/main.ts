@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
 import type { AppSettings } from '@config/config.types';
 
@@ -12,6 +13,8 @@ async function bootstrap(): Promise<void> {
   if (!appConfig) {
     throw new Error('Application configuration is not available');
   }
+
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   app.enableCors({
     origin: appConfig.frontendUrl,

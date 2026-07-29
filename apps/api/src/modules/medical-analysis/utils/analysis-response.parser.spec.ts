@@ -12,6 +12,19 @@ describe('analysis-response.parser', () => {
     expect(parsed.executiveSummary).toBe('test');
   });
 
+  it('should strip reasoning tags before parsing JSON', () => {
+    const output = parseMedicalAnalysisJson(
+      'internal reasoning' +
+        JSON.stringify({
+          executiveSummary: 'Summary',
+          conclusion: 'Conclusion',
+        }),
+    );
+
+    expect(output.executiveSummary).toBe('Summary');
+    expect(output.conclusion).toBe('Conclusion');
+  });
+
   it('should parse medical analysis output', () => {
     const output = parseMedicalAnalysisJson(
       JSON.stringify({

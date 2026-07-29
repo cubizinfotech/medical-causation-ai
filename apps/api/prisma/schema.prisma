@@ -8,7 +8,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["documents", "vectors"]
+  schemas  = ["documents", "vectors", "cases"]
 }
 
 enum IndexStatus {
@@ -84,4 +84,45 @@ model ChunkEmbedding {
 
   @@map("chunk_embeddings")
   @@schema("vectors")
+}
+
+enum AnalysisCaseStatus {
+  queued
+  running
+  completed
+  failed
+
+  @@schema("cases")
+}
+
+model AnalysisCase {
+  id                  String             @id @default(uuid()) @db.Uuid
+  jobId               String             @unique @map("job_id")
+  patientName         String             @map("patient_name")
+  patientAge          String             @map("patient_age")
+  patientGender       String             @map("patient_gender")
+  accidentDate        String             @map("accident_date")
+  accidentType        String             @map("accident_type")
+  accidentDescription String             @map("accident_description")
+  diagnosis           String
+  symptoms            String
+  medicalHistory      String?            @map("medical_history")
+  medications         String?
+  timeline            String?
+  medicalQuestion     String             @map("medical_question")
+  status              AnalysisCaseStatus @default(queued)
+  step                String?
+  stepLabel           String?            @map("step_label")
+  progress            Int                @default(0)
+  message             String?
+  errorMessage        String?            @map("error_message")
+  result              Json?
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  completedAt         DateTime?          @map("completed_at")
+
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("analysis_cases")
+  @@schema("cases")
 }

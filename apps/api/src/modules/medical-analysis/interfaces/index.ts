@@ -1,1 +1,4 @@
-export type { IMedicalAnalysisService } from './medical-analysis.interface';
+export type {
+  IMedicalAnalysisService,
+  AnalyzeOptions,
+} from './medical-analysis.interface';

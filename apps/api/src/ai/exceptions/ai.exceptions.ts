@@ -33,11 +33,14 @@ export class InvalidModelException extends AiException {
 
 /** Thrown when the provider rate limit is exceeded. */
 export class RateLimitExceededException extends AiException {
+  readonly retryAfterMs?: number;
+
   constructor(provider: string, retryAfterMs?: number) {
     super(
       `Rate limit exceeded for provider "${provider}"${retryAfterMs ? ` — retry after ${retryAfterMs}ms` : ''}`,
       'RATE_LIMIT_EXCEEDED',
     );
+    this.retryAfterMs = retryAfterMs;
   }
 }
 

@@ -12,9 +12,14 @@ export function SiteHeader() {
         >
           {appMetadata.name}
         </Link>
-        <Button asChild size="sm">
-          <Link href="/case">Start Demo</Link>
-        </Button>
+        <nav className="flex items-center gap-3">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/histories">Histories</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/case">Start Demo</Link>
+          </Button>
+        </nav>
       </div>
     </header>
   );
