@@ -121,9 +121,9 @@ npm run docker:infra
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| PostgreSQL | `localhost:5432` | See `.env` (`POSTGRES_*`) |
+| PostgreSQL | `localhost:5432` | See [Connecting to PostgreSQL](#connecting-to-postgresql) below |
 | Redis | `localhost:6379` | No password (local dev) |
-| pgAdmin | [http://localhost:5050](http://localhost:5050) | See `.env` (`PGADMIN_*`) |
+| pgAdmin | [http://localhost:5050](http://localhost:5050) | See [Connecting to PostgreSQL](#connecting-to-postgresql) below |
 
 ### Full Stack (Production-like)
 
@@ -188,18 +188,118 @@ npm run dev:web   # terminal 2
 
 > PostgreSQL and Redis are required for full functionality in later phases.
 
-## PostgreSQL
+## Connecting to PostgreSQL
 
-- **Image:** `pgvector/pgvector:pg17` (PostgreSQL 17 with pgvector)
-- **Extensions enabled on init:** `vector`, `uuid-ossp`, `pg_trgm`
-- **Schemas prepared:** `app`, `documents`, `vectors` (no tables yet)
-- **Init scripts:** `docker/postgres/init/`
+Start infrastructure first (required before any connection):
 
-Verify pgvector after starting:
+```bash
+cp .env.example .env   # if you have not already
+npm run docker:infra
+```
+
+### Default credentials (local Docker)
+
+These match `.env.example`. If you changed values in `.env`, use those instead.
+
+| Setting | Value |
+|---------|-------|
+| **Port** | `5432` |
+| **Database** | `medical_causation_ai` |
+| **User** | `mca_user` |
+| **Password** | `mca_password` |
+| **SSL mode** | `prefer` (or disable for local dev) |
+
+**Host depends on where you connect from:**
+
+| Field | pgAdmin (PSQL / Query Tool) | Your PC (terminal, DBeaver) |
+|-------|----------------------------|----------------------------|
+| **Server Name** | `localhost` (label only) | — |
+| **Host** | `postgres` | `localhost` |
+
+**Connection string (from your PC):**
+
+```
+postgresql://mca_user:mca_password@localhost:5432/medical_causation_ai
+```
+
+### pgAdmin login
+
+Open [http://localhost:5050](http://localhost:5050):
+
+| Setting | Value |
+|---------|-------|
+| **Email** | `admin@medical-causation.ai` |
+| **Password** | `admin` |
+
+### pgAdmin — PSQL Workspace (quick connect)
+
+Use **Tools → PSQL Workspace** for a browser-based `psql` session.
+
+1. Open [http://localhost:5050](http://localhost:5050) and log in (credentials above)
+2. Open **Tools → PSQL Workspace**
+3. Fill in the connection form exactly:
+
+   | Field | Value |
+   |-------|-------|
+   | **Server Name** | `localhost` |
+   | **Host name/address** | `postgres` |
+   | **Port** | `5432` |
+   | **Database** | `medical_causation_ai` |
+   | **User** | `mca_user` |
+   | **Password** | `mca_password` |
+
+4. Under **Connection Parameters**, confirm:
+
+   | Name | Keyword | Value |
+   |------|---------|-------|
+   | SSL mode | `sslmode` | `prefer` |
+   | Connection timeout | `connect_timeout` | `10` |
+
+5. Click **Connect & Open PSQL**
+
+> **Server Name vs Host:** **Server Name** (`localhost`) is only a label for the tab — it can be any name. **Host name/address** must be `postgres` (the Docker service name). Using `localhost` as the host causes *Connection refused* because pgAdmin runs inside Docker.
+
+### pgAdmin — Register server (browse tables in UI)
+
+1. Log in at [http://localhost:5050](http://localhost:5050)
+2. Click **Add New Server** (or right-click **Servers** → **Register → Server**)
+3. **General** tab — Name: `localhost` (or `Medical Causation AI`)
+4. **Connection** tab:
+
+   | Field | Value |
+   |-------|-------|
+   | Host name/address | `postgres` |
+   | Port | `5432` |
+   | Maintenance database | `medical_causation_ai` |
+   | Username | `mca_user` |
+   | Password | `mca_password` |
+
+5. Click **Save**
+6. Expand **Servers → localhost → Databases → medical_causation_ai → Schemas**
+7. Right-click a table → **View/Edit Data → All Rows**, or use **Tools → Query Tool**
+
+### pgAdmin — Query Tool (ad-hoc connect)
+
+If you use **Connect & Open Query Tool**, use the same values as PSQL Workspace above.
+
+### Command line (Docker)
+
+```bash
+docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai
+```
+
+### Verify pgvector
 
 ```bash
 docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
 ```
+
+## PostgreSQL
+
+- **Image:** `pgvector/pgvector:pg17` (PostgreSQL 17 with pgvector)
+- **Extensions enabled on init:** `vector`, `uuid-ossp`, `pg_trgm`
+- **Schemas prepared:** `app`, `documents`, `vectors`
+- **Init scripts:** `docker/postgres/init/`
 
 ## Redis
 

@@ -73,6 +73,95 @@ KNOWLEDGE_BASE_PATH=./knowledge-base
 
 See `.env.example` for the full variable reference.
 
+## Connecting to PostgreSQL
+
+Infrastructure must be running before you connect:
+
+```bash
+npm run docker:infra
+```
+
+### Database credentials (local demo defaults)
+
+| Setting | Value |
+|---------|-------|
+| **Port** | `5432` |
+| **Database** | `medical_causation_ai` |
+| **User** | `mca_user` |
+| **Password** | `mca_password` |
+| **Connection string** | `postgresql://mca_user:mca_password@localhost:5432/medical_causation_ai` |
+
+**Host depends on where you connect from:**
+
+| Field | pgAdmin (PSQL / Query Tool) | Your PC (terminal, API) |
+|-------|----------------------------|-------------------------|
+| **Server Name** | `localhost` (label only) | — |
+| **Host** | `postgres` | `localhost` |
+
+If you customized `.env`, use your `POSTGRES_*` values instead.
+
+### pgAdmin login
+
+Open [http://localhost:5050](http://localhost:5050):
+
+| Setting | Default value |
+|---------|---------------|
+| **Email** | `admin@medical-causation.ai` |
+| **Password** | `admin` |
+
+### pgAdmin — PSQL Workspace (quick connect)
+
+1. Log in to pgAdmin (credentials above)
+2. Open **Tools → PSQL Workspace**
+3. Fill in the form exactly as shown:
+
+   | Field | Value |
+   |-------|-------|
+   | **Server Name** | `localhost` |
+   | **Host name/address** | `postgres` |
+   | **Port** | `5432` |
+   | **Database** | `medical_causation_ai` |
+   | **User** | `mca_user` |
+   | **Password** | `mca_password` |
+
+4. **Connection Parameters** (defaults are fine):
+
+   | Name | Keyword | Value |
+   |------|---------|-------|
+   | SSL mode | `sslmode` | `prefer` |
+   | Connection timeout | `connect_timeout` | `10` |
+
+5. Click **Connect & Open PSQL**
+
+> **Server Name vs Host:** **Server Name** = `localhost` is just the tab label. **Host** = `postgres` is the actual Docker database address. Do not put `localhost` in the Host field.
+
+### pgAdmin — register server (browse tables)
+
+1. Click **Add New Server** (or right-click **Servers** → **Register → Server**)
+2. **General** tab — Name: `localhost`
+3. **Connection** tab:
+
+   | Field | Value |
+   |-------|-------|
+   | Host name/address | `postgres` |
+   | Port | `5432` |
+   | Maintenance database | `medical_causation_ai` |
+   | Username | `mca_user` |
+   | Password | `mca_password` |
+
+4. Click **Save**
+5. Browse: **Servers → localhost → Databases → medical_causation_ai → Schemas → documents / vectors**
+
+### pgAdmin — Query Tool (ad-hoc connect)
+
+Same values as PSQL Workspace: Server Name `localhost`, Host `postgres`, plus database/user/password above.
+
+### Command line
+
+```bash
+docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai
+```
+
 ## Knowledge Base Setup
 
 Place licensed PDF textbooks under:
@@ -299,7 +388,8 @@ PostgreSQL case history + full report UI
 | Gemini embedding quota (429) | Use OpenRouter for embeddings (`EMBEDDING_PROVIDER=openrouter`) |
 | Analysis stuck / canceled | Run `npm run docker:infra` (Redis required) |
 | CORS errors | Set `FRONTEND_URL=http://localhost:3000` |
-| Database connection failed | Run `npm run docker:infra` |
+| Database connection failed | Run `npm run docker:infra`; PSQL Workspace: Server Name `localhost`, Host `postgres`, user `mca_user`, password `mca_password` |
+| pgAdmin *Connection refused* on localhost | **Host** must be `postgres` (Docker service). `localhost` is only for **Server Name** (tab label) |
 
 ## Related Documentation
 
