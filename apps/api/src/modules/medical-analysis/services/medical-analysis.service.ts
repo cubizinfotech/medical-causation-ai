@@ -185,6 +185,17 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       }
 
       try {
+        const sanitized = this.safetyValidator.removeUnknownCitations(
+          llmOutput,
+          params.allowedChunkIds,
+        );
+        if (sanitized.removedChunkIds.length > 0) {
+          this.logger.warn(
+            `Removed unknown citation chunkIds: ${sanitized.removedChunkIds.join(', ')}`,
+          );
+          llmOutput = sanitized.output;
+        }
+
         this.safetyValidator.validateCitations(
           llmOutput,
           params.allowedChunkIds,

@@ -79,6 +79,45 @@ function tryParseJsonObject(jsonText: string): unknown | null {
   return null;
 }
 
+function normalizeAnalysisObject(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const nestedCandidates = ['analysis', 'result', 'data', 'response'];
+  for (const key of nestedCandidates) {
+    const nested = value[key];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      const normalized = normalizeAnalysisObject(
+        nested as Record<string, unknown>,
+      );
+      if (
+        typeof normalized.executiveSummary === 'string' ||
+        typeof normalized.conclusion === 'string'
+      ) {
+        return normalized;
+      }
+    }
+  }
+
+  const aliases: Record<string, string> = {
+    executive_summary: 'executiveSummary',
+    summary: 'executiveSummary',
+    finalConclusion: 'conclusion',
+    final_conclusion: 'conclusion',
+  };
+
+  const normalized = { ...value };
+  for (const [alias, field] of Object.entries(aliases)) {
+    if (
+      normalized[field] === undefined &&
+      typeof normalized[alias] === 'string'
+    ) {
+      normalized[field] = normalized[alias];
+    }
+  }
+
+  return normalized;
+}
+
 function hasRequiredAnalysisFields(
   value: unknown,
 ): value is Record<string, unknown> {
@@ -182,7 +221,9 @@ export function parseMedicalAnalysisJson(
     throw new AnalysisResponseParseError('LLM JSON output is not an object');
   }
 
-  const output = parsed as MedicalAnalysisLlmOutput;
+  const output = normalizeAnalysisObject(
+    parsed as Record<string, unknown>,
+  ) as unknown as MedicalAnalysisLlmOutput;
 
   if (!output.executiveSummary || !output.conclusion) {
     throw new AnalysisResponseParseError(

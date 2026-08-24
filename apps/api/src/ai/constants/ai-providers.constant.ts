@@ -8,6 +8,7 @@ export const LLM_PROVIDERS = {
   ANTHROPIC: 'anthropic',
   GEMINI: 'gemini',
   GROQ: 'groq',
+  MISTRAL: 'mistral',
 } as const;
 
 export type LlmProviderName =
@@ -45,6 +46,7 @@ export const DEFAULT_LLM_MODELS: Record<LlmProviderName, string> = {
   [LLM_PROVIDERS.ANTHROPIC]: 'claude-sonnet-4-20250514',
   [LLM_PROVIDERS.GEMINI]: 'gemini-3.5-flash-lite',
   [LLM_PROVIDERS.GROQ]: 'llama-3.3-70b-versatile',
+  [LLM_PROVIDERS.MISTRAL]: 'mistral-small-latest',
 };
 
 /**

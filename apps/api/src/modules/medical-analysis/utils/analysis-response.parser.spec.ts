@@ -90,4 +90,18 @@ describe('analysis-response.parser', () => {
     expect(output.conclusion).toBe('Possible association');
     expect(output.citations).toHaveLength(1);
   });
+
+  it('unwraps a response container and normalizes common field aliases', () => {
+    const output = parseMedicalAnalysisJson(
+      JSON.stringify({
+        result: {
+          executive_summary: 'Summary',
+          final_conclusion: 'Conclusion',
+        },
+      }),
+    );
+
+    expect(output.executiveSummary).toBe('Summary');
+    expect(output.conclusion).toBe('Conclusion');
+  });
 });

@@ -35,5 +35,6 @@ Rules:
 - confidenceScore must be integer 0-100
 - Every chunkId MUST be copied exactly from this allowed list (no modifications):
 {{allowedChunkIds}}
+- If you cannot match a citation to one exact allowed chunkId, omit that evidence item or citation entirely.
 - Never fabricate chunkIds, page numbers, or document names
 - If evidence is insufficient, set confidenceScore below 40 and explain in limitations

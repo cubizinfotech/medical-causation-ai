@@ -145,6 +145,10 @@ export async function fetchOpenAiCompatibleChat(
     }
   }
 
+  if (lastError instanceof RateLimitExceededException) {
+    throw lastError;
+  }
+
   throw new ProviderUnavailableException(
     options.providerName,
     lastError?.message ?? 'Unknown LLM error',

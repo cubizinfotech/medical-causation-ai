@@ -13,6 +13,7 @@ import { OpenAiProvider } from './openai.provider';
 import { AnthropicProvider } from './anthropic.provider';
 import { GeminiProvider } from './gemini.provider';
 import { GroqProvider } from './groq.provider';
+import { MistralProvider } from './mistral.provider';
 import type { LlmRuntimeOptions } from './base/openai-compatible-llm.provider';
 
 @Injectable()
@@ -35,6 +36,7 @@ export class LlmProviderFactory {
       ],
       [LLM_PROVIDERS.GEMINI, new GeminiProvider(config.google, runtime)],
       [LLM_PROVIDERS.GROQ, new GroqProvider(config.groq, runtime)],
+      [LLM_PROVIDERS.MISTRAL, new MistralProvider(config.mistral, runtime)],
     ]);
   }
 
@@ -67,6 +69,9 @@ export class LlmProviderFactory {
 
   resolveModel(provider: ILlmProvider, model?: string): string {
     if (model) return model;
+
+    const providerModel = this.aiConfigService.provider.models[provider.name];
+    if (providerModel) return providerModel;
 
     const configured = this.aiConfigService.chatModel;
     if (configured) return configured;

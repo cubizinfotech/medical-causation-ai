@@ -53,6 +53,31 @@ export class AnalysisSafetyValidator {
     for (const item of llmOutput.citations ?? []) collect(item.chunkId);
   }
 
+  removeUnknownCitations(
+    llmOutput: MedicalAnalysisLlmOutput,
+    allowedChunkIds: Set<string>,
+  ): { output: MedicalAnalysisLlmOutput; removedChunkIds: string[] } {
+    const removed = new Set<string>();
+    const filterItems = <T extends { chunkId: string }>(items: T[]): T[] =>
+      items.filter((item) => {
+        const allowed = allowedChunkIds.has(item.chunkId);
+        if (!allowed) removed.add(item.chunkId);
+        return allowed;
+      });
+
+    return {
+      output: {
+        ...llmOutput,
+        retrievedEvidence: filterItems(llmOutput.retrievedEvidence ?? []),
+        supportingEvidence: filterItems(llmOutput.supportingEvidence ?? []),
+        opposingEvidence: filterItems(llmOutput.opposingEvidence ?? []),
+        neutralEvidence: filterItems(llmOutput.neutralEvidence ?? []),
+        citations: filterItems(llmOutput.citations ?? []),
+      },
+      removedChunkIds: [...removed],
+    };
+  }
+
   clampConfidence(score: number): number {
     return Math.max(0, Math.min(100, Math.round(score)));
   }

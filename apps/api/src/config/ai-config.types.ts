@@ -6,6 +6,7 @@ import type { AIProviderSettings } from './config.types';
 export interface ProviderConfigSettings {
   activeProvider: string;
   chatModel: string;
+  models: Record<string, string>;
   temperature: number;
   maxTokens: number;
   retryMaxAttempts: number;
@@ -17,6 +18,7 @@ export interface ProviderConfigSettings {
   azureOpenai: AIProviderSettings;
   openrouter: AIProviderSettings;
   groq: AIProviderSettings;
+  mistral: AIProviderSettings;
 }
 
 /**

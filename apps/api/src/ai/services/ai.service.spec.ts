@@ -30,7 +30,7 @@ describe('AiService', () => {
 
   it('should return provider status for all providers', () => {
     const status = aiService.getLlmProviderStatus();
-    expect(status.length).toBe(5);
+    expect(status.length).toBe(6);
     expect(status.find((s) => s.active)?.name).toBe(LLM_PROVIDERS.OPENROUTER);
   });
 
