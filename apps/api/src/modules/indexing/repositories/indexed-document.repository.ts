@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, type IndexedDocument, type IndexStatus } from '@prisma/client';
+import {
+  Prisma,
+  type IndexedDocument,
+  type IndexStatus,
+  type ProductCorpus,
+} from '@prisma/client';
 import { PrismaService } from '@database/prisma.service';
 
 export interface CreateIndexedDocumentInput {
@@ -15,6 +20,8 @@ export interface CreateIndexedDocumentInput {
   fileSize: bigint;
   fileModifiedAt: Date;
   pageCount: number;
+  /** Defaults to mca when omitted. */
+  product?: ProductCorpus;
   status?: IndexStatus;
 }
 
@@ -31,7 +38,12 @@ export class IndexedDocumentRepository {
   }
 
   create(data: CreateIndexedDocumentInput): Promise<IndexedDocument> {
-    return this.prisma.indexedDocument.create({ data });
+    return this.prisma.indexedDocument.create({
+      data: {
+        ...data,
+        product: data.product ?? 'mca',
+      },
+    });
   }
 
   update(

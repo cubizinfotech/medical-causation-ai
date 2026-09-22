@@ -28,6 +28,7 @@
       "@database/*": ["src/database/*"],
       "@modules/*": ["src/modules/*"],
       "@ai/*": ["src/ai/*"],
+      "@platform/*": ["src/platform/*"],
       "@medical/*": ["src/medical/*"],
       "@integrations/*": ["src/integrations/*"],
       "@shared/*": ["src/shared/*"],

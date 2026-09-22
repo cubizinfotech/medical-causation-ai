@@ -43,7 +43,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client;
   }
 
-  getConnectionOptions(): { host: string; port: number; password?: string; db: number } {
+  getConnectionOptions(): {
+    host: string;
+    port: number;
+    password?: string;
+    db: number;
+  } {
     const redis = this.configService.get<RedisSettings>('redis')!;
     return {
       host: redis.host,

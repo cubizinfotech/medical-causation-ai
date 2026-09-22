@@ -267,9 +267,8 @@ export class IndexingService implements IIndexingService {
       );
     }
 
-    const embeddedChunkIds = await this.embeddingRepository.findEmbeddedChunkIds(
-      indexedDocument.id,
-    );
+    const embeddedChunkIds =
+      await this.embeddingRepository.findEmbeddedChunkIds(indexedDocument.id);
 
     const chunksToEmbed = storedChunks.filter(
       (chunk) => !embeddedChunkIds.has(chunk.id),
@@ -338,9 +337,8 @@ export class IndexingService implements IIndexingService {
         })
         .filter((item): item is NonNullable<typeof item> => item !== null);
 
-      embeddingCount += await this.embeddingRepository.storeEmbeddings(
-        embeddingInputs,
-      );
+      embeddingCount +=
+        await this.embeddingRepository.storeEmbeddings(embeddingInputs);
 
       this.logger.log(
         `Re-embed progress "${indexedDocument.filename}": ${Math.min(i + persistBatchSize, chunkDrafts.length)}/${chunkDrafts.length} remaining chunks`,

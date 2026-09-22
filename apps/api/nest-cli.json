@@ -10,7 +10,11 @@
         "outDir": "dist"
       },
       {
-        "include": "modules/medical-analysis/prompts/**/*.txt",
+        "include": "modules/mca/medical-analysis/prompts/**/*.txt",
+        "outDir": "dist"
+      },
+      {
+        "include": "modules/ewi/**/*.prompt.txt",
         "outDir": "dist"
       }
     ],

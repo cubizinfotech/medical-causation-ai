@@ -1,4 +1,5 @@
-// Medical Causation AI — Indexing schema (documents + vectors)
+// Medical Causation AI + Expert Witness Investigation
+// Indexing schema (documents + vectors) + MCA cases + EWI investigations
 // pgvector embedding column is created via migration SQL.
 
 generator client {
@@ -8,7 +9,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["documents", "vectors", "cases"]
+  schemas  = ["documents", "vectors", "cases", "ewi"]
 }
 
 enum IndexStatus {
@@ -21,31 +22,41 @@ enum IndexStatus {
   @@schema("documents")
 }
 
+/// Product corpus: mca | ewi — keeps knowledge indexes separated.
+enum ProductCorpus {
+  mca
+  ewi
+
+  @@schema("documents")
+}
+
 model IndexedDocument {
-  id                  String      @id @default(uuid()) @db.Uuid
-  knowledgeDocumentId String      @unique @map("knowledge_document_id")
-  documentTitle       String      @map("document_title")
+  id                  String        @id @default(uuid()) @db.Uuid
+  knowledgeDocumentId String        @unique @map("knowledge_document_id")
+  documentTitle       String        @map("document_title")
   filename            String
-  relativePath        String      @map("relative_path")
-  sourceFile          String      @map("source_file")
+  relativePath        String        @map("relative_path")
+  sourceFile          String        @map("source_file")
   category            String
-  subCategory         String?     @map("sub_category")
+  subCategory         String?       @map("sub_category")
   extension           String
   checksum            String
-  fileSize            BigInt      @map("file_size")
-  fileModifiedAt      DateTime    @map("file_modified_at")
-  pageCount           Int         @default(0) @map("page_count")
-  chunkCount          Int         @default(0) @map("chunk_count")
-  status              IndexStatus @default(pending)
-  errorMessage        String?     @map("error_message")
-  indexedAt           DateTime?   @map("indexed_at")
-  createdAt           DateTime    @default(now()) @map("created_at")
-  updatedAt           DateTime    @updatedAt @map("updated_at")
+  fileSize            BigInt        @map("file_size")
+  fileModifiedAt      DateTime      @map("file_modified_at")
+  pageCount           Int           @default(0) @map("page_count")
+  chunkCount          Int           @default(0) @map("chunk_count")
+  product             ProductCorpus @default(mca)
+  status              IndexStatus   @default(pending)
+  errorMessage        String?       @map("error_message")
+  indexedAt           DateTime?     @map("indexed_at")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
 
   chunks DocumentChunk[]
 
   @@index([status])
   @@index([checksum])
+  @@index([product])
   @@map("indexed_documents")
   @@schema("documents")
 }
@@ -125,4 +136,40 @@ model AnalysisCase {
   @@index([createdAt(sort: Desc)])
   @@map("analysis_cases")
   @@schema("cases")
+}
+
+enum InvestigationStatus {
+  queued
+  running
+  completed
+  failed
+
+  @@schema("ewi")
+}
+
+model ExpertInvestigation {
+  id             String              @id @default(uuid()) @db.Uuid
+  jobId          String              @unique @map("job_id")
+  expertName     String              @map("expert_name")
+  specialty      String
+  status         InvestigationStatus @default(queued)
+  step           String?
+  stepLabel      String?             @map("step_label")
+  progress       Int                 @default(0)
+  message        String?
+  errorMessage   String?             @map("error_message")
+  result         Json?
+  reportFileName String?             @map("report_file_name")
+  reportMimeType String?             @map("report_mime_type")
+  /// Base64-encoded .docx bytes for download (v1 local retention).
+  reportData     String?             @map("report_data") @db.Text
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  completedAt    DateTime?           @map("completed_at")
+
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@index([expertName])
+  @@map("expert_investigations")
+  @@schema("ewi")
 }

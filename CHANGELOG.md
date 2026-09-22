@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Common platform scaffolds under `apps/api/src/platform/` (auth, users, email, audit, report, storage, search, jobs)
+- `modules/common` Nest facade for shared document/RAG modules
+- Frontend MCA boundary: `features/mca`, `components/mca` (legacy paths re-export)
+- `@platform/*` TypeScript path alias
+
+### Added
+
+- Dual-product architecture: **MCA** (Medical Causation Analysis) + **EWI** (Expert Witness Investigation)
+- Backend boundaries: `modules/mca/`, `modules/ewi/`, `platform/`, `integrations/expert-research/`
+- EWI vertical slice: intake → BullMQ job → mock research → discrepancies → 100+ questions → Word (.docx) report
+- EWI API `/ewi/*` + WebSocket namespace `/ewi`; Prisma schema `ewi.expert_investigations`
+- Product corpus column on indexed documents; separate KB path config for MCA/EWI
+- Frontend product chooser at `/`; MCA under `/mca/*`; EWI under `/ewi/*`; legacy MCA redirects
+- Docs: `docs/ewi-architecture.md`, `docs/architecture-decisions-mca-ewi.md`
+
+### Changed
+
+- Relocated medical analysis module to `apps/api/src/modules/mca/medical-analysis/`
+- Redis/BullMQ prefixes documented as `{mca-bull}` / `{ewi-bull}`
+
+### Added
+
 - Case history delete — `DELETE /medical-analysis/histories/:id` with confirmation dialog in UI
 - PDF report export (replaces Markdown export) with terms & policy footer
 - Human-readable private knowledge base source summaries in reports

@@ -1,15 +1,26 @@
-# Medical Causation AI Platform
+# Medical Causation AI + Expert Witness Investigation Platform
 
 You are acting as a Principal Software Architect, Senior Full Stack Engineer, AI Engineer, and DevOps Engineer.
 
-We are building a production-ready enterprise SaaS application called **Medical Causation AI**.
+We are building a production-ready enterprise SaaS platform with **two products** in one monorepo:
 
-This application is NOT a hospital system, EMR, appointment system, or medical diagnosis software.
+1. **MCA — Medical Causation AI** — helps Personal Injury Attorneys determine whether trauma medically contributed to injury/disease.
+2. **EWI — Expert Witness Investigation** — researches opposing experts and generates Word reports with 100+ cross-examination questions.
 
-Its primary purpose is to help Personal Injury Attorneys determine whether a trauma or accident medically contributed to a patient's injury or disease using scientific evidence, epidemiology, AI reasoning, and peer-reviewed medical literature.
+Neither product is a hospital system, EMR, appointment system, or medical diagnosis software.
+
+**Architecture rules:**
+- Keep Common / MCA / EWI boundaries clear (`modules/mca`, `modules/ewi`, `platform`, `integrations`).
+- Do not merge EWI into `MedicalAnalysisModule`.
+- Prefer reusable services and interfaces; keep business logic out of controllers and UI.
+- Configuration is environment-driven; never hardcode secrets.
+- Local development must work without paid APIs (mocks/stubs).
+- Structure code so MCA and EWI can be separated later with minimal changes.
+
+See `docs/architecture.md`, `docs/ewi-architecture.md`, and `docs/architecture-decisions-mca-ewi.md`.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-APPLICATION PURPOSE
+APPLICATION PURPOSE (MCA)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 The application should help attorneys answer questions like:

@@ -12,7 +12,9 @@ Attorneys handling personal injury cases often need to answer causation question
 - Did trauma worsen a spinal injury?
 - Did a workplace accident increase the risk of a disease?
 
-**Medical Causation AI** automates the research and analysis process by searching medical databases, retrieving scientific evidence, applying accepted causation principles, and generating attorney-ready reports with citations.
+**Medical Causation AI (MCA)** automates the research and analysis process by searching medical databases, retrieving scientific evidence, applying accepted causation principles, and generating attorney-ready reports with citations.
+
+The same monorepo also hosts **Expert Witness Investigation (EWI)** — research an opposing expert (name + specialty) and generate a Microsoft Word report with 100+ evidence-based cross-examination questions. MCA and EWI share infrastructure but keep separate modules, data, and UI routes so they can be split later with minimal changes.
 
 ## Prerequisites
 
@@ -27,24 +29,14 @@ Attorneys handling personal injury cases often need to answer causation question
 ```
 medical-causation-ai/
 ├── apps/
-│   ├── api/              # NestJS backend
-│   └── web/              # Next.js frontend
+│   ├── api/              # NestJS — platform/common + MCA + EWI
+│   └── web/              # Next.js — /mca + /ewi (+ product chooser)
 ├── docker/
-│   ├── api/              # NestJS Dockerfile (prod + dev)
-│   ├── web/              # Next.js Dockerfile (prod + dev)
-│   ├── postgres/init/    # PostgreSQL initialization scripts (pgvector)
-│   └── redis/            # Redis configuration
 ├── packages/             # Shared packages (future)
-├── knowledge-base/       # Private documents for RAG
-│   ├── books/
-│   ├── articles/
-│   ├── reports/
-│   ├── templates/
-│   └── uploads/
-├── docs/                 # Project documentation
-├── docker-compose.yml    # Production Docker Compose stack
-├── docker-compose.dev.yml # Development overrides
-└── scripts/              # Utility scripts (future)
+├── knowledge-base/       # MCA corpus (flat) + knowledge-base/ewi/
+├── docs/
+├── docker-compose.yml
+└── docker-compose.dev.yml
 ```
 
 | Directory | Purpose |
@@ -349,11 +341,10 @@ npm run dev:api
 npm run dev:web
 ```
 
-- Landing: [http://localhost:3000](http://localhost:3000)
-- Case form: [http://localhost:3000/case](http://localhost:3000/case)
-- Analysis: [http://localhost:3000/analysis](http://localhost:3000/analysis)
-- Histories: [http://localhost:3000/histories](http://localhost:3000/histories)
-- Report: [http://localhost:3000/report](http://localhost:3000/report)
+- Landing (product chooser): [http://localhost:3000](http://localhost:3000)
+- MCA: [http://localhost:3000/mca](http://localhost:3000/mca) · Case [http://localhost:3000/mca/case](http://localhost:3000/mca/case)
+- EWI: [http://localhost:3000/ewi](http://localhost:3000/ewi) · Intake [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake)
+- Legacy MCA URLs (`/case`, `/analysis`, `/report`, `/histories`) redirect to `/mca/*`
 
 See [DEMO_GUIDE.md](./DEMO_GUIDE.md) for the full client demonstration script (step-by-step).
 
@@ -386,6 +377,8 @@ npm run typecheck    # TypeScript check
 | Document | Description |
 |----------|-------------|
 | [Architecture](./docs/architecture.md) | System design and principles |
+| [MCA + EWI Decisions](./docs/architecture-decisions-mca-ewi.md) | Locked dual-product decisions |
+| [EWI Architecture](./docs/ewi-architecture.md) | Expert Witness Investigation design |
 | [Folder Structure](./docs/folder-structure.md) | Directory layout reference |
 | [Development](./docs/development.md) | Local setup and workflows |
 | [Deployment](./docs/deployment.md) | Production deployment guide |
@@ -415,6 +408,7 @@ npm run typecheck    # TypeScript check
 | **Phase 2e** | Prisma schema, health checks, Swagger, KB/AI API endpoints | Planned |
 | **Phase 3** | Demonstration UI — landing, case form, analysis workflow | ✅ Complete |
 | **Phase 4** | Case history, report viewer, PDF export | ✅ Complete |
+| **Phase 4b** | Dual-product architecture (MCA + EWI boundaries, EWI vertical slice) | ✅ Complete |
 | **Phase 5** | Authentication, multi-tenant law firm management | Planned |
 | **Phase 6** | Medical literature search (PubMed, PMC, Semantic Scholar) | Planned |
 | **Phase 7** | Enhanced PDF report templates | Planned |

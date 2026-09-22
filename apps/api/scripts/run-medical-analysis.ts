@@ -5,7 +5,7 @@
  */
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
-import { MedicalAnalysisService } from '../src/modules/medical-analysis';
+import { MedicalAnalysisService } from '../src/modules/mca/medical-analysis';
 
 async function main(): Promise<void> {
   const question =

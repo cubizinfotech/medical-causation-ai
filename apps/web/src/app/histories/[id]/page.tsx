@@ -1,10 +1,10 @@
-import HistoryDetailPageClient from "./history-detail-page-client";
+import { redirect } from "next/navigation";
 
-export default async function HistoryDetailPage({
+export default async function HistoryDetailRedirectPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <HistoryDetailPageClient id={id} />;
+  redirect(`/mca/histories/${id}`);
 }

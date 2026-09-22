@@ -66,7 +66,10 @@ export class IndexingEmbeddingService {
 
       if (i + batchSize < chunks.length) {
         await new Promise((resolve) =>
-          setTimeout(resolve, Number(process.env.EMBEDDING_BATCH_DELAY_MS ?? 500)),
+          setTimeout(
+            resolve,
+            Number(process.env.EMBEDDING_BATCH_DELAY_MS ?? 500),
+          ),
         );
       }
     }

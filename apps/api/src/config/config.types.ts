@@ -48,10 +48,18 @@ export interface KnowledgeBasePaths {
   uploads: string;
 }
 
+export interface ProductKnowledgeBaseSettings {
+  mca: KnowledgeBasePaths;
+  ewi: KnowledgeBasePaths;
+}
+
 export interface StorageSettings {
-  /** @deprecated Use knowledgeBase.root */
+  /** @deprecated Use knowledgeBase.root (MCA default) */
   knowledgeBasePath: string;
+  /** MCA knowledge base paths (default corpus). */
   knowledgeBase: KnowledgeBasePaths;
+  /** Product-scoped knowledge base roots. */
+  products: ProductKnowledgeBaseSettings;
   uploadMaxSizeMb: number;
   uploadMaxSizeBytes: number;
   knowledgeBaseMaxFileSizeMb: number;
@@ -68,6 +76,7 @@ export interface FeatureFlags {
   enableAiProcessing: boolean;
   enableRag: boolean;
   enableLiteratureSearch: boolean;
+  enableEwi: boolean;
 }
 
 export interface IndexingConfigSettings {

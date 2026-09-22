@@ -19,6 +19,8 @@ export type {
   AISettings,
   AIProviderSettings,
   StorageSettings,
+  KnowledgeBasePaths,
+  ProductKnowledgeBaseSettings,
   LoggingSettings,
   FeatureFlags,
 } from './config.types';

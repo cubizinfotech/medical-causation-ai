@@ -95,9 +95,7 @@ export async function fetchOpenAiCompatibleChat(
         const retryAfter = Number(response.headers.get('retry-after') ?? 0);
         throw new RateLimitExceededException(
           options.providerName,
-          retryAfter > 0
-            ? retryAfter * 1000
-            : options.retryDelayMs * attempt,
+          retryAfter > 0 ? retryAfter * 1000 : options.retryDelayMs * attempt,
         );
       }
 

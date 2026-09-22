@@ -1,23 +1,30 @@
 import { Module } from '@nestjs/common';
 import { AppConfigModule } from '@config/config.module';
 import { AiModule } from '@ai/ai.module';
-import { KnowledgeBaseModule } from '@modules/knowledge-base/knowledge-base.module';
-import { DocumentProcessingModule } from '@modules/document-processing/document-processing.module';
-import { IndexingModule } from '@modules/indexing/indexing.module';
-import { RagModule } from '@modules/rag/rag.module';
-import { MedicalAnalysisModule } from '@modules/medical-analysis/medical-analysis.module';
 import { DatabaseModule } from '@database/database.module';
+import { PlatformModule } from '@platform/platform.module';
+import { CommonModule } from '@modules/common/common.module';
+import { McaModule } from '@modules/mca/mca.module';
+import { EwiModule } from '@modules/ewi/ewi.module';
 
+/**
+ * Application composition root.
+ *
+ * Layering:
+ * - PlatformModule — shared auth/email/audit/report/storage/search scaffolds + cross-cutting contracts
+ * - DatabaseModule / AppConfigModule / AiModule — shared runtime infrastructure
+ * - CommonModule — shared KB / document / indexing / RAG Nest modules
+ * - McaModule / EwiModule — product boundaries (no cross-imports)
+ */
 @Module({
   imports: [
     AppConfigModule,
+    PlatformModule,
     DatabaseModule,
     AiModule,
-    KnowledgeBaseModule,
-    DocumentProcessingModule,
-    IndexingModule,
-    RagModule,
-    MedicalAnalysisModule,
+    CommonModule,
+    McaModule,
+    EwiModule,
   ],
   controllers: [],
   providers: [],

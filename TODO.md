@@ -129,6 +129,27 @@
 - [x] Root `npm run validate` script
 - [x] Security review (no hardcoded secrets in source)
 
+## Phase 4b — MCA + EWI Dual-Product Architecture ✅
+
+- [x] Common / MCA / EWI module boundaries (`platform`, `modules/mca`, `modules/ewi`)
+- [x] Relocate medical-analysis under `modules/mca` without behavior change
+- [x] Prisma `ewi` schema + `product` corpus on indexed documents
+- [x] Separate Redis/BullMQ prefixes and EWI investigation queue
+- [x] Product-scoped knowledge base paths (`knowledge-base/ewi`)
+- [x] EWI vertical slice: mock research, discrepancies, 100+ questions, Word report
+- [x] `IExpertResearchSource` + mock/stub adapters
+- [x] Frontend `/` chooser, `/mca/*`, `/ewi/*`, legacy redirects
+- [x] Documentation updates (architecture, EWI, decisions, README, TODO)
+
+## Phase 4c — Common / MCA / EWI Folder Structure ✅
+
+- [x] Expand `platform/` scaffolds (auth, users, email, audit, report, storage, search, jobs)
+- [x] Add `modules/common` facade for shared KB/document/indexing/RAG modules
+- [x] Keep MCA under `modules/mca` and frontend `features/mca` + `components/mca`
+- [x] Keep EWI under `modules/ewi` and frontend `features/ewi` (no MCA cross-imports)
+- [x] Add `@platform/*` path alias; update docs (architecture, folder-structure, README)
+- [x] Compatibility re-exports for legacy MCA feature/component paths
+
 ## Phase 2 — Database & API Foundation
 
 - [ ] Root monorepo workspace configuration (npm/pnpm workspaces)
