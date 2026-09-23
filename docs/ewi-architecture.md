@@ -62,14 +62,49 @@ The history detail page shows the stage label and percent while the investigatio
 | `research_findings` | Evidence item: title, optional summary, URL, verification status, notes |
 | `discrepancies` | Severity, title, description, related URLs |
 | `cross_exam_questions` | Numbered questions and evidence basis |
-| `investigation_reports` | Generated `.docx` file name, MIME type, local storage key, byte size |
+| `investigation_reports` | Generated `.docx` file name, MIME type, local storage key, byte size, template id, template version |
 | `investigation_events` | Audit trail: event type, status, stage, message, timestamp |
 
 Indexes cover status, expert, created time, provider, verification status, and question order.
 
 ## Restricted sources
 
-LexisNexis, commercial expert directories, social platforms, and IME advertising sites are restricted. Findings from those providers store title, URL, source type, publication date, and verification status. Summary text is not stored. The generated Word report is our document and is stored as a local file, not as third-party article or PDF bytes.
+LexisNexis, commercial expert directories, social platforms, and IME advertising sites are restricted. Findings from those providers store title, URL, source type, publication date, and verification status. Summary text is not stored. The generated Word report is our document and is stored as a local file, not as third-party article or PDF bytes. See [ewi-report-workflow.md](./ewi-report-workflow.md).
+
+## Workflow
+
+Starting an investigation with expert name and specialty queues a BullMQ job on `ewi-investigation`. The worker runs every stage in order. The user does not approve each stage. Progress is published on the `/ewi` WebSocket and stored on the investigation, so the investigation page can follow the live update or poll `GET /ewi/jobs/:jobId`.
+
+Stages:
+
+1. Identify Expert
+2. Find CV and professional profiles
+3. Verify education and degrees
+4. Verify medical licenses
+5. Verify board certifications
+6. Research publications and authorship
+7. Research grants
+8. Research patents
+9. Research awards and medals
+10. Research legal cases, motions, orders and available references
+11. Research expert witness directories
+12. Research expert websites and advertising
+13. Research IME-related information
+14. Research YouTube/videos/presentations
+15. Research public social media
+16. Research news and blogs
+17. Research university/professional rules
+18. Cross-check information
+19. Identify discrepancies
+20. Generate investigation summary
+21. Generate cross-examination questions
+22. Generate final report
+
+A stage with no connected source, no results, an unavailable source, a rate limit, or an API error is recorded and the workflow continues. Transient provider errors (timeout, rate limit, 502/503/504) are retried up to three times inside the job. LexisNexis and other restricted sources are recorded as requiring authorized access. Their content is not stored.
+
+Analysis is a separate step from collection. See [ewi-ai-analysis.md](./ewi-ai-analysis.md). The model may only phrase a summary, conclusions, and questions from collected findings. Unsupported or malformed model output is discarded. Source findings and the analysis JSON are stored in different tables.
+
+Each stage change is written to `investigation_events` and logged.
 
 ## Research providers
 
@@ -85,4 +120,4 @@ Provider requirements are listed in [ewi-research-providers.md](./ewi-research-p
 
 No paid API is required. With `RESEARCH_PROVIDER=mock`, the workflow runs on development fixtures. Providers without a fixture return unavailable and add no records.
 
-See also: [architecture-decisions-mca-ewi.md](./architecture-decisions-mca-ewi.md), [architecture.md](./architecture.md).
+See also: [ewi-report-workflow.md](./ewi-report-workflow.md), [architecture-decisions-mca-ewi.md](./architecture-decisions-mca-ewi.md), [architecture.md](./architecture.md).

@@ -9,7 +9,8 @@ import type { CreateExpertInvestigationDto } from '../dto/create-expert-investig
 import type { EwiInvestigationResult } from '../jobs/ewi-investigation-job.types';
 import {
   EWI_JOB_STEP_LABELS,
-  EWI_JOB_STEPS,
+  EWI_STAGE_IDENTIFY,
+  EWI_STAGE_REPORT,
 } from '../jobs/ewi-investigation-job.constants';
 import {
   InvalidInvestigationTransitionError,
@@ -28,6 +29,7 @@ const detailInclude = {
   discrepancies: true,
   questions: { orderBy: { number: 'asc' as const } },
   report: true,
+  analysis: true,
 } satisfies Prisma.InvestigationInclude;
 
 type InvestigationDetail = Prisma.InvestigationGetPayload<{
@@ -76,8 +78,8 @@ export class ExpertInvestigationRepository {
           jobId,
           expertId: expert.id,
           status: 'pending',
-          currentStage: EWI_JOB_STEPS.INTAKE,
-          stageLabel: EWI_JOB_STEP_LABELS[EWI_JOB_STEPS.INTAKE],
+          currentStage: EWI_STAGE_IDENTIFY,
+          stageLabel: EWI_JOB_STEP_LABELS[EWI_STAGE_IDENTIFY],
           progress: 0,
           profile: {
             create: { displayName: name, specialty },
@@ -86,7 +88,7 @@ export class ExpertInvestigationRepository {
             create: {
               eventType: 'created',
               status: 'pending',
-              stage: EWI_JOB_STEPS.INTAKE,
+              stage: EWI_STAGE_IDENTIFY,
               message: 'Investigation started',
             },
           },
@@ -177,6 +179,8 @@ export class ExpertInvestigationRepository {
       mimeType: string;
       storageKey: string;
       byteSize: number;
+      templateId?: string;
+      templateVersion?: string;
     },
   ) {
     const current = await this.requireByJobId(jobId);
@@ -193,7 +197,8 @@ export class ExpertInvestigationRepository {
         sourceType: item.category,
         provider: item.sourceId,
         publishedAt,
-        restricted: item.access === 'restricted' || item.source?.access === 'restricted',
+        restricted:
+          item.access === 'restricted' || item.source?.access === 'restricted',
       });
     });
 
@@ -259,6 +264,19 @@ export class ExpertInvestigationRepository {
         });
       }
 
+      if (result.analysis) {
+        await tx.investigationAnalysis.create({
+          data: {
+            investigationId: current.id,
+            origin: result.analysis.origin,
+            providerName: result.analysis.providerName,
+            schemaVersion: result.analysis.document.schemaVersion,
+            payload: result.analysis
+              .document as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
+
       await tx.investigationReport.create({
         data: {
           investigationId: current.id,
@@ -266,6 +284,8 @@ export class ExpertInvestigationRepository {
           mimeType: report.mimeType,
           storageKey: report.storageKey,
           byteSize: report.byteSize,
+          templateId: report.templateId ?? 'ewi/investigation-report',
+          templateVersion: report.templateVersion ?? '1.0.0',
           generatedAt: new Date(result.generatedAt),
         },
       });
@@ -289,8 +309,9 @@ export class ExpertInvestigationRepository {
         data: {
           status: 'completed',
           progress: 100,
-          currentStage: EWI_JOB_STEPS.REPORT,
-          stageLabel: EWI_JOB_STEP_LABELS[EWI_JOB_STEPS.REPORT],
+          currentStage: EWI_STAGE_REPORT,
+          stageLabel: EWI_JOB_STEP_LABELS[EWI_STAGE_REPORT],
+          notes: result.summary,
           message: 'Investigation complete',
           errorMessage: null,
           completedAt: new Date(),
@@ -298,7 +319,7 @@ export class ExpertInvestigationRepository {
             create: {
               eventType: 'completed',
               status: 'completed',
-              stage: EWI_JOB_STEPS.REPORT,
+              stage: EWI_STAGE_REPORT,
               message: 'Investigation complete',
             },
           },
@@ -446,8 +467,7 @@ export class ExpertInvestigationRepository {
         expertName: row.expert.name,
         specialty: row.expert.specialty,
         evidence: row.findings.map((finding) => ({
-          sourceId: finding.source
-            .provider as EwiInvestigationResult['evidence'][number]['sourceId'],
+          sourceId: finding.source.provider,
           category: finding.sourceType,
           title: finding.title,
           summary: finding.summary ?? '',
@@ -472,6 +492,32 @@ export class ExpertInvestigationRepository {
         reportFileName: row.report?.fileName ?? '',
         generatedAt: (row.report?.generatedAt ?? row.updatedAt).toISOString(),
         disclaimer: EWI_RESULT_DISCLAIMER,
+        summary: row.notes ?? '',
+        analysis: row.analysis
+          ? {
+              origin: row.analysis.origin === 'ai' ? 'ai' : 'deterministic',
+              providerName: row.analysis.providerName,
+              document: row.analysis
+                .payload as unknown as EwiInvestigationResult['analysis']['document'],
+            }
+          : {
+              origin: 'deterministic',
+              providerName: null,
+              document: {
+                schemaVersion: '1.0',
+                groups: [],
+                duplicates: [],
+                comparisons: [],
+                conflicts: [],
+                missing: [],
+                cvDiscrepancies: [],
+                assessments: [],
+                summary:
+                  row.notes ?? 'Could not verify. No analysis was stored.',
+                conclusions: [],
+                questions: [],
+              },
+            },
       },
     };
   }

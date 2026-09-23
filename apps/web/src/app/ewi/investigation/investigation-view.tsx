@@ -85,14 +85,16 @@ export default function EwiInvestigationView() {
           )}
         </div>
 
-        <ProgressTimeline
-          steps={EWI_PROGRESS_STEPS.map((s) => ({ id: s.id, label: s.label }))}
-          currentStepIndex={Math.max(
-            0,
-            EWI_PROGRESS_STEPS.findIndex((s) => s.id === job?.step),
-          )}
-          failed={phase === "failed"}
-        />
+        <div className="max-h-[28rem] overflow-y-auto rounded-xl border border-border p-4">
+          <ProgressTimeline
+            steps={EWI_PROGRESS_STEPS.map((s) => ({ id: s.id, label: s.label }))}
+            currentStepIndex={Math.max(
+              0,
+              EWI_PROGRESS_STEPS.findIndex((s) => s.id === job?.step),
+            )}
+            failed={phase === "failed"}
+          />
+        </div>
 
         {phase === "failed" && (
           <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4">

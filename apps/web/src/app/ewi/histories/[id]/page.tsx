@@ -87,6 +87,15 @@ export default function EwiHistoryDetailPage() {
         </div>
       </div>
 
+      {detail.notes && (
+        <section className="mb-8 rounded-xl border border-border bg-card p-6">
+          <h2 className="text-lg font-semibold">Investigation summary</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+            {detail.notes}
+          </p>
+        </section>
+      )}
+
       {result && (
         <div className="space-y-8">
           <section className="rounded-xl border border-border bg-card p-6">

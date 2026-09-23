@@ -1,3 +1,5 @@
+import type { EWI_PROGRESS_STEPS } from "@/features/ewi/constants";
+
 export type EwiJobStatus =
   | "pending"
   | "running"
@@ -5,16 +7,7 @@ export type EwiJobStatus =
   | "failed"
   | "cancelled";
 
-export type EwiJobStep =
-  | "intake"
-  | "profile"
-  | "credentials"
-  | "scholarship"
-  | "legal"
-  | "public-web"
-  | "discrepancy"
-  | "questions"
-  | "report";
+export type EwiJobStep = (typeof EWI_PROGRESS_STEPS)[number]["id"];
 
 export interface EwiCrossExamQuestion {
   number: number;
@@ -57,6 +50,7 @@ export interface EwiInvestigationResult {
   reportFileName: string;
   generatedAt: string;
   disclaimer: string;
+  summary?: string;
 }
 
 export interface EwiInvestigationJobRecord {
@@ -97,6 +91,7 @@ export interface EwiHistoryListItem {
 }
 
 export interface EwiHistoryDetail extends EwiHistoryListItem {
+  notes: string | null;
   result: EwiInvestigationResult | null;
   reportMimeType: string | null;
 }

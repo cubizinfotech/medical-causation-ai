@@ -21,6 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - EWI API `/ewi/*` + WebSocket namespace `/ewi`
 - EWI investigation lifecycle in schema `ewi`: expert, investigation status/progress, profile, sources, findings, discrepancies, questions, report file, and audit events. Restricted sources store metadata and links only.
 - EWI research provider catalog behind `ExpertResearchService`. Local mock fixtures. Live adapters are not connected. See `docs/ewi-research-providers.md`.
+- EWI investigation workflow runs the research stages automatically in the background job, records stage outcomes, and retries transient source failures.
+- EWI AI analysis interprets collected findings through `AiService` and registered prompts. Malformed or unsupported model output is discarded. Source findings and analysis JSON are stored separately. See `docs/ewi-ai-analysis.md`.
+- EWI Word reports use the shared `docx` renderer and the EWI section template `ewi/investigation-report` `1.0.0`. Cross-examination questions cite collected findings and are omitted when none exist. See `docs/ewi-report-workflow.md`.
 - Product corpus column on indexed documents; separate KB path config for MCA/EWI
 - Frontend product chooser at `/`; MCA under `/mca/*`; EWI under `/ewi/*`; legacy MCA redirects
 - Docs: `docs/ewi-architecture.md`, `docs/architecture-decisions-mca-ewi.md`

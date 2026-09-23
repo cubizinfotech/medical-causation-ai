@@ -1,0 +1,8 @@
+Expert: {{expertName}}
+Specialty: {{specialty}}
+
+Collected findings and source attempts. This is the only evidence you may use:
+
+{{findingsJson}}
+
+Write the JSON object described in your instructions. Cite findingKey or sourceRef values from this JSON. If a category has no record, say it could not be verified. Do not invent sources or qualifications.

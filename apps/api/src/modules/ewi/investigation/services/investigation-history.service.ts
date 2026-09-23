@@ -66,7 +66,13 @@ export class InvestigationHistoryService {
   async markCompleted(
     jobId: string,
     result: EwiInvestigationResult,
-    report: { fileName: string; mimeType: string; buffer: Buffer },
+    report: {
+      fileName: string;
+      mimeType: string;
+      buffer: Buffer;
+      templateId?: string;
+      templateVersion?: string;
+    },
   ) {
     const directory = join(this.reportsDirectory(), 'investigations');
     await mkdir(directory, { recursive: true });
@@ -77,6 +83,8 @@ export class InvestigationHistoryService {
       mimeType: report.mimeType,
       storageKey,
       byteSize: report.buffer.byteLength,
+      templateId: report.templateId,
+      templateVersion: report.templateVersion,
     });
   }
 

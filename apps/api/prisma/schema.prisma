@@ -195,6 +195,7 @@ model Investigation {
   discrepancies Discrepancy[]
   questions     CrossExamQuestion[]
   report        InvestigationReport?
+  analysis      InvestigationAnalysis?
   events        InvestigationEvent[]
 
   @@index([status])
@@ -300,11 +301,28 @@ model InvestigationReport {
   mimeType        String   @map("mime_type")
   storageKey      String   @map("storage_key")
   byteSize        Int      @map("byte_size")
+  templateId      String   @default("ewi/investigation-report") @map("template_id")
+  templateVersion String   @default("1.0.0") @map("template_version")
   generatedAt     DateTime @map("generated_at")
 
   investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
 
   @@map("investigation_reports")
+  @@schema("ewi")
+}
+
+model InvestigationAnalysis {
+  id              String   @id @default(uuid()) @db.Uuid
+  investigationId String   @unique @map("investigation_id") @db.Uuid
+  origin          String
+  providerName    String?  @map("provider_name")
+  schemaVersion   String   @map("schema_version")
+  payload         Json
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@map("investigation_analyses")
   @@schema("ewi")
 }
 

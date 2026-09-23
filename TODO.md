@@ -137,6 +137,7 @@
 - [x] Separate Redis/BullMQ prefixes and EWI investigation queue
 - [x] Product-scoped knowledge base paths (`knowledge-base/ewi`)
 - [x] EWI vertical slice: mock research, discrepancies, 100+ questions, Word report
+- [x] Shared Word renderer plus EWI report template, versioned file, and grounded cross-examination questions (`docs/ewi-report-workflow.md`)
 - [x] `IExpertResearchSource` + mock/stub adapters
 - [x] Frontend `/` chooser, `/mca/*`, `/ewi/*`, legacy redirects
 - [x] Documentation updates (architecture, EWI, decisions, README, TODO)

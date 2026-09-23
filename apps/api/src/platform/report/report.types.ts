@@ -10,6 +10,8 @@ export interface ReportArtifact {
   format: ReportFormat;
   /** Raw bytes when generated server-side. */
   buffer?: Buffer;
+  templateId?: string;
+  templateVersion?: string;
 }
 
 export interface IReportBuilder<TInput> {

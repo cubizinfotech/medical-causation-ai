@@ -1,6 +1,7 @@
 import type { ExpertEvidenceItem } from '@integrations/expert-research';
 import type { ExpertDiscrepancy } from '../../research/discrepancy-analyzer';
 import type { CrossExamQuestion } from '../../research/cross-exam-question.generator';
+import type { EwiAnalysisRecord } from '../analysis/ewi-analysis.types';
 import type {
   EwiJobStatus,
   EwiJobStep,
@@ -27,6 +28,8 @@ export interface EwiInvestigationResult {
   reportFileName: string;
   generatedAt: string;
   disclaimer: string;
+  summary: string;
+  analysis: EwiAnalysisRecord;
 }
 
 export interface EwiInvestigationJobPayload {

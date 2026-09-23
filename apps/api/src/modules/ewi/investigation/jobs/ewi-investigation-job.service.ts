@@ -15,7 +15,8 @@ import {
   EWI_INVESTIGATION_QUEUE_NAME,
   EWI_JOB_STATUS,
   EWI_JOB_STEP_LABELS,
-  EWI_JOB_STEPS,
+  EWI_STAGE_IDENTIFY,
+  EWI_STAGE_REPORT,
 } from './ewi-investigation-job.constants';
 import type {
   CreateEwiInvestigationJobResponse,
@@ -75,8 +76,8 @@ export class EwiInvestigationJobService
       jobId,
       investigationId: investigation.id,
       status: EWI_JOB_STATUS.PENDING,
-      step: EWI_JOB_STEPS.INTAKE,
-      stepLabel: EWI_JOB_STEP_LABELS[EWI_JOB_STEPS.INTAKE],
+      step: EWI_STAGE_IDENTIFY,
+      stepLabel: EWI_JOB_STEP_LABELS[EWI_STAGE_IDENTIFY],
       progress: 5,
       message: 'Investigation pending — starting shortly…',
       createdAt: now,
@@ -158,13 +159,19 @@ export class EwiInvestigationJobService
   async markCompleted(
     jobId: string,
     result: EwiInvestigationResult,
-    report: { fileName: string; mimeType: string; buffer: Buffer },
+    report: {
+      fileName: string;
+      mimeType: string;
+      buffer: Buffer;
+      templateId?: string;
+      templateVersion?: string;
+    },
   ): Promise<void> {
     const record = await this.requireRecord(jobId);
     record.status = EWI_JOB_STATUS.COMPLETED;
     record.progress = 100;
-    record.step = EWI_JOB_STEPS.REPORT;
-    record.stepLabel = EWI_JOB_STEP_LABELS[EWI_JOB_STEPS.REPORT];
+    record.step = EWI_STAGE_REPORT;
+    record.stepLabel = EWI_JOB_STEP_LABELS[EWI_STAGE_REPORT];
     record.message = 'Investigation complete';
     record.result = result;
     record.updatedAt = new Date().toISOString();
@@ -173,6 +180,8 @@ export class EwiInvestigationJobService
       fileName: report.fileName,
       mimeType: report.mimeType,
       buffer: report.buffer,
+      templateId: report.templateId,
+      templateVersion: report.templateVersion,
     });
     this.emit(record);
   }

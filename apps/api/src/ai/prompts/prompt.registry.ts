@@ -44,6 +44,26 @@ export const PROMPT_REGISTRY: PromptTemplateMetadata[] = [
     description: 'Generates attorney-ready report sections from analysis',
   },
   {
+    id: 'ewi/investigation-analysis-system',
+    name: 'EWI Investigation Analysis System',
+    category: 'ewi',
+    filename: 'ewi/investigation-analysis.system.prompt.txt',
+    version: '1.0.0',
+    variables: [],
+    description:
+      'System rules for EWI analysis. The model may only discuss supplied findings.',
+  },
+  {
+    id: 'ewi/investigation-analysis',
+    name: 'EWI Investigation Analysis',
+    category: 'ewi',
+    filename: 'ewi/investigation-analysis.prompt.txt',
+    version: '1.0.0',
+    variables: ['expertName', 'specialty', 'findingsJson'],
+    description:
+      'Asks the model to phrase a summary, conclusions, and questions from collected EWI findings.',
+  },
+  {
     id: 'testing/smoke-test',
     name: 'Smoke Test',
     category: 'testing',
