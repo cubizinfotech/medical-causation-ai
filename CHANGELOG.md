@@ -18,7 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Dual-product architecture: **MCA** (Medical Causation Analysis) + **EWI** (Expert Witness Investigation)
 - Backend boundaries: `modules/mca/`, `modules/ewi/`, `platform/`, `integrations/expert-research/`
 - EWI vertical slice: intake → BullMQ job → mock research → discrepancies → 100+ questions → Word (.docx) report
-- EWI API `/ewi/*` + WebSocket namespace `/ewi`; Prisma schema `ewi.expert_investigations`
+- EWI API `/ewi/*` + WebSocket namespace `/ewi`
+- EWI investigation lifecycle in schema `ewi`: expert, investigation status/progress, profile, sources, findings, discrepancies, questions, report file, and audit events. Restricted sources store metadata and links only.
+- EWI research provider catalog behind `ExpertResearchService`. Local mock fixtures. Live adapters are not connected. See `docs/ewi-research-providers.md`.
 - Product corpus column on indexed documents; separate KB path config for MCA/EWI
 - Frontend product chooser at `/`; MCA under `/mca/*`; EWI under `/ewi/*`; legacy MCA redirects
 - Docs: `docs/ewi-architecture.md`, `docs/architecture-decisions-mca-ewi.md`

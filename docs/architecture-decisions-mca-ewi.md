@@ -6,7 +6,7 @@ These defaults apply until explicitly changed. They resolve the open questions f
 |---|--------|----------|
 | 1 | Root UX | `/` is a product chooser (MCA + EWI). MCA landing moves to `/mca`. |
 | 2 | MCA routes | UI under `/mca/*` with redirects from `/case`, `/analysis`, `/report`, `/histories`. |
-| 3 | EWI research sources (v1) | Interface + mock fixtures for all sources. Stub adapters for NPI, PubMed/ORCID, CourtListener, USPTO, news, web search. Paid/real APIs env-gated and replaceable later. |
+| 3 | EWI research sources (v1) | Provider catalog behind `ExpertResearchService`. Mock fixtures locally. Live HTTP is not connected. See `docs/ewi-research-providers.md`. |
 | 4 | Local/dev without paid APIs | Deterministic mock research fixtures when keys are absent. |
 | 5 | Word report | Server-side `.docx` via `docx` library. No mandatory client Word template in v1. |
 | 6 | Question count | Fixed minimum of **100** evidence-based cross-examination questions. |

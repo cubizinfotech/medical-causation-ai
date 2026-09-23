@@ -74,11 +74,11 @@ export class EwiInvestigationJobService
     const record: EwiInvestigationJobRecord = {
       jobId,
       investigationId: investigation.id,
-      status: EWI_JOB_STATUS.QUEUED,
+      status: EWI_JOB_STATUS.PENDING,
       step: EWI_JOB_STEPS.INTAKE,
       stepLabel: EWI_JOB_STEP_LABELS[EWI_JOB_STEPS.INTAKE],
       progress: 5,
-      message: 'Investigation queued — starting shortly…',
+      message: 'Investigation pending — starting shortly…',
       createdAt: now,
       updatedAt: now,
     };
@@ -109,7 +109,7 @@ export class EwiInvestigationJobService
     return {
       investigationId: investigation.id,
       jobId,
-      status: EWI_JOB_STATUS.QUEUED,
+      status: EWI_JOB_STATUS.PENDING,
     };
   }
 
@@ -172,7 +172,7 @@ export class EwiInvestigationJobService
     await this.historyService.markCompleted(jobId, result, {
       fileName: report.fileName,
       mimeType: report.mimeType,
-      dataBase64: report.buffer.toString('base64'),
+      buffer: report.buffer,
     });
     this.emit(record);
   }

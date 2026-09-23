@@ -72,10 +72,27 @@ docker compose down -v
 | `postgres` | `pgvector/pgvector:pg17` | 5432 | `mca-postgres-data` |
 | `redis` | `redis:7-alpine` | 6379 | `mca-redis-data` |
 | `pgadmin` | `dpage/pgadmin4:latest` | 5050 | `mca-pgadmin-data` |
-| `api` | Built from `docker/api/Dockerfile` | 3001 | — |
+| `api` | Built from `docker/api/Dockerfile` | 3001 | `./knowledge-base` mounted read-only |
 | `web` | Built from `docker/web/Dockerfile` | 3000 | — |
+| `mailpit` | `axllent/mailpit` (profile `mail`) | 8025 / 1025 | — |
+| `ollama` | `ollama/ollama` (profile `local-ai`) | 11434 | `mca-ollama-data` |
 
-All services use the `mca-network` bridge network for internal communication.
+pgAdmin is for local development. Optional profiles are not started by `docker compose up`.
+
+```bash
+docker compose --profile mail up -d mailpit
+docker compose --profile local-ai up -d ollama
+```
+
+## Health checks
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | API liveness. Docker uses this. No secrets. |
+| `GET /health/ready` | PostgreSQL + Redis readiness. `503` when degraded. |
+
+Container health checks remain on postgres (`pg_isready`), redis (`PING`), api (`/health`), and web (`/`).
+
 
 ## PostgreSQL
 
@@ -162,25 +179,19 @@ The NestJS application can be deployed to:
 
 ## Health Checks
 
-Docker Compose health checks are configured for all services:
-
-| Service | Check |
-|---------|-------|
+| Check | Target |
+|-------|--------|
 | PostgreSQL | `pg_isready` |
 | Redis | `redis-cli ping` |
-| API | HTTP fetch to port 3001 |
+| API liveness | `GET /health` |
+| API readiness | `GET /health/ready` (database + Redis) |
 | Web | HTTP fetch to port 3000 |
 
-> Dedicated `/health` API endpoints will be added in Phase 2.
+Responses do not include credentials or connection strings.
 
-## Background Jobs (Future)
+## Background Jobs
 
-BullMQ workers will use Redis for:
-
-- PDF parsing and chunking
-- Embedding generation
-- Report generation
-- Medical literature search
+BullMQ workers use Redis. Queue prefixes and TTLs come from `JOB_*` / `ANALYSIS_JOB_TTL_SECONDS`. MCA and EWI keep separate queues.
 
 ## Security Checklist (Production)
 
@@ -216,8 +227,7 @@ Docker infrastructure is **implemented**:
 
 **Not yet implemented:**
 
-- [ ] Prisma schema and migrations
-- [ ] Dedicated `/health` API endpoints
+- [x] Health endpoints `GET /health` and `GET /health/ready`
 - [ ] CI/CD pipeline
 - [ ] Production secrets management
 

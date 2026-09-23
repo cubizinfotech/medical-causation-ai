@@ -20,7 +20,7 @@ export type EwiJobPhase =
 const POLL_INTERVAL_MS = 4000;
 
 function isTerminal(status: EwiInvestigationJobRecord["status"]): boolean {
-  return status === "completed" || status === "failed";
+  return status === "completed" || status === "failed" || status === "cancelled";
 }
 
 export function useEwiInvestigationJob() {
@@ -51,10 +51,17 @@ export function useEwiInvestigationJob() {
     if (update.status === "completed") {
       setPhase("completed");
       setError(null);
-    } else if (update.status === "failed") {
+    } else if (update.status === "failed" || update.status === "cancelled") {
       setPhase("failed");
-      setError(new Error(update.error ?? "Investigation failed"));
-    } else if (update.status === "running" || update.status === "queued") {
+      setError(
+        new Error(
+          update.error ??
+            (update.status === "cancelled"
+              ? "Investigation cancelled"
+              : "Investigation failed"),
+        ),
+      );
+    } else if (update.status === "running" || update.status === "pending") {
       setPhase("running");
     }
   }, []);

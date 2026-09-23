@@ -5,6 +5,7 @@ import { EmailModule } from './email/email.module';
 import { AuditModule } from './audit/audit.module';
 import { ReportModule } from './report/report.module';
 import { StorageModule } from './storage/storage.module';
+import { HealthModule } from './health/health.module';
 import { SearchModule } from './search/search.module';
 
 /**
@@ -24,6 +25,7 @@ import { SearchModule } from './search/search.module';
     ReportModule,
     StorageModule,
     SearchModule,
+    HealthModule,
   ],
   exports: [
     AuthModule,
@@ -33,6 +35,7 @@ import { SearchModule } from './search/search.module';
     ReportModule,
     StorageModule,
     SearchModule,
+    HealthModule,
   ],
 })
 export class PlatformModule {}

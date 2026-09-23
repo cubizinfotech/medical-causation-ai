@@ -14,6 +14,10 @@ describe('Configuration', () => {
     expect(config.ai).toBeDefined();
     expect(config.storage).toBeDefined();
     expect(config.logging).toBeDefined();
+    expect(config.email.provider).toBeDefined();
+    expect(config.auth).toBeDefined();
+    expect(config.jobs.stateTtlSeconds).toBeGreaterThan(0);
+    expect(config.research.mode).toBeDefined();
     expect(config.features).toBeDefined();
   });
 

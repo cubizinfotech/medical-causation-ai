@@ -11,6 +11,10 @@ import { storageConfig } from './storage.config';
 import { tokenConfig } from './token.config';
 import { indexingConfig } from './indexing.config';
 import { ragConfig } from './rag.config';
+import { emailConfig } from './email.config';
+import { authConfig } from './auth.config';
+import { jobsConfig } from './jobs.config';
+import { researchConfig } from './research.config';
 
 export const configuration = (): RootConfig => ({
   app: appConfig(),
@@ -22,6 +26,10 @@ export const configuration = (): RootConfig => ({
   token: tokenConfig(),
   storage: storageConfig(),
   logging: loggingConfig(),
+  email: emailConfig(),
+  auth: authConfig(),
+  jobs: jobsConfig(),
+  research: researchConfig(),
   features: featureFlagsConfig(),
   indexing: indexingConfig(),
   rag: ragConfig(),

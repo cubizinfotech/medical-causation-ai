@@ -1,10 +1,11 @@
 export const EWI_INVESTIGATION_QUEUE_NAME = 'ewi-investigation';
 
 export const EWI_JOB_STATUS = {
-  QUEUED: 'queued',
+  PENDING: 'pending',
   RUNNING: 'running',
   COMPLETED: 'completed',
   FAILED: 'failed',
+  CANCELLED: 'cancelled',
 } as const;
 
 export type EwiJobStatus = (typeof EWI_JOB_STATUS)[keyof typeof EWI_JOB_STATUS];

@@ -5,4 +5,5 @@ export const appConfig = (): AppSettings => ({
   port: Number(process.env.PORT ?? process.env.API_PORT ?? 3001),
   nodeEnv: process.env.NODE_ENV ?? 'development',
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+  apiPublicUrl: process.env.API_PUBLIC_URL ?? 'http://localhost:3001',
 });

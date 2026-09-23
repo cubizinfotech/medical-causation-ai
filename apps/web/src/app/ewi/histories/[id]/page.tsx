@@ -54,7 +54,13 @@ export default function EwiHistoryDetailPage() {
             {detail.expertName}
           </h1>
           <p className="mt-1 text-muted-foreground">
-            {detail.specialty} · {detail.status} · {formatReportDate(detail.createdAt)}
+            {detail.specialty} · {detail.status}
+            {detail.stepLabel ? ` · ${detail.stepLabel}` : ""}
+            {detail.status === "pending" || detail.status === "running"
+              ? ` · ${detail.progress}%`
+              : ""}
+            {" · "}
+            {formatReportDate(detail.createdAt)}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

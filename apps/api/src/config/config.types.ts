@@ -4,7 +4,10 @@ export interface AppSettings {
   name: string;
   port: number;
   nodeEnv: string;
+  /** Browser origin allowed by CORS. */
   frontendUrl: string;
+  /** Public API base URL (server-side). Not an API key. */
+  apiPublicUrl: string;
 }
 
 export interface DatabaseSettings {
@@ -53,7 +56,11 @@ export interface ProductKnowledgeBaseSettings {
   ewi: KnowledgeBasePaths;
 }
 
+export type StorageDriver = 'local';
+
 export interface StorageSettings {
+  /** local filesystem today; object-store drivers stay env-gated for later. */
+  driver: StorageDriver;
   /** @deprecated Use knowledgeBase.root (MCA default) */
   knowledgeBasePath: string;
   /** MCA knowledge base paths (default corpus). */
@@ -76,7 +83,44 @@ export interface FeatureFlags {
   enableAiProcessing: boolean;
   enableRag: boolean;
   enableLiteratureSearch: boolean;
+  enableMca: boolean;
   enableEwi: boolean;
+  enableEmail: boolean;
+  enableAuth: boolean;
+}
+
+export interface EmailSettings {
+  /** console logs mail locally; smtp uses SMTP_* when a provider is configured. */
+  provider: 'console' | 'smtp';
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  from: string;
+  secure: boolean;
+}
+
+export interface AuthSettings {
+  enabled: boolean;
+  jwtSecret: string;
+  jwtExpiresIn: string;
+}
+
+export interface JobsSettings {
+  stateTtlSeconds: number;
+  concurrency: number;
+  mcaQueuePrefix: string;
+  ewiQueuePrefix: string;
+}
+
+export interface ResearchProviderSettings {
+  /** mock uses local fixtures; live does not call external research APIs until an adapter is connected. */
+  mode: 'mock' | 'live';
+  timeoutMs: number;
+  retryMaxAttempts: number;
+  retryDelayMs: number;
+  /** Minimum gap between calls to the same provider. 0 disables the local limiter. */
+  minIntervalMs: number;
 }
 
 export interface IndexingConfigSettings {
@@ -111,6 +155,10 @@ export interface RootConfig {
   token: import('./ai-config.types').TokenConfigSettings;
   storage: StorageSettings;
   logging: LoggingSettings;
+  email: EmailSettings;
+  auth: AuthSettings;
+  jobs: JobsSettings;
+  research: ResearchProviderSettings;
   features: FeatureFlags;
   indexing: IndexingConfigSettings;
   rag: RagConfigSettings;

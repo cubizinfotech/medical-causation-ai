@@ -59,9 +59,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   getTtlSeconds(): number {
-    return (
-      Number(process.env.ANALYSIS_JOB_TTL_SECONDS) ||
-      this.configService.get<RedisSettings>('redis')!.ttlSeconds
+    const fromEnv = Number(
+      process.env.JOB_STATE_TTL_SECONDS ?? process.env.ANALYSIS_JOB_TTL_SECONDS,
     );
+    if (Number.isFinite(fromEnv) && fromEnv > 0) {
+      return fromEnv;
+    }
+    return this.configService.get<RedisSettings>('redis')!.ttlSeconds;
   }
 }

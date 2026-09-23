@@ -1,11 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { StorageSettings } from '@config/config.types';
 import { ExpertInvestigationRepository } from '../repositories/expert-investigation.repository';
 import type { CreateExpertInvestigationDto } from '../dto/create-expert-investigation.dto';
 import type { EwiInvestigationResult } from '../jobs/ewi-investigation-job.types';
 
 @Injectable()
 export class InvestigationHistoryService {
-  constructor(private readonly repo: ExpertInvestigationRepository) {}
+  constructor(
+    private readonly repo: ExpertInvestigationRepository,
+    private readonly config: ConfigService,
+  ) {}
 
   create(jobId: string, dto: CreateExpertInvestigationDto) {
     return this.repo.create(jobId, dto);
@@ -28,19 +35,24 @@ export class InvestigationHistoryService {
     await this.repo.delete(id);
   }
 
+  cancel(id: string) {
+    return this.repo.cancel(id);
+  }
+
   async getReport(id: string): Promise<{
     fileName: string;
     mimeType: string;
     buffer: Buffer;
   }> {
     const row = await this.getHistory(id);
-    if (!row.reportData || !row.reportFileName || !row.reportMimeType) {
+    if (!row.reportStorageKey || !row.reportFileName || !row.reportMimeType) {
       throw new NotFoundException(`Report for investigation "${id}" not found`);
     }
+    const buffer = await readFile(row.reportStorageKey);
     return {
       fileName: row.reportFileName,
       mimeType: row.reportMimeType,
-      buffer: Buffer.from(row.reportData, 'base64'),
+      buffer,
     };
   }
 
@@ -51,15 +63,32 @@ export class InvestigationHistoryService {
     return this.repo.updateProgress(jobId, data);
   }
 
-  markCompleted(
+  async markCompleted(
     jobId: string,
     result: EwiInvestigationResult,
-    report: { fileName: string; mimeType: string; dataBase64: string },
+    report: { fileName: string; mimeType: string; buffer: Buffer },
   ) {
-    return this.repo.markCompleted(jobId, result, report);
+    const directory = join(this.reportsDirectory(), 'investigations');
+    await mkdir(directory, { recursive: true });
+    const storageKey = join(directory, `${jobId}.docx`);
+    await writeFile(storageKey, report.buffer);
+    return this.repo.markCompleted(jobId, result, {
+      fileName: report.fileName,
+      mimeType: report.mimeType,
+      storageKey,
+      byteSize: report.buffer.byteLength,
+    });
   }
 
   markFailed(jobId: string, errorMessage: string) {
     return this.repo.markFailed(jobId, errorMessage);
+  }
+
+  private reportsDirectory(): string {
+    const storage = this.config.get<StorageSettings>('storage');
+    return (
+      storage?.products.ewi.reports ??
+      join(process.cwd(), 'knowledge-base', 'ewi', 'reports')
+    );
   }
 }

@@ -155,7 +155,7 @@
 - [ ] Root monorepo workspace configuration (npm/pnpm workspaces)
 - [ ] Prisma schema and initial migrations
 - [ ] Database module (`apps/api/src/database/`)
-- [ ] Health check endpoint (`GET /health`)
+- [x] Health check endpoint (`GET /health`, `GET /health/ready`)
 - [ ] Swagger/OpenAPI setup
 - [ ] Structured logging (Winston or Pino)
 - [ ] Global exception filter and validation pipe

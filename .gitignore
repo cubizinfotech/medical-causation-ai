@@ -54,3 +54,4 @@ next-env.d.ts
 # Uploads and large binaries (optional — uncomment in production)
 # knowledge-base/uploads/*
 # knowledge-base/**/*.pdf
+knowledge-base/ewi/reports/investigations/

@@ -139,37 +139,187 @@ model AnalysisCase {
 }
 
 enum InvestigationStatus {
-  queued
+  pending
   running
   completed
   failed
+  cancelled
 
   @@schema("ewi")
 }
 
-model ExpertInvestigation {
-  id             String              @id @default(uuid()) @db.Uuid
-  jobId          String              @unique @map("job_id")
-  expertName     String              @map("expert_name")
-  specialty      String
-  status         InvestigationStatus @default(queued)
-  step           String?
-  stepLabel      String?             @map("step_label")
-  progress       Int                 @default(0)
-  message        String?
-  errorMessage   String?             @map("error_message")
-  result         Json?
-  reportFileName String?             @map("report_file_name")
-  reportMimeType String?             @map("report_mime_type")
-  /// Base64-encoded .docx bytes for download (v1 local retention).
-  reportData     String?             @map("report_data") @db.Text
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
-  completedAt    DateTime?           @map("completed_at")
+enum VerificationStatus {
+  unverified
+  verified
+  disputed
+
+  @@schema("ewi")
+}
+
+model Expert {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  specialty String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  investigations Investigation[]
+
+  @@unique([name, specialty])
+  @@index([name])
+  @@map("experts")
+  @@schema("ewi")
+}
+
+model Investigation {
+  id            String              @id @default(uuid()) @db.Uuid
+  expertId      String              @map("expert_id") @db.Uuid
+  jobId         String              @unique @map("job_id")
+  status        InvestigationStatus @default(pending)
+  currentStage  String?             @map("current_stage")
+  stageLabel    String?             @map("stage_label")
+  progress      Int                 @default(0)
+  message       String?
+  errorMessage  String?             @map("error_message")
+  notes         String?
+  startedAt     DateTime?           @map("started_at")
+  completedAt   DateTime?           @map("completed_at")
+  cancelledAt   DateTime?           @map("cancelled_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  expert        Expert              @relation(fields: [expertId], references: [id])
+  profile       ExpertProfile?
+  sources       ResearchSource[]
+  findings      ResearchFinding[]
+  discrepancies Discrepancy[]
+  questions     CrossExamQuestion[]
+  report        InvestigationReport?
+  events        InvestigationEvent[]
 
   @@index([status])
+  @@index([expertId])
   @@index([createdAt(sort: Desc)])
-  @@index([expertName])
-  @@map("expert_investigations")
+  @@map("investigations")
+  @@schema("ewi")
+}
+
+model ExpertProfile {
+  id              String   @id @default(uuid()) @db.Uuid
+  investigationId String   @unique @map("investigation_id") @db.Uuid
+  displayName     String   @map("display_name")
+  specialty       String
+  summary         String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@map("expert_profiles")
+  @@schema("ewi")
+}
+
+model ResearchSource {
+  id              String    @id @default(uuid()) @db.Uuid
+  investigationId String    @map("investigation_id") @db.Uuid
+  sourceType      String    @map("source_type")
+  provider        String
+  name            String
+  url             String?
+  publishedAt     DateTime? @map("published_at")
+  restricted      Boolean   @default(false)
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  investigation Investigation     @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  findings      ResearchFinding[]
+
+  @@index([investigationId])
+  @@index([provider])
+  @@map("research_sources")
+  @@schema("ewi")
+}
+
+model ResearchFinding {
+  id                 String             @id @default(uuid()) @db.Uuid
+  investigationId    String             @map("investigation_id") @db.Uuid
+  sourceId           String             @map("source_id") @db.Uuid
+  title              String
+  summary            String?
+  url                String?
+  sourceType         String             @map("source_type")
+  publishedAt        DateTime?          @map("published_at")
+  verificationStatus VerificationStatus @default(unverified) @map("verification_status")
+  notes              String?
+  createdAt          DateTime           @default(now()) @map("created_at")
+
+  investigation Investigation  @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  source        ResearchSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@index([verificationStatus])
+  @@map("research_findings")
+  @@schema("ewi")
+}
+
+model Discrepancy {
+  id              String   @id @default(uuid()) @db.Uuid
+  investigationId String   @map("investigation_id") @db.Uuid
+  severity        String
+  title           String
+  description     String
+  relatedUrls     String[] @default([]) @map("related_urls")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@map("discrepancies")
+  @@schema("ewi")
+}
+
+model CrossExamQuestion {
+  id              String   @id @default(uuid()) @db.Uuid
+  investigationId String   @map("investigation_id") @db.Uuid
+  number          Int
+  category        String
+  question        String
+  evidenceBasis   String   @map("evidence_basis")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId, number])
+  @@map("cross_exam_questions")
+  @@schema("ewi")
+}
+
+model InvestigationReport {
+  id              String   @id @default(uuid()) @db.Uuid
+  investigationId String   @unique @map("investigation_id") @db.Uuid
+  fileName        String   @map("file_name")
+  mimeType        String   @map("mime_type")
+  storageKey      String   @map("storage_key")
+  byteSize        Int      @map("byte_size")
+  generatedAt     DateTime @map("generated_at")
+
+  investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@map("investigation_reports")
+  @@schema("ewi")
+}
+
+model InvestigationEvent {
+  id              String               @id @default(uuid()) @db.Uuid
+  investigationId String               @map("investigation_id") @db.Uuid
+  eventType       String               @map("event_type")
+  status          InvestigationStatus?
+  stage           String?
+  message         String?
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId, createdAt])
+  @@map("investigation_events")
   @@schema("ewi")
 }

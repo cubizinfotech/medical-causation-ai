@@ -11,6 +11,10 @@ export { tokenConfig } from './token.config';
 export { storageConfig } from './storage.config';
 export { loggingConfig } from './logging.config';
 export { featureFlagsConfig } from './feature-flags.config';
+export { emailConfig } from './email.config';
+export { authConfig } from './auth.config';
+export { jobsConfig } from './jobs.config';
+export { researchConfig } from './research.config';
 export type {
   RootConfig,
   AppSettings,

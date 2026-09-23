@@ -12,6 +12,7 @@ import type { KnowledgeDocument } from '../types';
 import type { StorageSettings } from '@config/config.types';
 
 const mockStorage: StorageSettings = {
+  driver: 'local',
   knowledgeBasePath: '/kb',
   knowledgeBase: {
     root: '/kb',

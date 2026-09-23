@@ -121,7 +121,15 @@ export const storageConfig = (): StorageSettings => {
     process.env.KNOWLEDGE_BASE_MAX_FILE_SIZE_MB ?? 500,
   );
 
+  const driver = process.env.STORAGE_DRIVER ?? 'local';
+  if (driver !== 'local') {
+    throw new Error(
+      `Unsupported STORAGE_DRIVER "${driver}". Use "local" until an object-store adapter is added.`,
+    );
+  }
+
   return {
+    driver: 'local',
     knowledgeBasePath: mcaRoot,
     knowledgeBase,
     products,

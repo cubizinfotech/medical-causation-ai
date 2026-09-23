@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  ExpertResearchSourceRegistry,
+  ExpertResearchService,
   type ExpertEvidenceItem,
   type ExpertResearchQuery,
   type ExpertResearchSourceResult,
@@ -22,13 +22,13 @@ export class ExpertResearchOrchestrator {
   private readonly logger = new Logger(ExpertResearchOrchestrator.name);
   private readonly discrepancyAnalyzer = new DiscrepancyAnalyzer();
 
-  constructor(private readonly registry: ExpertResearchSourceRegistry) {}
+  constructor(private readonly research: ExpertResearchService) {}
 
   async investigate(query: ExpertResearchQuery): Promise<ExpertResearchBundle> {
     this.logger.log(
       `Collecting expert research for ${query.expertName} (${query.specialty})`,
     );
-    const sourceResults = await this.registry.searchAll(query);
+    const sourceResults = await this.research.collect(query);
     const evidence = sourceResults.flatMap((r) => r.items);
     const discrepancies = this.discrepancyAnalyzer.analyze(evidence);
 

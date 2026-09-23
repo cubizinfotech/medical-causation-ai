@@ -135,6 +135,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 npm run docker:up        # Start all services
 npm run docker:down      # Stop all services
 npm run docker:infra     # Start postgres, redis, pgadmin only
+# Optional local services (not started by default):
+# docker compose --profile mail up -d mailpit
+# docker compose --profile local-ai up -d ollama
 npm run docker:build     # Build all images
 npm run docker:logs      # Tail service logs
 npm run docker:ps        # List running containers
@@ -405,7 +408,7 @@ npm run typecheck    # TypeScript check
 | **Phase 2b** | Knowledge indexing — chunking, embeddings, pgvector storage | ✅ Complete |
 | **Phase 2c** | RAG retrieval — hybrid search, context builder, citations | ✅ Complete |
 | **Phase 2d** | Medical analysis — RAG + LLM structured causation reasoning | ✅ Complete |
-| **Phase 2e** | Prisma schema, health checks, Swagger, KB/AI API endpoints | Planned |
+| **Phase 2e** | Prisma schema, health checks, Swagger, KB/AI API endpoints | Health checks done; Swagger planned |
 | **Phase 3** | Demonstration UI — landing, case form, analysis workflow | ✅ Complete |
 | **Phase 4** | Case history, report viewer, PDF export | ✅ Complete |
 | **Phase 4b** | Dual-product architecture (MCA + EWI boundaries, EWI vertical slice) | ✅ Complete |

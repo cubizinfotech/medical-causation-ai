@@ -1,4 +1,9 @@
-export type EwiJobStatus = "queued" | "running" | "completed" | "failed";
+export type EwiJobStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
 export type EwiJobStep =
   | "intake"

@@ -87,7 +87,10 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_URL: redis://redis:6379
+      KNOWLEDGE_BASE_PATH: /knowledge-base
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ./knowledge-base:/knowledge-base:ro
     ports:
       - "${API_PORT:-3001}:3001"
     depends_on:
@@ -101,7 +104,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3001').then(()=>process.exit(0)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:3001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 30s
       timeout: 10s
@@ -143,6 +146,31 @@ services:
     networks:
       - mca-network
 
+  # Optional local inbox. Start with: docker compose --profile mail up -d mailpit
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mca-mailpit
+    profiles: ["mail"]
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+    networks:
+      - mca-network
+
+  # Optional free local embeddings/chat. Start with: docker compose --profile local-ai up -d ollama
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mca-ollama
+    profiles: ["local-ai"]
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - mca-network
+
 networks:
   mca-network:
     driver: bridge
@@ -155,3 +183,5 @@ volumes:
     name: mca-redis-data
   pgadmin_data:
     name: mca-pgadmin-data
+  ollama_data:
+    name: mca-ollama-data

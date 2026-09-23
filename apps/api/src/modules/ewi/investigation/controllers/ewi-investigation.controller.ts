@@ -41,6 +41,11 @@ export class EwiInvestigationController {
     return this.historyService.getHistory(id);
   }
 
+  @Post('histories/:id/cancel')
+  cancelHistory(@Param('id') id: string) {
+    return this.historyService.cancel(id);
+  }
+
   @Delete('histories/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteHistory(@Param('id') id: string): Promise<void> {

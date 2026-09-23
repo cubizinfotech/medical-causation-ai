@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
+import { EmailService } from './email.service';
 
-/** Shared email module scaffold. */
-@Module({})
+@Module({
+  providers: [EmailService],
+  exports: [EmailService],
+})
 export class EmailModule {}
