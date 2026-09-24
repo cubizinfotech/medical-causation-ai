@@ -17,6 +17,8 @@ Paid API credentials are not required. Leave research and email on their local d
 | `docker/postgres/init/` | Enables pgvector and creates schemas on first start |
 | `docker/redis/redis.conf` | Redis persistence and memory limit |
 
+Image builds use the repository root as the Docker context. The npm lockfile lives at the root, so the API and web images cannot be built from `apps/api` or `apps/web` alone.
+
 ## Commands
 
 From the repository root:

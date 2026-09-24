@@ -1,10 +1,13 @@
 # Medical Causation AI — Next.js Web (development with hot reload)
+# Build context is the repository root (npm workspaces).
 FROM node:20-alpine
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json ./
-RUN npm install
-COPY . .
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN npm ci
+COPY apps/web apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "dev", "--workspace=web"]

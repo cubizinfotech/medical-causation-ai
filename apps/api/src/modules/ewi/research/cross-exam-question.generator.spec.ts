@@ -30,7 +30,9 @@ describe('CrossExamQuestionGenerator', () => {
 
     expect(questions.length).toBeGreaterThanOrEqual(100);
     expect(questions[0]?.question).toContain('Jane Doe');
-    expect(questions.some((item) => item.question.includes('CA License'))).toBe(true);
+    expect(questions.some((item) => item.question.includes('CA License'))).toBe(
+      true,
+    );
     expect(questions.map((item) => item.question).join(' ')).not.toMatch(
       /board-certified/i,
     );

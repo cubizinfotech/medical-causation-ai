@@ -8,8 +8,6 @@ services:
     image: pgvector/pgvector:pg17
     container_name: mca-postgres
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -32,8 +30,6 @@ services:
     image: redis:7-alpine
     container_name: mca-redis
     restart: unless-stopped
-    env_file:
-      - .env
     command: redis-server /usr/local/etc/redis/redis.conf
     volumes:
       - redis_data:/data
@@ -53,8 +49,6 @@ services:
     image: dpage/pgadmin4:latest
     container_name: mca-pgadmin
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
@@ -72,8 +66,8 @@ services:
 
   api:
     build:
-      context: ./apps/api
-      dockerfile: ../../docker/api/Dockerfile
+      context: .
+      dockerfile: docker/api/Dockerfile
     container_name: mca-api
     restart: unless-stopped
     env_file:
@@ -115,14 +109,12 @@ services:
 
   web:
     build:
-      context: ./apps/web
-      dockerfile: ../../docker/web/Dockerfile
+      context: .
+      dockerfile: docker/web/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     container_name: mca-web
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}

@@ -1,7 +1,8 @@
 /**
  * Category of a prompt template.
  */
-export type PromptCategory = 'system' | 'medical' | 'reports' | 'testing' | 'ewi';
+export type PromptCategory =
+  'system' | 'medical' | 'reports' | 'testing' | 'ewi';
 
 /**
  * Metadata for a registered prompt template.

@@ -1,9 +1,14 @@
 # Medical Causation AI — NestJS API (development with hot reload)
+# Build context is the repository root (npm workspaces).
 FROM node:20-alpine
 WORKDIR /app
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat openssl
 COPY package.json package-lock.json ./
-RUN npm install
-COPY . .
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN npm ci
+COPY apps/api apps/api
+ENV DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build
+RUN npm run prisma:generate --workspace=api
 EXPOSE 3001
-CMD ["npm", "run", "start:dev"]
+CMD ["npm", "run", "start:dev", "--workspace=api"]
