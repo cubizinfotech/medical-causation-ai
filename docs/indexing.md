@@ -1,10 +1,10 @@
 # Indexing Pipeline
 
+**Current status.** Indexing writes chunks and embeddings to PostgreSQL. The RAG engine searches them. See [rag-workflow.md](./rag-workflow.md). BullMQ is used for MCA and EWI product jobs. The indexing job helper described below may still log a stub instead of enqueueing a BullMQ indexing job.
+
 ## Purpose
 
-The **Indexing Pipeline** transforms processed medical documents into semantic vectors stored in PostgreSQL with pgvector. Indexed chunks become searchable by the future RAG retrieval engine.
-
-This phase implements **indexing only** — no RAG retrieval, report generation, or medical analysis.
+The **Indexing Pipeline** transforms processed medical documents into semantic vectors stored in PostgreSQL with pgvector.
 
 ## Module Location
 

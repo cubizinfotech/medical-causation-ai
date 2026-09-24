@@ -3,6 +3,7 @@ import { AiModule } from '@ai/ai.module';
 import { RagModule } from '@modules/rag/rag.module';
 import { RedisModule } from '@redis/redis.module';
 import { DatabaseModule } from '@database/database.module';
+import { AuthModule } from '@platform/auth/auth.module';
 import { MedicalPromptService } from './prompts';
 import { AnalysisPromptBuilder, MedicalQueryBuilder } from './builders';
 import { AnalysisResponseMapper, AnalysisSafetyValidator } from './validators';
@@ -16,7 +17,7 @@ import { MedicalAnalysisProcessor } from './jobs/medical-analysis.processor';
 import { AnalysisCaseRepository } from './repositories/analysis-case.repository';
 
 @Module({
-  imports: [AiModule, RagModule, RedisModule, DatabaseModule],
+  imports: [AiModule, RagModule, RedisModule, DatabaseModule, AuthModule],
   controllers: [MedicalAnalysisController],
   providers: [
     MedicalPromptService,

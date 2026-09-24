@@ -16,7 +16,12 @@ export type {
   PlatformUser,
   IUserService,
 } from './users/user.types';
-export type { EmailMessage, IEmailService } from './email/email.types';
+export type {
+  EmailAttachment,
+  EmailMessage,
+  EmailSendResult,
+  IEmailService,
+} from './email/email.types';
 export type { AuditEvent, IAuditService } from './audit/audit.types';
 export type {
   ReportFormat,

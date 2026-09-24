@@ -1,5 +1,7 @@
 # Development Guide
 
+Local work uses Docker on your machine for PostgreSQL and Redis. A DigitalOcean server is not required. Paid API credentials are not required. See [demo-guide.md](./demo-guide.md) and [docker.md](./docker.md).
+
 ## Prerequisites
 
 - **Node.js** 20.x or later
@@ -133,7 +135,7 @@ docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai \
 
 Redis 7 starts with a custom configuration at `docker/redis/redis.conf`.
 
-**Key prefix conventions** (enforced in application code, future phases):
+**Key prefix conventions** (MCA and EWI use separate BullMQ prefixes):
 
 | Prefix | Purpose |
 |--------|---------|
@@ -248,6 +250,10 @@ Medical reference documents are stored in `knowledge-base/`. See [knowledge-base
 ## Related Documentation
 
 - [Architecture](./architecture.md)
+- [Docker](./docker.md)
 - [Deployment Guide](./deployment.md)
+- [DigitalOcean](./digitalocean.md)
 - [AI Architecture](./ai-architecture.md)
+- [Authentication](./authentication.md)
+- [Troubleshooting](./troubleshooting.md)
 - [RAG Workflow](./rag-workflow.md)

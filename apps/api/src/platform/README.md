@@ -6,7 +6,7 @@ Reusable, product-agnostic contracts and Nest module scaffolds for MCA and EWI.
 |------|------|--------|
 | Auth | `auth/` | Scaffold |
 | Users / roles | `users/` | Scaffold |
-| Email | `email/` | Scaffold |
+| Email | `email/` | Console, SMTP, and transactional adapters |
 | Audit | `audit/` | Scaffold |
 | Report builders | `report/` | Types + scaffold |
 | Object storage | `storage/` | Types + scaffold |

@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useState } from "react";
 import { io, type Socket } from "socket.io-client";
-import { ewiClient, type ApiError } from "@/features/ewi/ewi.service";
+import { ewiClient } from "@/features/ewi/ewi.service";
+import { ewiKeys } from "@/features/ewi/query-keys";
+import { getAccessToken } from "@/lib/config";
 import { ewiSocketUrl } from "@/lib/config/socket";
 import type { ExpertInvestigationFormValues } from "@/features/ewi/schemas/expert-form.schema";
 import type {
@@ -24,128 +27,104 @@ function isTerminal(status: EwiInvestigationJobRecord["status"]): boolean {
 }
 
 export function useEwiInvestigationJob() {
-  const [phase, setPhase] = useState<EwiJobPhase>("idle");
-  const [job, setJob] = useState<EwiInvestigationJobRecord | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const socketRef = useRef<Socket | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeJobIdRef = useRef<string | null>(null);
+  const queryClient = useQueryClient();
+  const [jobId, setJobId] = useState<string | null>(null);
 
-  const cleanup = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    if (socketRef.current) {
-      socketRef.current.removeAllListeners();
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-    activeJobIdRef.current = null;
-  }, []);
+  const jobQuery = useQuery({
+    queryKey: ewiKeys.job(jobId ?? "none"),
+    queryFn: () => ewiClient.getJob(jobId!),
+    enabled: Boolean(jobId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (!status || status === "pending" || status === "running") {
+        return POLL_INTERVAL_MS;
+      }
+      return false;
+    },
+  });
 
-  useEffect(() => cleanup, [cleanup]);
+  const mutation = useMutation({
+    mutationFn: (values: ExpertInvestigationFormValues) =>
+      ewiClient.submitJob(values),
+    onSuccess: (created) => {
+      setJobId(created.jobId);
+    },
+  });
 
-  const applyUpdate = useCallback((update: EwiInvestigationJobRecord) => {
-    setJob(update);
-    if (update.status === "completed") {
-      setPhase("completed");
-      setError(null);
-    } else if (update.status === "failed" || update.status === "cancelled") {
-      setPhase("failed");
-      setError(
-        new Error(
-          update.error ??
-            (update.status === "cancelled"
+  useEffect(() => {
+    if (!jobId) return;
+
+    const socket: Socket = io(ewiSocketUrl(), {
+      transports: ["websocket", "polling"],
+      autoConnect: true,
+      auth: { token: getAccessToken() ?? undefined },
+    });
+
+    socket.on("connect", () => {
+      socket.emit("subscribe", { jobId });
+    });
+
+    socket.on("job:update", (update: EwiInvestigationJobRecord) => {
+      if (update.jobId !== jobId) return;
+      queryClient.setQueryData(ewiKeys.job(jobId), update);
+      if (isTerminal(update.status)) {
+        socket.disconnect();
+      }
+    });
+
+    return () => {
+      socket.removeAllListeners();
+      socket.disconnect();
+    };
+  }, [jobId, queryClient]);
+
+  const job = jobQuery.data ?? null;
+  const status = job?.status;
+
+  let phase: EwiJobPhase = "idle";
+  if (status === "completed") {
+    phase = "completed";
+  } else if (status === "failed" || status === "cancelled") {
+    phase = "failed";
+  } else if (mutation.isPending && !job) {
+    phase = "submitting";
+  } else if ((mutation.isError || jobQuery.isError) && !job) {
+    phase = "failed";
+  } else if (jobId) {
+    phase = "running";
+  }
+
+  const error =
+    status === "failed" || status === "cancelled"
+      ? new Error(
+          job?.error ??
+            (status === "cancelled"
               ? "Investigation cancelled"
               : "Investigation failed"),
-        ),
-      );
-    } else if (update.status === "running" || update.status === "pending") {
-      setPhase("running");
-    }
-  }, []);
-
-  const startTracking = useCallback(
-    (jobId: string) => {
-      cleanup();
-      activeJobIdRef.current = jobId;
-
-      const socket = io(ewiSocketUrl(), {
-        transports: ["websocket", "polling"],
-        autoConnect: true,
-      });
-      socketRef.current = socket;
-
-      socket.on("connect", () => {
-        socket.emit("subscribe", { jobId });
-      });
-
-      socket.on("job:update", (update: EwiInvestigationJobRecord) => {
-        if (update.jobId === jobId) {
-          applyUpdate(update);
-          if (isTerminal(update.status)) {
-            cleanup();
-          }
-        }
-      });
-
-      pollRef.current = setInterval(() => {
-        void ewiClient
-          .getJob(jobId)
-          .then((record) => {
-            if (activeJobIdRef.current !== jobId) return;
-            applyUpdate(record);
-            if (isTerminal(record.status)) {
-              cleanup();
-            }
-          })
-          .catch(() => {
-            /* polling is best-effort when socket is connected */
-          });
-      }, POLL_INTERVAL_MS);
-    },
-    [applyUpdate, cleanup],
-  );
+        )
+      : mutation.error instanceof Error
+        ? mutation.error
+        : jobQuery.error instanceof Error
+          ? jobQuery.error
+          : null;
 
   const submit = useCallback(
     async (
       values: ExpertInvestigationFormValues,
     ): Promise<CreateEwiJobResponse> => {
-      setPhase("submitting");
-      setError(null);
-      try {
-        const created = await ewiClient.submitJob(values);
-        setPhase("running");
-        startTracking(created.jobId);
-        return created;
-      } catch (err) {
-        setPhase("failed");
-        const next =
-          err instanceof Error
-            ? err
-            : new Error("Failed to submit investigation");
-        setError(next);
-        throw err as ApiError;
-      }
+      setJobId(null);
+      return mutation.mutateAsync(values);
     },
-    [startTracking],
+    [mutation],
   );
 
   const resume = useCallback(
-    (jobId: string) => {
-      setPhase("running");
-      setError(null);
-      startTracking(jobId);
-      void ewiClient.getJob(jobId).then(applyUpdate).catch((err: unknown) => {
-        setPhase("failed");
-        setError(
-          err instanceof Error ? err : new Error("Unable to resume job"),
-        );
-      });
+    (nextJobId: string) => {
+      mutation.reset();
+      setJobId(nextJobId);
     },
-    [applyUpdate, startTracking],
+    [mutation],
   );
 
-  return { phase, job, error, submit, resume, cleanup };
+  return { phase, job, error, submit, resume };
 }

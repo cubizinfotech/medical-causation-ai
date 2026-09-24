@@ -164,7 +164,7 @@ Every retrieved chunk includes:
 
 Citation fields: `documentName`, `pageNumber`, `chunkNumber`, `category`, `similarityScore`, `citationText`, `sourceFile`.
 
-These citations will appear in generated attorney reports in a future phase.
+These citations are included in the medical analysis result the attorney reviews.
 
 ## Multi-Source Architecture
 

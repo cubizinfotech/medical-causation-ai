@@ -6,7 +6,7 @@ These defaults apply until explicitly changed. They resolve the open questions f
 |---|--------|----------|
 | 1 | Root UX | `/` is a product chooser (MCA + EWI). MCA landing moves to `/mca`. |
 | 2 | MCA routes | UI under `/mca/*` with redirects from `/case`, `/analysis`, `/report`, `/histories`. |
-| 3 | EWI research sources (v1) | Provider catalog behind `ExpertResearchService`. Mock fixtures locally. Live HTTP is not connected. See `docs/ewi-research-providers.md`. |
+| 3 | EWI research sources (v1) | Provider catalog behind `ExpertResearchService`. Mock fixtures locally. Live HTTP is not connected. See `docs/research-providers.md`. |
 | 4 | Local/dev without paid APIs | Deterministic mock research fixtures when keys are absent. |
 | 5 | Word report | Server-side `.docx` via `docx` library. No mandatory client Word template in v1. |
 | 6 | Question count | Fixed minimum of **100** evidence-based cross-examination questions. |
@@ -14,5 +14,7 @@ These defaults apply until explicitly changed. They resolve the open questions f
 | 8 | PII / ethics | Treat expert as a public professional figure; retain investigation artifacts needed for report history/export; no public scrape of ToS-prohibited sources without approval. |
 | 9 | KB migration | Keep current flat `knowledge-base/{books,articles,...}` as **MCA default root**. Add `knowledge-base/ewi/` for EWI. Optional `KNOWLEDGE_BASE_MCA_PATH` / `KNOWLEDGE_BASE_EWI_PATH`. |
 | 10 | API prefixes | Keep `/medical-analysis` for MCA. Use `/ewi/...` for EWI. |
+| 11 | Authentication | Shared platform users and roles for MCA and EWI. `AUTH_ENABLED=false` leaves product APIs open. When it is true, the API requires a JWT. Demo accounts are local only. |
+| 12 | Email | Shared `EmailService` with console, SMTP, and a transactional seam. Local default logs messages and does not transmit them. Production SMTP credentials come from the environment. EWI request templates are not sent by the investigation job. See `docs/email.md`. |
 
 Related: [architecture.md](./architecture.md), [ewi-architecture.md](./ewi-architecture.md).

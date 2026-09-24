@@ -4,6 +4,8 @@
 
 The **Medical Causation AI** platform uses a provider-agnostic AI architecture that supports multiple LLM and embedding providers. All AI operations flow through a single `AiService` entry point — no module calls providers directly.
 
+**Current status.** Indexing, RAG, and medical analysis call `AiService`. Product screens do not use a standalone frontend AI client. Diagrams below that say “future” for parsing, pgvector, or retrieval describe the original foundation. Those steps are implemented. See [medical-analysis.md](./medical-analysis.md), [indexing.md](./indexing.md), and [rag-workflow.md](./rag-workflow.md).
+
 This document describes the AI foundation implemented in **Phase 1 — AI Foundation**.
 
 ## Design Goals

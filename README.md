@@ -98,7 +98,7 @@ Copy `.env.example` to `.env`. Key variables:
 | `NEXT_PUBLIC_API_URL` | API URL for frontend (`http://localhost:3001`) |
 | `NEXT_PUBLIC_API_TIMEOUT_MS` | Analysis timeout (`180000` recommended) |
 
-See [DEMO_GUIDE.md](./DEMO_GUIDE.md) for full configuration walkthrough.
+See [docs/demo-guide.md](./docs/demo-guide.md) for the local demonstration. Paid API credentials are not required. A DigitalOcean server is not required.
 
 ## Docker Setup
 
@@ -346,7 +346,7 @@ npm run dev:web
 
 - Landing (product chooser): [http://localhost:3000](http://localhost:3000)
 - MCA: [http://localhost:3000/mca](http://localhost:3000/mca) · Case [http://localhost:3000/mca/case](http://localhost:3000/mca/case)
-- EWI: [http://localhost:3000/ewi](http://localhost:3000/ewi) · Intake [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake)
+- EWI: [http://localhost:3000/ewi](http://localhost:3000/ewi) · Intake [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake) · after Start Investigation, progress is at `/ewi/investigation` and the completed summary, findings, sources, questions, and Word download are at `/ewi/histories/:id`
 - Legacy MCA URLs (`/case`, `/analysis`, `/report`, `/histories`) redirect to `/mca/*`
 
 See [DEMO_GUIDE.md](./DEMO_GUIDE.md) for the full client demonstration script (step-by-step).
@@ -379,22 +379,33 @@ npm run typecheck    # TypeScript check
 
 | Document | Description |
 |----------|-------------|
-| [Architecture](./docs/architecture.md) | System design and principles |
+| [Client overview](./docs/index.html) | Non-technical explanation of MCA and EWI |
+| [Client overview (Markdown)](./docs/client-overview.md) | Same overview in Markdown |
+| [Demonstration guide](./docs/demo-guide.md) | Local demo. Paid API keys are not required |
+| [Architecture](./docs/architecture.md) | System design and the documentation map |
 | [MCA + EWI Decisions](./docs/architecture-decisions-mca-ewi.md) | Locked dual-product decisions |
-| [EWI Architecture](./docs/ewi-architecture.md) | Expert Witness Investigation design |
-| [Folder Structure](./docs/folder-structure.md) | Directory layout reference |
-| [Development](./docs/development.md) | Local setup and workflows |
-| [Deployment](./docs/deployment.md) | Production deployment guide |
-| [AI Architecture](./docs/ai-architecture.md) | AI provider and workflow design |
-| [Knowledge Base](./docs/knowledge-base.md) | Document management and discovery |
-| [Document Processing](./docs/document-processing.md) | PDF/DOCX/TXT parsing pipeline |
-| [Indexing](./docs/indexing.md) | Chunking, embeddings, pgvector storage |
-| [RAG Workflow](./docs/rag-workflow.md) | Hybrid retrieval, context builder, citations |
-| [Medical Analysis](./docs/medical-analysis.md) | AI medical causation analysis engine |
-| [Frontend Demo](./docs/frontend-demo.md) | Demonstration UI workflow |
-| [Demo Guide](./DEMO_GUIDE.md) | Step-by-step demonstration setup |
-| [Deployment](./DEPLOYMENT.md) | Production deployment reference |
-| [Client Overview](./docs/index.html) | Client-friendly HTML documentation |
+| [Folder structure](./docs/folder-structure.md) | Directory layout |
+| [Development](./docs/development.md) | Local setup. No DigitalOcean server required |
+| [Docker](./docs/docker.md) | Compose services and what is optional |
+| [AI architecture](./docs/ai-architecture.md) | AI provider design |
+| [EWI architecture](./docs/ewi-architecture.md) | Expert Witness Investigation design |
+| [EWI workflow](./docs/ewi-workflow.md) | Investigation stages |
+| [Research providers](./docs/research-providers.md) | Research adapters. Mock locally |
+| [Email](./docs/email.md) | Email providers. Console locally |
+| [Authentication](./docs/authentication.md) | Login, roles, and demo accounts |
+| [Database](./docs/database.md) | PostgreSQL schemas and migrations |
+| [Deployment](./docs/deployment.md) | Container deployment shape |
+| [DigitalOcean](./docs/digitalocean.md) | Droplet deployment. Not used for local work |
+| [Security](./docs/security.md) | Security practices |
+| [Troubleshooting](./docs/troubleshooting.md) | Common failures |
+| [Knowledge base](./docs/knowledge-base.md) | Document discovery |
+| [Document processing](./docs/document-processing.md) | PDF/DOCX/TXT parsing |
+| [Indexing](./docs/indexing.md) | Chunking and pgvector storage |
+| [RAG workflow](./docs/rag-workflow.md) | Retrieval and citations |
+| [Medical analysis](./docs/medical-analysis.md) | MCA analysis engine |
+| [EWI report](./docs/ewi-report-workflow.md) | Word report |
+| [EWI AI analysis](./docs/ewi-ai-analysis.md) | Grounded analysis rules |
+| [Frontend demo](./docs/frontend-demo.md) | MCA demonstration UI |
 
 ## Roadmap
 
@@ -411,11 +422,13 @@ npm run typecheck    # TypeScript check
 | **Phase 2e** | Prisma schema, health checks, Swagger, KB/AI API endpoints | Health checks done; Swagger planned |
 | **Phase 3** | Demonstration UI — landing, case form, analysis workflow | ✅ Complete |
 | **Phase 4** | Case history, report viewer, PDF export | ✅ Complete |
-| **Phase 4b** | Dual-product architecture (MCA + EWI boundaries, EWI vertical slice) | ✅ Complete |
-| **Phase 5** | Authentication, multi-tenant law firm management | Planned |
-| **Phase 6** | Medical literature search (PubMed, PMC, Semantic Scholar) | Planned |
-| **Phase 7** | Enhanced PDF report templates | Planned |
-| **Phase 8** | Admin panel, audit logs, notifications | Planned |
+| **Phase 4b** | Dual-product architecture (MCA + EWI), EWI workflow, Word report | ✅ Complete |
+| **Phase 4c** | Shared login and roles (off unless `AUTH_ENABLED=true`) | ✅ Foundation complete. Firm tenancy is not built |
+| **Phase 4d** | Email provider adapters (console locally; SMTP when confirmed) | ✅ Complete |
+| **Phase 5** | Law-firm tenancy | Planned |
+| **Phase 6** | Live medical literature and research vendor calls | Catalog only. Live HTTP is not connected |
+| **Phase 7** | MCA PDF file export | On-screen MCA report exists. PDF file export is planned |
+| **Phase 8** | Admin panel, audit UI, notifications | Planned |
 | **Phase 9** | Subscription and billing | Planned |
 
 ## License

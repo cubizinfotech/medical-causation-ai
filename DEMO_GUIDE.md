@@ -1,6 +1,8 @@
 # Medical Causation AI — Demonstration Guide
 
-This guide walks you through installing, configuring, and demonstrating the **Medical Causation AI Platform** for clients and stakeholders.
+The maintained guide is [docs/demo-guide.md](docs/demo-guide.md). Paid API credentials are not required for local development. A DigitalOcean server is not required.
+
+This file keeps the longer click-by-click notes from earlier demos. Where it disagrees with `docs/demo-guide.md`, follow `docs/demo-guide.md`.
 
 ## Project Overview
 
@@ -24,9 +26,7 @@ Medical Causation AI helps personal injury attorneys evaluate whether trauma or 
 | Docker | 24.x or later |
 | Docker Compose | v2 |
 
-You also need API keys for:
-- **Chat/reasoning** — Groq (free tier) or OpenRouter
-- **Embeddings** — OpenRouter (recommended; no Gemini 1,000/day cap)
+You do not need a paid API account to install or to run Expert Witness Investigation. A live Medical Causation Analysis calls one chat provider. A free-tier key is enough for that optional step. Leave research credentials empty.
 
 ## Installation
 
@@ -372,7 +372,8 @@ PostgreSQL case history + full report UI
 
 | Limitation | Notes |
 |------------|-------|
-| No authentication | Open demo — no user accounts |
+| Authentication is off by default | Set `AUTH_ENABLED=true` and a local `JWT_SECRET`, then run `npm run seed:demo-users` |
+| Email is logged, not sent | `EMAIL_PROVIDER=console`. See [docs/email.md](docs/email.md) |
 | File upload is display-only | Uploaded files are not sent to the API |
 | Public literature is simulated | PubMed/NIH references are demo placeholders |
 | One analysis at a time | Queue processes cases sequentially |
@@ -391,10 +392,44 @@ PostgreSQL case history + full report UI
 | Database connection failed | Run `npm run docker:infra`; PSQL Workspace: Server Name `localhost`, Host `postgres`, user `mca_user`, password `mca_password` |
 | pgAdmin *Connection refused* on localhost | **Host** must be `postgres` (Docker service). `localhost` is only for **Server Name** (tab label) |
 
+## Demo accounts
+
+These accounts exist only for local demonstration. Do not use them in production, and do not put the password in environment files.
+
+1. Set `AUTH_ENABLED=true` and a local `JWT_SECRET` in the root `.env` (any long random string is fine for local use).
+2. Restart the API.
+3. Run `npm run seed:demo-users`.
+
+The seed refuses to run when `NODE_ENV=production`. Each account uses the password `password`.
+
+| Role | Email |
+|------|--------|
+| Super Admin | super-admin@example.com |
+| Admin | admin@example.com |
+| Attorney | attorney@example.com |
+| Paralegal | paralegal@example.com |
+| Medical Expert | medical-expert@example.com |
+| Normal User | normal-user@example.com |
+
+Sign in at [http://localhost:3000/login](http://localhost:3000/login). The header shows the role. Super Admin and Admin can list users at `GET /auth/users`. Other roles can use MCA and EWI. With `AUTH_ENABLED=false`, the product pages stay open and the API does not require a token.
+
+## Expert Witness Investigation
+
+EWI is a separate product from the medical causation demo. It does not use the knowledge base. With `RESEARCH_PROVIDER=mock` (the local default), the investigation runs on development fixtures and does not call paid research APIs.
+
+1. Open [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake).
+2. Enter an expert name and medical specialty, or use **Load Example**, then click **Start Investigation**.
+3. The progress screen lists the investigation stages, the current stage, overall percent, and status. A failed run can be retried from that screen. Sources that are unavailable are recorded and the run continues.
+4. When the job completes, the history page shows the investigation summary, findings, discrepancies, sources, and cross-examination questions.
+5. **Download Word Report** saves the `.docx` file.
+
+Histories: [http://localhost:3000/ewi/histories](http://localhost:3000/ewi/histories).
+
 ## Related Documentation
 
 - [README.md](./README.md)
 - [docs/frontend-demo.md](./docs/frontend-demo.md)
+- [docs/ewi-architecture.md](./docs/ewi-architecture.md)
 - [docs/medical-analysis.md](./docs/medical-analysis.md)
 - [docs/indexing.md](./docs/indexing.md)
 - [DEPLOYMENT.md](./DEPLOYMENT.md)

@@ -6,6 +6,7 @@ import {
   medicalAnalysisClient,
   type ApiError,
 } from "@/features/mca/medical-analysis/medical-analysis.service";
+import { getAccessToken } from "@/lib/config";
 import { medicalAnalysisSocketUrl } from "@/lib/config/socket";
 import type { AnalyzeCaseRequest } from "@/features/mca/medical-analysis/types";
 import type {
@@ -87,6 +88,7 @@ export function useMedicalAnalysisJob() {
       const socket = io(medicalAnalysisSocketUrl(), {
         transports: ["websocket", "polling"],
         autoConnect: true,
+        auth: { token: getAccessToken() ?? undefined },
       });
       socketRef.current = socket;
 

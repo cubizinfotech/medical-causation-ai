@@ -6,7 +6,7 @@ EWI is a product module inside the shared monorepo (`apps/api` + `apps/web`). It
 
 An attorney starts an investigation with **Expert Name** and **Medical Specialty**. Later stages research credentials, publications, legal history, and public footprint, detect discrepancies, generate cross-examination questions, and produce a Microsoft Word (`.docx`) report.
 
-Research goes through `ExpertResearchService`. Each source is an independent provider. Live HTTP adapters are not connected. See [ewi-research-providers.md](./ewi-research-providers.md).
+Research goes through `ExpertResearchService`. Each source is an independent provider. Live HTTP adapters are not connected. See [research-providers.md](./research-providers.md).
 
 ## Boundaries
 
@@ -73,7 +73,13 @@ LexisNexis, commercial expert directories, social platforms, and IME advertising
 
 ## Workflow
 
-Starting an investigation with expert name and specialty queues a BullMQ job on `ewi-investigation`. The worker runs every stage in order. The user does not approve each stage. Progress is published on the `/ewi` WebSocket and stored on the investigation, so the investigation page can follow the live update or poll `GET /ewi/jobs/:jobId`.
+Starting an investigation with expert name and specialty queues a BullMQ job on `ewi-investigation`. The user does not approve each stage.
+
+The web app collects the name and specialty at `/ewi/intake`, then follows the job at `/ewi/investigation`. The screen groups the backend stages into the attorney-facing list (identifying the expert through the final report), and shows the current stage, completed stages, a failed stage when the job stops, overall progress, and status. Socket.IO updates the job, and TanStack Query refetches it while it is pending or running. A failed job can be retried from that screen.
+
+When the job completes, `/ewi/histories/:id` shows the summary, findings, discrepancies, source outcomes (including empty and unavailable sources), cross-examination questions, and the Word download. Raw findings stay on the investigation record. The download is `GET /ewi/histories/:id/report`.
+
+Progress is also stored on the investigation, so a refresh can resume the same job.
 
 Stages:
 
@@ -114,10 +120,16 @@ Information status is `verified`, `unverified`, `conflicting`, or `unavailable`.
 
 `RESEARCH_PROVIDER=mock` (the local default) uses fixtures and does not call external APIs. `live` still returns unavailable for every provider until an adapter is implemented. Setting an API key does not send a request.
 
-Provider requirements are listed in [ewi-research-providers.md](./ewi-research-providers.md).
+The stage list is in [ewi-workflow.md](./ewi-workflow.md). Provider requirements are in [research-providers.md](./research-providers.md).
+
+## Correspondence
+
+EWI can prepare request emails without sending them during an investigation. Templates cover a FOIA request, a university record request, a graduation verification, and a general client-approved research request. `EwiCorrespondenceService` renders those templates. The investigation job does not call it.
+
+Delivery uses the shared email service. The local default logs the message. See [email.md](./email.md).
 
 ## Local development
 
 No paid API is required. With `RESEARCH_PROVIDER=mock`, the workflow runs on development fixtures. Providers without a fixture return unavailable and add no records.
 
-See also: [ewi-report-workflow.md](./ewi-report-workflow.md), [architecture-decisions-mca-ewi.md](./architecture-decisions-mca-ewi.md), [architecture.md](./architecture.md).
+See also: [ewi-workflow.md](./ewi-workflow.md), [ewi-report-workflow.md](./ewi-report-workflow.md), [authentication.md](./authentication.md), [architecture-decisions-mca-ewi.md](./architecture-decisions-mca-ewi.md), [architecture.md](./architecture.md).

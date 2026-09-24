@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { roleLabel, useAuth } from "@/features/auth/auth-session";
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
   const isEwi = pathname?.startsWith("/ewi");
   const isMca = pathname?.startsWith("/mca");
+  const role = user?.roles[0];
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/60 bg-background/90 backdrop-blur-md">
@@ -23,6 +26,20 @@ export function SiteHeader() {
               : "Legal Research AI"}
         </Link>
         <nav className="flex items-center gap-3">
+          {role ? (
+            <span className="hidden text-sm text-muted-foreground sm:inline">
+              {roleLabel(role)}
+            </span>
+          ) : null}
+          {user ? (
+            <Button variant="ghost" size="sm" onClick={logout}>
+              Sign out
+            </Button>
+          ) : (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/login">Sign in</Link>
+            </Button>
+          )}
           {isEwi ? (
             <>
               <Button asChild variant="ghost" size="sm">

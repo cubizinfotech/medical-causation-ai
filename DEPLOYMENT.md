@@ -1,8 +1,8 @@
 # Medical Causation AI — Deployment Guide
 
-Production deployment reference for the **Medical Causation AI Platform**.
+The current production guide is [docs/digitalocean.md](docs/digitalocean.md). Container layout and health checks are in [docs/deployment.md](docs/deployment.md). Local setup does not use this server. See [docs/demo-guide.md](docs/demo-guide.md).
 
-> For local demonstration setup, see [DEMO_GUIDE.md](./DEMO_GUIDE.md).
+Automated backups are not part of the approved deployment.
 
 ## Server Requirements
 

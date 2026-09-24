@@ -1,5 +1,21 @@
 # TODO — Medical Causation AI
 
+## Current product status
+
+MCA and EWI run in one monorepo. Local development uses Docker for PostgreSQL and Redis and does not need DigitalOcean or paid API credentials.
+
+- [x] MCA case analysis, history, and on-screen report (`/mca`)
+- [x] EWI investigation workflow, grounded questions, and Word report (`/ewi`)
+- [x] Shared platform auth (off unless `AUTH_ENABLED=true`) and demo user seed
+- [x] Email providers: console locally, SMTP only when delivery is explicitly enabled
+- [x] Research provider catalog with local mock fixtures. Live vendor HTTP is not connected
+- [x] Documentation set under `docs/`, including [digitalocean.md](docs/digitalocean.md) and [index.html](docs/index.html)
+- [ ] Law-firm tenancy
+- [ ] Live research and literature HTTP calls
+- [ ] MCA PDF file export
+- [ ] Production backups (not approved)
+- [ ] CI pipeline and Swagger
+
 ## Phase 1 — Project Foundation ✅
 
 - [x] Clean default Next.js and NestJS starter code
@@ -153,9 +169,9 @@
 
 ## Phase 2 — Database & API Foundation
 
-- [ ] Root monorepo workspace configuration (npm/pnpm workspaces)
-- [ ] Prisma schema and initial migrations
-- [ ] Database module (`apps/api/src/database/`)
+- [x] Root monorepo workspace configuration (npm workspaces)
+- [x] Prisma schema and migrations (`documents`, `vectors`, `cases`, `ewi`, `platform`)
+- [x] Database module (`apps/api/src/database/`)
 - [x] Health check endpoint (`GET /health`, `GET /health/ready`)
 - [ ] Swagger/OpenAPI setup
 - [ ] Structured logging (Winston or Pino)
@@ -165,47 +181,48 @@
 
 ## Phase 3 — Authentication & Multi-Tenancy
 
-- [ ] JWT authentication module
+- [x] JWT authentication module (enforced when `AUTH_ENABLED=true`)
 - [ ] Law firm (tenant) entity and isolation
-- [ ] User roles: Attorney, Paralegal, Medical Expert, Admin
-- [ ] Auth guards and decorators
-- [ ] Frontend auth provider and protected routes
-- [ ] Shadcn/UI component library setup
+- [x] User roles: Super Admin, Admin, Attorney, Paralegal, Medical Expert, User
+- [x] Auth guards and decorators, including sockets
+- [x] Frontend login and route gate when the API reports auth enabled
+- [x] Shared UI component set used by MCA and EWI
 
 ## Phase 4 — Medical Literature Search
 
-- [ ] PubMed API integration
-- [ ] PubMed Central (PMC) integration
+- [x] Provider interfaces and local fixtures for PubMed, Crossref, OpenAlex, and related EWI sources
+- [ ] Live PubMed API calls
+- [ ] Live PubMed Central (PMC) integration
 - [ ] ClinicalTrials.gov integration
-- [ ] Crossref integration
+- [ ] Live Crossref calls
 - [ ] Semantic Scholar integration
-- [ ] Literature search service and caching
+- [ ] Literature search wired into MCA (EWI catalog does not call vendors yet)
 
 ## Phase 5 — RAG & Knowledge Base
 
-- [ ] PDF parsing service
-- [ ] Document chunking (LangChain)
-- [ ] Embedding generation (configurable provider)
-- [ ] pgvector indexing
-- [ ] BullMQ ingestion queue
+- [x] PDF, DOCX, and text parsing
+- [x] Document chunking
+- [x] Embedding generation (configurable provider)
+- [x] pgvector indexing
+- [ ] BullMQ ingestion queue (product jobs use BullMQ; indexing enqueue may still be a stub)
 - [ ] Knowledge base upload UI
-- [ ] Hybrid search (vector + full-text)
+- [x] Hybrid search (vector + full-text)
 
 ## Phase 6 — Medical Causation Engine
 
-- [ ] Case management module
-- [ ] Causation analysis workflow
+- [x] Case history stored for MCA analyses
+- [x] Causation analysis workflow (RAG plus structured model output)
 - [ ] Bradford Hill criteria engine
 - [ ] Probability calculator
-- [ ] AI evidence synthesis chain
-- [ ] Citation management
+- [x] AI evidence synthesis through `AiService`
+- [x] Citation checks on model output
 
 ## Phase 7 — Report Generation
 
-- [ ] Report templates
-- [ ] PDF report generator
-- [ ] Attorney download workflow
-- [ ] Report versioning and audit trail
+- [x] EWI Word template and shared docx renderer
+- [ ] PDF report generator for MCA
+- [x] Attorney download for the EWI Word file
+- [x] EWI report version stored with the investigation
 
 ## Phase 8 — Admin & Operations
 

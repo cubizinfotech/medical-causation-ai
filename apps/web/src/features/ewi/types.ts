@@ -34,6 +34,13 @@ export interface EwiEvidenceItem {
   simulated?: boolean;
 }
 
+export interface EwiSourceStatus {
+  sourceId: string;
+  status: string;
+  message?: string;
+  itemCount: number;
+}
+
 export interface EwiInvestigationResult {
   expertName: string;
   specialty: string;
@@ -41,16 +48,20 @@ export interface EwiInvestigationResult {
   discrepancies: EwiDiscrepancy[];
   questions: EwiCrossExamQuestion[];
   questionCount: number;
-  sourceStatuses: Array<{
-    sourceId: string;
-    status: string;
-    message?: string;
-    itemCount: number;
-  }>;
+  sourceStatuses: EwiSourceStatus[];
   reportFileName: string;
   generatedAt: string;
   disclaimer: string;
   summary?: string;
+  analysis?: {
+    document?: {
+      missing?: Array<{
+        category: string;
+        assessment: string;
+        note: string;
+      }>;
+    };
+  };
 }
 
 export interface EwiInvestigationJobRecord {

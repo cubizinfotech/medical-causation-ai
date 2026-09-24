@@ -1,4 +1,4 @@
-import { apiUrl } from "@/lib/config";
+import { apiFetch } from "@/lib/config";
 import type { AnalyzeCaseRequest } from "./types";
 import type {
   CreateMedicalAnalysisJobResponse,
@@ -40,7 +40,7 @@ export class MedicalAnalysisClient {
   async submitJob(
     request: AnalyzeCaseRequest,
   ): Promise<CreateMedicalAnalysisJobResponse> {
-    const response = await fetch(apiUrl("/medical-analysis/jobs"), {
+    const response = await apiFetch("/medical-analysis/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
@@ -50,22 +50,22 @@ export class MedicalAnalysisClient {
   }
 
   async getJob(jobId: string): Promise<MedicalAnalysisJobRecord> {
-    const response = await fetch(apiUrl(`/medical-analysis/jobs/${jobId}`));
+    const response = await apiFetch(`/medical-analysis/jobs/${jobId}`);
     return parseApiResponse<MedicalAnalysisJobRecord>(response);
   }
 
   async listHistories(): Promise<AnalysisHistoryListItem[]> {
-    const response = await fetch(apiUrl("/medical-analysis/histories"));
+    const response = await apiFetch("/medical-analysis/histories");
     return parseApiResponse<AnalysisHistoryListItem[]>(response);
   }
 
   async getHistory(id: string): Promise<AnalysisHistoryDetail> {
-    const response = await fetch(apiUrl(`/medical-analysis/histories/${id}`));
+    const response = await apiFetch(`/medical-analysis/histories/${id}`);
     return parseApiResponse<AnalysisHistoryDetail>(response);
   }
 
   async deleteHistory(id: string): Promise<void> {
-    const response = await fetch(apiUrl(`/medical-analysis/histories/${id}`), {
+    const response = await apiFetch(`/medical-analysis/histories/${id}`, {
       method: "DELETE",
     });
 

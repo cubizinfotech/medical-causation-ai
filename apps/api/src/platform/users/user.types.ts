@@ -1,9 +1,22 @@
 /**
- * Users and roles (future shared tenancy).
+ * Users and roles for shared tenancy.
  * Product feature access uses permission keys like `mca:analyze` / `ewi:investigate`.
  */
-export type PlatformRole =
-  'attorney' | 'paralegal' | 'medical_expert' | 'admin';
+export const PLATFORM_ROLES = [
+  'super_admin',
+  'admin',
+  'attorney',
+  'paralegal',
+  'medical_expert',
+  'user',
+] as const;
+
+export type PlatformRole = (typeof PLATFORM_ROLES)[number];
+
+export const USER_LIST_ROLES = [
+  'super_admin',
+  'admin',
+] as const satisfies readonly PlatformRole[];
 
 export interface PlatformUser {
   id: string;

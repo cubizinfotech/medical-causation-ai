@@ -22,8 +22,8 @@ export function ProgressTimeline({
   return (
     <ol className={cn("space-y-4", className)}>
       {steps.map((step, index) => {
-        const isComplete = !failed && index < currentStepIndex;
         const isFailedStep = failed && index === currentStepIndex;
+        const isComplete = index < currentStepIndex;
         const isCurrent = !failed && index === currentStepIndex;
         const isPending = index > currentStepIndex;
 

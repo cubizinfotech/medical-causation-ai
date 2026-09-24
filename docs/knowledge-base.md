@@ -1,10 +1,10 @@
 # Knowledge Base
 
+**Current status.** Discovery is implemented. Indexing and RAG are separate modules and are in use for MCA. See [indexing.md](./indexing.md) and [rag-workflow.md](./rag-workflow.md). EWI does not use this corpus for its investigation.
+
 ## Purpose
 
-The **Knowledge Base** is the private document repository for the Medical Causation AI platform. It stores medical books, research articles, case reports, templates, and uploaded documents that will later be indexed for Retrieval-Augmented Generation (RAG).
-
-This phase implements **document management and discovery only**. Text extraction is handled by the [Document Processing](./document-processing.md) module.
+The **Knowledge Base** is the private document repository for Medical Causation Analysis. It stores medical books, research articles, case reports, templates, and uploaded documents that the indexing pipeline can embed.
 
 ## Folder Structure
 

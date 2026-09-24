@@ -89,15 +89,28 @@ export interface FeatureFlags {
   enableAuth: boolean;
 }
 
+export type EmailProviderName = 'console' | 'smtp' | 'transactional';
+
 export interface EmailSettings {
-  /** console logs mail locally; smtp uses SMTP_* when a provider is configured. */
-  provider: 'console' | 'smtp';
+  /**
+   * console logs mail. smtp transmits only when delivery is enabled and the
+   * host is allowed. transactional is reserved until a vendor is confirmed.
+   */
+  provider: EmailProviderName;
+  /** True only when EMAIL_DELIVERY_ENABLED or FEATURE_EMAIL is true. */
+  deliveryEnabled: boolean;
+  from: string;
+  fromName: string;
+  replyTo: string;
+  /** When set, every recipient is replaced with this address. */
+  redirectTo: string;
   host: string;
   port: number;
   user: string;
   password: string;
-  from: string;
   secure: boolean;
+  maxAttempts: number;
+  retryDelayMs: number;
 }
 
 export interface AuthSettings {

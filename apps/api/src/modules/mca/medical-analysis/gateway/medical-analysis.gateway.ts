@@ -5,11 +5,13 @@ import {
   MessageBody,
   ConnectedSocket,
   OnGatewayInit,
+  OnGatewayConnection,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Server, Socket } from 'socket.io';
 import type { AppSettings } from '@config/config.types';
+import { AuthService } from '@platform/auth/auth.service';
 import type { MedicalAnalysisJobRecord } from '../jobs/medical-analysis-job.types';
 
 export type MedicalAnalysisJobUpdate = Pick<
@@ -33,13 +35,23 @@ export type MedicalAnalysisJobUpdate = Pick<
     credentials: true,
   },
 })
-export class MedicalAnalysisGateway implements OnGatewayInit {
+export class MedicalAnalysisGateway
+  implements OnGatewayInit, OnGatewayConnection
+{
   private readonly logger = new Logger(MedicalAnalysisGateway.name);
 
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly auth: AuthService,
+  ) {}
+
+  async handleConnection(client: Socket): Promise<void> {
+    const allowed = await this.auth.allowSocket(client);
+    if (!allowed) client.disconnect(true);
+  }
 
   afterInit(): void {
     const app = this.configService.get<AppSettings>('app');

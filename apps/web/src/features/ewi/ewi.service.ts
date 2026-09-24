@@ -1,4 +1,4 @@
-import { apiUrl } from "@/lib/config";
+import { apiFetch } from "@/lib/config";
 import { ApiError, parseApiResponse } from "@/features/common/api";
 import type { ExpertInvestigationFormValues } from "./schemas/expert-form.schema";
 import type {
@@ -14,7 +14,7 @@ export class EwiClient {
   async submitJob(
     request: ExpertInvestigationFormValues,
   ): Promise<CreateEwiJobResponse> {
-    const response = await fetch(apiUrl("/ewi/jobs"), {
+    const response = await apiFetch("/ewi/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
@@ -23,22 +23,22 @@ export class EwiClient {
   }
 
   async getJob(jobId: string): Promise<EwiInvestigationJobRecord> {
-    const response = await fetch(apiUrl(`/ewi/jobs/${jobId}`));
+    const response = await apiFetch(`/ewi/jobs/${jobId}`);
     return parseApiResponse<EwiInvestigationJobRecord>(response);
   }
 
   async listHistories(): Promise<EwiHistoryListItem[]> {
-    const response = await fetch(apiUrl("/ewi/histories"));
+    const response = await apiFetch("/ewi/histories");
     return parseApiResponse<EwiHistoryListItem[]>(response);
   }
 
   async getHistory(id: string): Promise<EwiHistoryDetail> {
-    const response = await fetch(apiUrl(`/ewi/histories/${id}`));
+    const response = await apiFetch(`/ewi/histories/${id}`);
     return parseApiResponse<EwiHistoryDetail>(response);
   }
 
   async deleteHistory(id: string): Promise<void> {
-    const response = await fetch(apiUrl(`/ewi/histories/${id}`), {
+    const response = await apiFetch(`/ewi/histories/${id}`, {
       method: "DELETE",
     });
     if (!response.ok) {
@@ -46,8 +46,18 @@ export class EwiClient {
     }
   }
 
-  reportDownloadUrl(id: string): string {
-    return apiUrl(`/ewi/histories/${id}/report`);
+  async downloadReport(id: string, fileName: string): Promise<void> {
+    const response = await apiFetch(`/ewi/histories/${id}/report`);
+    if (!response.ok) {
+      await parseApiResponse<never>(response);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 }
 

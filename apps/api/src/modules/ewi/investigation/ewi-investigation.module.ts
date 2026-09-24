@@ -2,6 +2,7 @@ import { Logger, Module, OnModuleInit } from '@nestjs/common';
 import { RedisModule } from '@redis/redis.module';
 import { DatabaseModule } from '@database/database.module';
 import { AiModule } from '@ai/ai.module';
+import { AuthModule } from '@platform/auth/auth.module';
 import { ReportModule } from '@platform/report/report.module';
 import { ExpertResearchIntegrationsModule } from '@integrations/expert-research';
 import { ExpertResearchOrchestrator } from '../research/expert-research.orchestrator';
@@ -20,6 +21,7 @@ import { EwiInvestigationController } from './controllers/ewi-investigation.cont
     RedisModule,
     DatabaseModule,
     AiModule,
+    AuthModule,
     ReportModule,
     ExpertResearchIntegrationsModule,
   ],

@@ -4,20 +4,29 @@ import {
   SubscribeMessage,
   MessageBody,
   ConnectedSocket,
+  OnGatewayConnection,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
+import { AuthService } from '@platform/auth/auth.service';
 import type { EwiInvestigationJobRecord } from '../jobs/ewi-investigation-job.types';
 
 @WebSocketGateway({
   namespace: '/ewi',
   cors: { origin: true, credentials: true },
 })
-export class EwiInvestigationGateway {
+export class EwiInvestigationGateway implements OnGatewayConnection {
   private readonly logger = new Logger(EwiInvestigationGateway.name);
 
   @WebSocketServer()
   server!: Server;
+
+  constructor(private readonly auth: AuthService) {}
+
+  async handleConnection(client: Socket): Promise<void> {
+    const allowed = await this.auth.allowSocket(client);
+    if (!allowed) client.disconnect(true);
+  }
 
   @SubscribeMessage('subscribe')
   handleSubscribe(

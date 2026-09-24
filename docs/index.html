@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Medical Causation AI — Project Overview</title>
+  <title>Legal Research AI — Client Overview</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -34,17 +34,13 @@
       text-align: center;
     }
 
-    header h1 {
-      font-size: 2.25rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
+    header h1 { font-size: 2.25rem; font-weight: 700; letter-spacing: -0.02em; }
 
     header p {
       margin-top: 0.75rem;
       font-size: 1.125rem;
-      opacity: 0.85;
-      max-width: 640px;
+      opacity: 0.9;
+      max-width: 720px;
       margin-left: auto;
       margin-right: auto;
     }
@@ -56,17 +52,13 @@
       color: #fff;
       font-size: 0.75rem;
       font-weight: 600;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
       padding: 0.35rem 0.85rem;
       border-radius: 999px;
     }
 
-    main {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 2.5rem 1.5rem 4rem;
-    }
+    main { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
 
     section {
       background: var(--color-surface);
@@ -78,7 +70,7 @@
     }
 
     section h2 {
-      font-size: 1.25rem;
+      font-size: 1.35rem;
       font-weight: 700;
       color: var(--color-primary);
       margin-bottom: 1rem;
@@ -86,134 +78,21 @@
       border-bottom: 2px solid var(--color-border);
     }
 
-    section p { margin-bottom: 0.75rem; color: var(--color-text); }
+    section h3 { font-size: 1rem; margin: 1.1rem 0 0.35rem; color: var(--color-primary-light); }
+    section p { margin-bottom: 0.75rem; }
     section p:last-child { margin-bottom: 0; }
+    ul { padding-left: 1.25rem; margin-top: 0.35rem; }
+    li { margin-bottom: 0.35rem; }
 
-    ul { padding-left: 1.25rem; margin-top: 0.5rem; }
-    li { margin-bottom: 0.4rem; color: var(--color-text); }
+    table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.95rem; }
+    th { text-align: left; background: var(--color-bg); padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); }
+    td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
 
-    .flow {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-      margin-top: 1rem;
-    }
+    a { color: var(--color-primary-light); }
+    .note { color: var(--color-muted); font-size: 0.95rem; }
 
-    .flow-step {
-      display: flex;
-      align-items: flex-start;
-      gap: 1rem;
-      padding: 0.75rem 0;
-      border-bottom: 1px solid var(--color-border);
-    }
-
-    .flow-step:last-child { border-bottom: none; }
-
-    .flow-num {
-      flex-shrink: 0;
-      width: 2rem;
-      height: 2rem;
-      background: var(--color-primary);
-      color: #fff;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.8rem;
-      font-weight: 700;
-    }
-
-    .flow-text { font-size: 0.95rem; padding-top: 0.2rem; }
-
-    .tech-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-top: 1rem;
-    }
-
-    .tech-card {
-      background: var(--color-bg);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius);
-      padding: 1rem;
-    }
-
-    .tech-card h3 {
-      font-size: 0.8rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--color-muted);
-      margin-bottom: 0.5rem;
-    }
-
-    .tech-card ul { list-style: none; padding: 0; }
-    .tech-card li { font-size: 0.9rem; margin-bottom: 0.25rem; }
-
-    .phase-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-      font-size: 0.9rem;
-    }
-
-    .phase-table th {
-      background: var(--color-primary);
-      color: #fff;
-      padding: 0.6rem 1rem;
-      text-align: left;
-      font-weight: 600;
-    }
-
-    .phase-table td {
-      padding: 0.6rem 1rem;
-      border-bottom: 1px solid var(--color-border);
-      vertical-align: top;
-    }
-
-    .phase-table tr:last-child td { border-bottom: none; }
-
-    .status-done {
-      display: inline-block;
-      background: #dcfce7;
-      color: #166534;
-      font-size: 0.75rem;
-      font-weight: 600;
-      padding: 0.15rem 0.5rem;
-      border-radius: 4px;
-    }
-
-    .status-planned {
-      display: inline-block;
-      background: #f1f5f9;
-      color: var(--color-muted);
-      font-size: 0.75rem;
-      font-weight: 600;
-      padding: 0.15rem 0.5rem;
-      border-radius: 4px;
-    }
-
-    code {
-      background: var(--color-bg);
-      border: 1px solid var(--color-border);
-      border-radius: 4px;
-      padding: 0.1rem 0.4rem;
-      font-family: "SF Mono", "Fira Code", Consolas, monospace;
-      font-size: 0.85em;
-      color: var(--color-primary-light);
-    }
-
-    pre {
-      background: #1e293b;
-      color: #e2e8f0;
-      border-radius: var(--radius);
-      padding: 1.25rem;
-      overflow-x: auto;
-      font-size: 0.85rem;
-      line-height: 1.5;
-      margin-top: 0.75rem;
-    }
+    .doc-list { columns: 2; padding-left: 1.25rem; }
+    @media (max-width: 640px) { .doc-list { columns: 1; } }
 
     footer {
       text-align: center;
@@ -225,230 +104,152 @@
   </style>
 </head>
 <body>
-
   <header>
-    <h1>Medical Causation AI</h1>
-    <p>Enterprise SaaS platform for personal injury attorneys to evaluate medical causation using scientific evidence and AI.</p>
-    <span class="badge">Phase 1 — Project Foundation</span>
+    <h1>Legal Research AI</h1>
+    <p>Two attorney tools in one application: medical causation research, and investigation of an opposing expert. This is legal research assistance. It is not a hospital system and it does not diagnose patients.</p>
+    <span class="badge">Local demonstration ready</span>
   </header>
 
   <main>
-
     <section>
-      <h2>Project Purpose</h2>
-      <p>
-        <strong>Medical Causation AI</strong> helps personal injury attorneys determine whether a trauma
-        or accident medically contributed to a patient's injury or disease. The platform is
-        <em>not</em> a hospital system, EMR, or medical diagnosis tool.
-      </p>
-      <p>Attorneys use the platform to answer questions such as:</p>
+      <h2>Medical Causation Analysis</h2>
+      <h3>Purpose</h3>
+      <p>Help an attorney study whether a trauma or accident medically contributed to an injury or a disease. The application uses the firm’s indexed documents and the AI model that has been configured. The attorney reviews the result. The software does not issue a medical opinion.</p>
+      <h3>User input</h3>
+      <p>The attorney enters the case: what happened, the injury or condition, and the history they choose to include. The form can show an uploaded file. In the current demo, that file is not sent into the analysis.</p>
+      <h3>Workflow</h3>
       <ul>
-        <li>Did a car accident contribute to a patient's stroke?</li>
-        <li>Did trauma worsen a spinal injury?</li>
-        <li>Did a workplace accident increase the risk of a disease?</li>
-        <li>Can scientific evidence support medical causation?</li>
+        <li>The attorney submits the case.</li>
+        <li>The application searches the indexed knowledge base.</li>
+        <li>The AI model writes a structured analysis from the passages it was given.</li>
+        <li>The screen shows progress, then the finished result.</li>
+        <li>If evidence is missing, the result says so. It does not fill the gap with an invented citation.</li>
       </ul>
-      <p>
-        Instead of manually reading hundreds of medical papers, the platform automatically searches
-        trusted medical databases, retrieves relevant scientific evidence, analyzes it using AI,
-        applies accepted causation principles, and generates attorney-ready professional reports with citations.
-      </p>
-    </section>
-
-    <section>
-      <h2>Demo Workflow</h2>
-      <p>The full application workflow (target state):</p>
-      <div class="flow">
-        <div class="flow-step">
-          <div class="flow-num">1</div>
-          <div class="flow-text">Attorney creates a medical causation case with patient and accident details</div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">2</div>
-          <div class="flow-text">System searches PubMed, PMC, ClinicalTrials.gov, and other medical databases</div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">3</div>
-          <div class="flow-text">Private knowledge base (textbooks, articles, reports) is searched via RAG</div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">4</div>
-          <div class="flow-text">AI analyzes retrieved evidence and applies medical causation principles</div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">5</div>
-          <div class="flow-text">Probability engine calculates causation confidence scores</div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">6</div>
-          <div class="flow-text">Professional PDF report is generated with full citations</div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">7</div>
-          <div class="flow-text">Attorney downloads the report for case use</div>
-        </div>
-      </div>
-    </section>
-
-    <section>
-      <h2>Current Demo Scope (Phase 1)</h2>
-      <p>Phase 1 establishes the production-ready architecture foundation. The following is in place:</p>
+      <h3>Output</h3>
+      <p>An on-screen report with the analysis, supporting and opposing evidence, citations, and cross-examination questions. Past cases stay in history.</p>
+      <h3>Major features</h3>
       <ul>
-        <li>Enterprise folder structure for NestJS backend and Next.js frontend</li>
-        <li>TypeScript path aliases for clean imports</li>
-        <li>Knowledge base directory structure for future RAG ingestion</li>
-        <li>Comprehensive project documentation</li>
-        <li>Environment configuration template for multiple AI providers</li>
-        <li>Minimal foundation home page confirming the application identity</li>
-      </ul>
-      <p style="margin-top: 1rem;"><strong>Not yet implemented in Phase 1:</strong></p>
-      <ul>
-        <li>Authentication and user management</li>
-        <li>Database and API endpoints</li>
-        <li>AI provider integration</li>
-        <li>Medical literature search</li>
-        <li>RAG pipeline and knowledge base ingestion</li>
-        <li>Causation analysis and report generation</li>
+        <li>Guided case intake</li>
+        <li>Background processing with visible progress</li>
+        <li>Search over the private knowledge base</li>
+        <li>Citation checks</li>
+        <li>Saved case history</li>
       </ul>
     </section>
 
     <section>
-      <h2>Technology Stack</h2>
-      <div class="tech-grid">
-        <div class="tech-card">
-          <h3>Frontend</h3>
-          <ul>
-            <li>Next.js 16 (App Router)</li>
-            <li>TypeScript</li>
-            <li>Tailwind CSS 4</li>
-            <li>Shadcn/UI (Phase 2+)</li>
-            <li>TanStack Query (Phase 2+)</li>
-          </ul>
-        </div>
-        <div class="tech-card">
-          <h3>Backend</h3>
-          <ul>
-            <li>NestJS 11</li>
-            <li>TypeScript</li>
-            <li>Prisma ORM (Phase 2+)</li>
-            <li>PostgreSQL + pgvector (Phase 2+)</li>
-            <li>Redis + BullMQ (Phase 2+)</li>
-          </ul>
-        </div>
-        <div class="tech-card">
-          <h3>AI</h3>
-          <ul>
-            <li>Vercel AI SDK (Phase 3+)</li>
-            <li>LangChain (Phase 3+)</li>
-            <li>OpenAI</li>
-            <li>Anthropic Claude</li>
-            <li>Google Gemini</li>
-            <li>Azure OpenAI</li>
-            <li>OpenRouter</li>
-          </ul>
-        </div>
-        <div class="tech-card">
-          <h3>Data Sources</h3>
-          <ul>
-            <li>PubMed / PMC</li>
-            <li>ClinicalTrials.gov</li>
-            <li>Crossref</li>
-            <li>Semantic Scholar</li>
-            <li>CDC / WHO</li>
-            <li>Private Knowledge Base</li>
-          </ul>
-        </div>
-      </div>
+      <h2>Expert Witness Investigation</h2>
+      <h3>Purpose</h3>
+      <p>Help an attorney prepare to question an opposing medical expert. The investigation collects what public and approved sources can support, and it keeps a clear record when something cannot be verified.</p>
+      <h3>User input</h3>
+      <p>The expert’s name and medical specialty.</p>
+      <h3>Workflow</h3>
+      <ul>
+        <li>The attorney starts one investigation.</li>
+        <li>The application continues through profile, education, licenses, publications, legal mentions, public pages, and related checks.</li>
+        <li>The attorney does not approve every step.</li>
+        <li>If a source is unavailable, the investigation continues and records that.</li>
+        <li>The application does not invent a degree, a license, or a lawsuit.</li>
+      </ul>
+      <h3>Output</h3>
+      <p>A finished page and a Microsoft Word report. The report includes a summary, findings, discrepancies, source links, limitations, and cross-examination questions based on the collected record. When the evidence is thin, the questions stay limited to what was found.</p>
+      <h3>Major features</h3>
+      <ul>
+        <li>A single start action for the full investigation</li>
+        <li>Live progress</li>
+        <li>Source-by-source status, including “not found” and “unavailable”</li>
+        <li>Discrepancy notes</li>
+        <li>A downloadable Word report</li>
+      </ul>
     </section>
 
     <section>
-      <h2>Local Setup</h2>
-      <p><strong>Prerequisites:</strong> Node.js 20+, npm 10+, Git</p>
-      <pre># Clone and configure
-git clone &lt;repository-url&gt;
-cd medical-causation-ai
-cp .env.example .env
-
-# Backend (port 3001)
-cd apps/api
-npm install
-npm run start:dev
-
-# Frontend (port 3000) — separate terminal
-cd apps/web
-npm install
-npm run dev</pre>
-      <p style="margin-top: 1rem;">
-        Open <code>http://localhost:3000</code> for the frontend.
-        The backend runs at <code>http://localhost:3001</code>.
-      </p>
-    </section>
-
-    <section>
-      <h2>Future Phases</h2>
-      <table class="phase-table">
+      <h2>Demo users and roles</h2>
+      <p>Login can stay off for a local tour. When login is turned on, these demonstration accounts can be created on a developer machine. They are not production users.</p>
+      <table>
         <thead>
-          <tr>
-            <th>Phase</th>
-            <th>Focus</th>
-            <th>Status</th>
-          </tr>
+          <tr><th>Role</th><th>Email</th><th>What they can open</th></tr>
         </thead>
         <tbody>
-          <tr>
-            <td>Phase 1</td>
-            <td>Project foundation, folder structure, documentation</td>
-            <td><span class="status-done">Complete</span></td>
-          </tr>
-          <tr>
-            <td>Phase 2</td>
-            <td>Docker Compose, PostgreSQL + pgvector, Prisma, health checks, Swagger</td>
-            <td><span class="status-planned">Planned</span></td>
-          </tr>
-          <tr>
-            <td>Phase 3</td>
-            <td>Authentication, multi-tenant law firm management, case management</td>
-            <td><span class="status-planned">Planned</span></td>
-          </tr>
-          <tr>
-            <td>Phase 4</td>
-            <td>Medical literature search (PubMed, PMC, Semantic Scholar)</td>
-            <td><span class="status-planned">Planned</span></td>
-          </tr>
-          <tr>
-            <td>Phase 5</td>
-            <td>RAG pipeline, knowledge base ingestion, AI provider integration</td>
-            <td><span class="status-planned">Planned</span></td>
-          </tr>
-          <tr>
-            <td>Phase 6</td>
-            <td>Medical causation engine, probability calculator</td>
-            <td><span class="status-planned">Planned</span></td>
-          </tr>
-          <tr>
-            <td>Phase 7</td>
-            <td>Professional PDF report generator</td>
-            <td><span class="status-planned">Planned</span></td>
-          </tr>
-          <tr>
-            <td>Phase 8</td>
-            <td>Admin panel, audit logs, notifications</td>
-            <td><span class="status-planned">Planned</span></td>
-          </tr>
-          <tr>
-            <td>Phase 9</td>
-            <td>Subscription and billing</td>
-            <td><span class="status-planned">Planned</span></td>
-          </tr>
+          <tr><td>Super Admin</td><td>super-admin@example.com</td><td>Both products and the user list</td></tr>
+          <tr><td>Admin</td><td>admin@example.com</td><td>Both products and the user list</td></tr>
+          <tr><td>Attorney</td><td>attorney@example.com</td><td>Both products</td></tr>
+          <tr><td>Paralegal</td><td>paralegal@example.com</td><td>Both products</td></tr>
+          <tr><td>Medical Expert</td><td>medical-expert@example.com</td><td>Both products</td></tr>
+          <tr><td>User</td><td>normal-user@example.com</td><td>Both products</td></tr>
         </tbody>
       </table>
+      <p class="note" style="margin-top: 0.75rem;">The shared local password is <code>password</code>. Use it only on a local demo. Do not create these accounts on a production server.</p>
     </section>
 
+    <section>
+      <h2>Local development overview</h2>
+      <p>Developers run the database and the job queue in Docker on a laptop. The website is at <code>http://localhost:3000</code>. No DigitalOcean server is required. No paid API account is required.</p>
+      <ul>
+        <li>Expert research uses sample records, not live paid databases.</li>
+        <li>Email is written to the application log. It is not sent to a university or an agency.</li>
+        <li>A live medical-causation analysis is the optional step that needs a chat model. A free tier is enough.</li>
+      </ul>
+      <p>Step-by-step setup is in <a href="./demo-guide.md">the demonstration guide</a>.</p>
+    </section>
+
+    <section>
+      <h2>Production architecture overview</h2>
+      <p>When the client is ready, the same application can run on one DigitalOcean server. The website, the API, the database, and the job queue run in containers. A reverse proxy provides HTTPS for the domain. Research vendors and outbound email stay off until the client confirms them. Backups are a later decision. They are not installed as part of the current plan.</p>
+      <p>The server guide is <a href="./digitalocean.md">digitalocean.md</a>.</p>
+    </section>
+
+    <section>
+      <h2>AI provider</h2>
+      <p>The screens ask one shared AI service for help. That service can be pointed at different model companies without rewriting the products. The model is only allowed to discuss evidence the application already retrieved. Extra facts from the model are discarded.</p>
+    </section>
+
+    <section>
+      <h2>Research provider</h2>
+      <p>Expert research goes through a catalog of sources. A source might later be a free public site, a paid account, or a manual check. In local development none of those outside services are called. If a source has nothing, the report says the information was not found. That is not treated as proof that the expert lacks a credential.</p>
+    </section>
+
+    <section>
+      <h2>Report generation</h2>
+      <p>Medical Causation Analysis shows its report in the browser. Expert Witness Investigation also builds a Microsoft Word document from the collected findings. The two products share the Word builder and keep their own document layouts. Text from a restricted database is not copied into the Word file.</p>
+    </section>
+
+    <section>
+      <h2>Deployment overview</h2>
+      <ul>
+        <li>Today: develop and demonstrate on a local computer.</li>
+        <li>Later: one Ubuntu server on DigitalOcean, Docker, a domain, and HTTPS.</li>
+        <li>Database and Redis stay private to that server.</li>
+        <li>Paid research keys and production email are optional until approved.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Technical documentation</h2>
+      <ul class="doc-list">
+        <li><a href="./client-overview.md">Client overview</a></li>
+        <li><a href="./demo-guide.md">Demonstration guide</a></li>
+        <li><a href="./architecture.md">Architecture</a></li>
+        <li><a href="./folder-structure.md">Folder structure</a></li>
+        <li><a href="./development.md">Development</a></li>
+        <li><a href="./docker.md">Docker</a></li>
+        <li><a href="./ai-architecture.md">AI architecture</a></li>
+        <li><a href="./ewi-architecture.md">EWI architecture</a></li>
+        <li><a href="./ewi-workflow.md">EWI workflow</a></li>
+        <li><a href="./research-providers.md">Research providers</a></li>
+        <li><a href="./email.md">Email</a></li>
+        <li><a href="./authentication.md">Authentication</a></li>
+        <li><a href="./database.md">Database</a></li>
+        <li><a href="./deployment.md">Deployment</a></li>
+        <li><a href="./digitalocean.md">DigitalOcean</a></li>
+        <li><a href="./security.md">Security</a></li>
+        <li><a href="./troubleshooting.md">Troubleshooting</a></li>
+      </ul>
+    </section>
   </main>
 
   <footer>
-    Medical Causation AI &mdash; Proprietary. All rights reserved. &mdash; Phase 1 Foundation
+    Legal Research AI — Medical Causation Analysis and Expert Witness Investigation. Local demonstration material. Not for production credentials.
   </footer>
-
 </body>
 </html>

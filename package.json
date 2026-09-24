@@ -29,6 +29,7 @@
     "reembed:kb:full": "npm run reembed:kb:full --workspace=api",
     "prisma:migrate": "npm run prisma:migrate --workspace=api",
     "prisma:generate": "npm run prisma:generate --workspace=api",
+    "seed:demo-users": "npm run seed:demo-users --workspace=api",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up",

@@ -99,16 +99,18 @@ Container health checks remain on postgres (`pg_isready`), redis (`PING`), api (
 - **Version:** PostgreSQL 17
 - **Extension:** pgvector (enabled automatically on first start)
 - **Additional extensions:** `uuid-ossp`, `pg_trgm`
-- **Schemas:** `app`, `documents`, `vectors` (prepared, no tables yet)
+- **Schemas:** `documents`, `vectors`, `cases`, `ewi`, `platform` (see [database.md](./database.md))
 - **Init scripts:** `docker/postgres/init/`
 
 ### Production Considerations
 
-- Use managed PostgreSQL (AWS RDS, Supabase, Neon, Azure Database)
-- Enable automated backups and point-in-time recovery
-- Enable SSL: set `DATABASE_SSL=true`
+The current deployment target is a DigitalOcean droplet running Docker Compose. See [digitalocean.md](./digitalocean.md). Managed PostgreSQL is optional and is not required for the first deployment.
+
+- Enable SSL when the database is not on the private Docker network: set `DATABASE_SSL=true`
 - Restrict network access to application containers only
-- Use strong passwords stored in a secrets manager
+- Use strong passwords stored outside source control
+
+Automated backups are not part of the approved deployment. See [Optional future improvement: backups](./digitalocean.md#optional-future-improvement-backups).
 
 ## Redis
 
@@ -193,24 +195,27 @@ Responses do not include credentials or connection strings.
 
 BullMQ workers use Redis. Queue prefixes and TTLs come from `JOB_*` / `ANALYSIS_JOB_TTL_SECONDS`. MCA and EWI keep separate queues.
 
+## Email
+
+Production mail uses the shared email service. Set `EMAIL_PROVIDER=smtp`, `EMAIL_DELIVERY_ENABLED=true`, a confirmed `EMAIL_FROM` on the client domain, and `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` in the environment. Do not put those values in source control.
+
+`EMAIL_PROVIDER=console` logs messages and does not send them. A transactional vendor is not connected. Details and the local Mailpit option are in [email.md](./email.md).
+
 ## Security Checklist (Production)
 
-- [ ] All secrets in a secrets manager (AWS Secrets Manager, Vault)
-- [ ] HTTPS enforced on all endpoints
-- [ ] CORS restricted to frontend origin
-- [ ] Database and Redis not exposed to public internet
-- [ ] Rate limiting on API endpoints
-- [ ] Input validation on all API inputs
-- [ ] Audit logging enabled
-- [ ] Database backups configured
-- [ ] No PHI in logs or version control
+See [security.md](./security.md).
 
-## Monitoring (Future)
+- [ ] Secrets live in the server environment, not in git
+- [ ] HTTPS enforced on the public site
+- [ ] CORS restricted to the frontend origin
+- [ ] Database and Redis are not exposed to the public internet
+- [ ] `AUTH_ENABLED=true` and a unique `JWT_SECRET` before the site is public
+- [ ] Demo users are not seeded in production
+- [ ] No patient or case content in logs or version control
 
-- Structured JSON logging
-- Health check endpoints (`/health`, `/ready`)
-- Error tracking (Sentry)
-- BullMQ queue monitoring
+## Monitoring
+
+`GET /health` and `GET /health/ready` are implemented. Container health checks cover Postgres, Redis, the API, and the web app. DigitalOcean’s droplet graphs show CPU, memory, and disk. Error-tracking products and queue dashboards are not connected.
 
 ## Phase 1b Status
 
@@ -233,5 +238,9 @@ Docker infrastructure is **implemented**:
 
 ## Related Documentation
 
+- [DigitalOcean](./digitalocean.md)
+- [Docker](./docker.md)
+- [Database](./database.md)
+- [Security](./security.md)
 - [Architecture](./architecture.md)
 - [Development Guide](./development.md)

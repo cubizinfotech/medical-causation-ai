@@ -1,10 +1,10 @@
 # Document Processing
 
+**Current status.** Parsing is implemented and is used by the indexing pipeline. Chunking and embeddings live in [indexing.md](./indexing.md), not in this module.
+
 ## Purpose
 
-The **Document Processing Pipeline** extracts structured text and metadata from medical documents in the knowledge base. It is the foundation for future chunking, embedding, vector indexing, and RAG workflows.
-
-This phase implements **parsing and normalization only** — no chunking, embeddings, pgvector, RAG, AI analysis, or report generation.
+The **Document Processing Pipeline** extracts structured text and metadata from medical documents in the knowledge base.
 
 ## Supported Formats
 

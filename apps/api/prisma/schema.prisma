@@ -9,7 +9,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["documents", "vectors", "cases", "ewi"]
+  schemas  = ["documents", "vectors", "cases", "ewi", "platform"]
 }
 
 enum IndexStatus {
@@ -340,4 +340,48 @@ model InvestigationEvent {
   @@index([investigationId, createdAt])
   @@map("investigation_events")
   @@schema("ewi")
+}
+
+enum PlatformRoleName {
+  super_admin
+  admin
+  attorney
+  paralegal
+  medical_expert
+  user
+
+  @@schema("platform")
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  displayName  String     @map("display_name")
+  passwordHash String     @map("password_hash")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  roles        UserRole[]
+
+  @@map("users")
+  @@schema("platform")
+}
+
+model Role {
+  id    String           @id @default(uuid()) @db.Uuid
+  name  PlatformRoleName @unique
+  users UserRole[]
+
+  @@map("roles")
+  @@schema("platform")
+}
+
+model UserRole {
+  userId String @map("user_id") @db.Uuid
+  roleId String @map("role_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+  @@schema("platform")
 }

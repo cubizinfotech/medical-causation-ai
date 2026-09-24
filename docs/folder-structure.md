@@ -44,6 +44,7 @@ src/
 │   │   └── medical-analysis/
 │   └── ewi/                  # EWI product only
 │       ├── investigation/
+│       ├── correspondence/
 │       ├── research/
 │       └── report/
 ├── common/                   # Nest guards/filters (future)
@@ -53,7 +54,7 @@ src/
 
 | Directory | Boundary | Purpose |
 |-----------|----------|---------|
-| `platform/` | Common | Auth, users, email, audit, report, storage, search scaffolds; job prefixes |
+| `platform/` | Common | Auth, users, email providers, audit, report, storage, search; job prefixes |
 | `ai/` | Common | LLM/embedding providers, prompt infrastructure |
 | `config/` | Common | Environment configuration |
 | `database/` | Common | Prisma client |
@@ -101,6 +102,7 @@ Legacy paths (`features/demo`, `features/medical-analysis`, `components/demo`, �
 | Route | Product |
 |-------|---------|
 | `/` | Chooser |
+| `/login` | Shared login (used when the API reports auth enabled) |
 | `/mca/*` | MCA |
 | `/ewi/*` | EWI |
 | `/case`, `/analysis`, `/report`, `/histories` | Redirect → `/mca/*` |

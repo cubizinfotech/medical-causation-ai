@@ -1,10 +1,12 @@
 # Medical Analysis Engine
 
+**Current status.** The module lives at `apps/api/src/modules/mca/medical-analysis/`. The demo shows the analysis in the browser. A separate PDF file export is not the current MCA output. EWI Word reports are documented in [ewi-report-workflow.md](./ewi-report-workflow.md).
+
 ## Purpose
 
 The **Medical Analysis Engine** uses the RAG Retrieval Engine together with the configured LLM provider to generate **structured, evidence-based medical causation analysis** for personal injury attorneys.
 
-This phase implements **analysis only** — no PDF report generation, no medical diagnosis, no case management.
+The attorney reviews an on-screen report. The engine does not diagnose a patient and it does not replace case management.
 
 ## Critical Safety Rules
 
