@@ -11,7 +11,7 @@
       },
       {
         "include": "modules/mca/medical-analysis/prompts/**/*.txt",
-        "outDir": "dist"
+        "outDir": "dist/src"
       },
       {
         "include": "modules/ewi/**/*.prompt.txt",
