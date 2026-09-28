@@ -1,3 +1,8 @@
+import {
+  mapEvidenceCategory,
+  type EwiEvidenceCategory,
+} from './evidence-categories';
+
 export const INVESTIGATION_STATUSES = [
   'pending',
   'running',
@@ -42,15 +47,41 @@ export function assertInvestigationTransition(
 /** Providers whose license does not permit storing article/PDF body text. */
 export const RESTRICTED_SOURCE_PROVIDERS = ['lexisnexis', 'westlaw'] as const;
 
+const METADATA_ONLY_NOTE =
+  'Metadata only. Source license does not permit storing content. LexisNexis PDFs are not stored.';
+
+/** Attribute keys that carry document or article body text. Never persisted. */
+const STORED_CONTENT_KEYS = new Set([
+  'fulltext',
+  'body',
+  'content',
+  'pdf',
+  'pdfbytes',
+  'bytes',
+  'opiniontext',
+  'articletext',
+  'file',
+  'filebytes',
+  'documentbody',
+  'html',
+]);
+
+export type StoredEvidenceStatus = 'recorded' | 'metadata_only' | 'unavailable';
+
 export interface FindingDraft {
   title: string;
   summary?: string | null;
   url?: string | null;
   sourceType: string;
+  sourceName?: string | null;
   provider: string;
   publishedAt?: Date | null;
+  retrievedAt?: Date | null;
+  relevantDates?: Date[] | null;
   restricted?: boolean;
   notes?: string | null;
+  attributes?: Record<string, unknown> | null;
+  identityMatch?: 'matched' | 'uncertain';
 }
 
 export interface StorableFinding {
@@ -58,10 +89,17 @@ export interface StorableFinding {
   summary: string | null;
   url: string | null;
   sourceType: string;
+  sourceName: string;
+  category: EwiEvidenceCategory;
   provider: string;
   publishedAt: Date | null;
+  retrievedAt: Date | null;
+  relevantDates: Date[];
+  evidenceStatus: StoredEvidenceStatus;
   restricted: boolean;
   notes: string | null;
+  attributes: Record<string, unknown> | null;
+  identityMatch: 'matched' | 'uncertain';
 }
 
 export function isRestrictedSource(
@@ -77,22 +115,84 @@ export function isRestrictedSource(
 }
 
 /**
- * Restricted sources keep metadata and a permitted URL only.
- * Summary text is dropped so licensed content is not stored.
+ * Restricted sources keep a title, source metadata, and a permitted URL.
+ * Summary text, document bodies, and LexisNexis PDF content are not stored.
  */
 export function toStorableFinding(draft: FindingDraft): StorableFinding {
   const restricted = isRestrictedSource(draft.provider, draft.restricted);
+  const publishedAt = draft.publishedAt ?? null;
+  const relevantDates = (draft.relevantDates ?? []).filter(
+    (value) => value instanceof Date && !Number.isNaN(value.getTime()),
+  );
+  if (
+    publishedAt &&
+    !relevantDates.some((value) => value.getTime() === publishedAt.getTime())
+  ) {
+    relevantDates.push(publishedAt);
+  }
+
+  const identityMatch =
+    draft.identityMatch === 'matched' ? 'matched' : 'uncertain';
+  const uncertainNote =
+    draft.identityMatch === 'uncertain'
+      ? 'Identity was not established. This record was not merged with the expert.'
+      : '';
+
   return {
     title: draft.title.trim(),
     summary: restricted ? null : draft.summary?.trim() || null,
-    url: draft.url?.trim() || null,
+    url: safeSourceUrl(draft.url),
     sourceType: draft.sourceType,
+    sourceName: draft.sourceName?.trim() || draft.provider.trim(),
+    category: mapEvidenceCategory(draft.sourceType),
     provider: draft.provider.trim().toLowerCase(),
-    publishedAt: draft.publishedAt ?? null,
+    publishedAt,
+    retrievedAt: draft.retrievedAt ?? null,
+    relevantDates,
+    evidenceStatus: restricted ? 'metadata_only' : 'recorded',
     restricted,
     notes: restricted
-      ? draft.notes?.trim() ||
-        'Metadata only. Source license does not permit storing content.'
-      : draft.notes?.trim() || null,
+      ? draft.notes?.trim() || METADATA_ONLY_NOTE
+      : [draft.notes?.trim(), identityMatch === 'uncertain' ? uncertainNote : '']
+          .filter(Boolean)
+          .join(' ') || null,
+    attributes: withIdentity(
+      storableAttributes(draft.attributes, restricted),
+      draft.identityMatch,
+      restricted,
+    ),
+    identityMatch,
   };
+}
+
+function withIdentity(
+  attributes: Record<string, unknown> | null,
+  identityMatch: 'matched' | 'uncertain' | undefined,
+  restricted: boolean,
+): Record<string, unknown> | null {
+  if (restricted || !identityMatch) return attributes;
+  return { ...(attributes ?? {}), identityMatch };
+}
+
+function safeSourceUrl(url: string | null | undefined): string | null {
+  const trimmed = url?.trim() || null;
+  if (!trimmed) return null;
+  if (trimmed.toLowerCase().startsWith('data:')) return null;
+  return trimmed;
+}
+
+function storableAttributes(
+  value: Record<string, unknown> | null | undefined,
+  restricted: boolean,
+): Record<string, unknown> | null {
+  if (restricted || !value) return null;
+  const next: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (STORED_CONTENT_KEYS.has(key.toLowerCase())) continue;
+    if (typeof entry === 'string' && entry.toLowerCase().startsWith('data:')) {
+      continue;
+    }
+    next[key] = entry;
+  }
+  return Object.keys(next).length > 0 ? next : null;
 }

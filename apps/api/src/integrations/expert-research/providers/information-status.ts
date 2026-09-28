@@ -29,7 +29,9 @@ function setsDiffer(left: Set<string>, right: Set<string>): boolean {
 export function markConflicts(
   items: ExpertEvidenceItem[],
 ): ExpertEvidenceItem[] {
-  const licenses = items.filter((item) => item.category === 'license');
+  const licenses = items.filter(
+    (item) => item.category === 'license' && item.identityMatch !== 'uncertain',
+  );
   const conflicting = new Set<ExpertEvidenceItem>();
   for (let i = 0; i < licenses.length; i++) {
     for (let j = i + 1; j < licenses.length; j++) {

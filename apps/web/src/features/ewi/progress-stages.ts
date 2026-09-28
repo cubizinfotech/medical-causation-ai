@@ -70,7 +70,7 @@ export const EWI_DISPLAY_STAGES = [
   {
     id: "cross-check",
     label: "Cross-Checking Evidence",
-    stageIds: ["university-rules", "cross-check"],
+    stageIds: ["university-rules", "public-records", "cross-check"],
   },
   {
     id: "findings",

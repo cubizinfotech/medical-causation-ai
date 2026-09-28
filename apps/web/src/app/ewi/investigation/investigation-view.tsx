@@ -98,7 +98,7 @@ export default function EwiInvestigationView() {
         </h1>
         <p className="mt-2 text-muted-foreground">
           {expert
-            ? `${expert.specialty}. Research runs automatically. Unavailable sources are recorded and the investigation continues.`
+            ? `${expert.city} · ${expert.specialty}. Research runs automatically. Unavailable sources are recorded and the investigation continues.`
             : "Researching credentials, publications, and legal history."}
         </p>
       </div>

@@ -22,7 +22,7 @@ Two products share one sign-in, one database, and one place to run background wo
 
 **Purpose.** Help an attorney prepare to question an opposing medical expert.
 
-**User input.** The expert’s name and medical specialty.
+**User input.** The expert’s name, city, and medical specialty.
 
 **Workflow.** The attorney starts one investigation. The application then works through profile, education, licenses, publications, legal mentions, public pages, and related checks. It does not stop for approval at every step. If a source is unavailable, the investigation continues and records that fact. It does not invent a degree, license, or case.
 

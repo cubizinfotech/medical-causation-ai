@@ -11,6 +11,7 @@ describe('EWI report template', () => {
   it('includes every report section and does not invent an empty section', () => {
     const document = buildEwiReportDocument({
       expertName: 'Jane Doe',
+      city: 'Boston',
       specialty: 'Neurology',
       evidence: [],
       discrepancies: [],
@@ -35,6 +36,7 @@ describe('EWI report template', () => {
   it('keeps restricted source text out of the report and links the public URL', () => {
     const document = buildEwiReportDocument({
       expertName: 'Jane Doe',
+      city: 'Boston',
       specialty: 'Neurology',
       evidence: [
         {
@@ -82,6 +84,7 @@ describe('EWI report template', () => {
     });
     const document = buildEwiReportDocument({
       expertName: 'Jane Doe',
+      city: 'Boston',
       specialty: 'Neurology',
       evidence,
       discrepancies: [],

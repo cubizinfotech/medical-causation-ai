@@ -94,7 +94,9 @@ export default function EwiHistoryDetailPage() {
             {detail.expertName}
           </h1>
           <p className="mt-1 text-muted-foreground">
-            {detail.specialty} · <span className="capitalize">{detail.status}</span>
+            {detail.city ? `${detail.city} · ` : ""}
+            {detail.specialty} ·{" "}
+            <span className="capitalize">{detail.status}</span>
             {inProgress ? ` · ${detail.progress}%` : ""} ·{" "}
             {formatReportDate(detail.createdAt)}
           </p>

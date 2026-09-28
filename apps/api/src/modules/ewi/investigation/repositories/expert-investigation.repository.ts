@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { InvestigationStatus, Prisma } from '@prisma/client';
+import { Prisma, type InvestigationStatus } from '@prisma/client';
 import { PrismaService } from '@database/prisma.service';
 import type { CreateExpertInvestigationDto } from '../dto/create-expert-investigation.dto';
 import type { EwiInvestigationResult } from '../jobs/ewi-investigation-job.types';
@@ -41,6 +41,7 @@ export interface InvestigationView {
   jobId: string;
   expertId: string;
   expertName: string;
+  city: string;
   specialty: string;
   status: InvestigationStatus;
   step: string | null;
@@ -64,12 +65,13 @@ export class ExpertInvestigationRepository {
 
   async create(jobId: string, dto: CreateExpertInvestigationDto) {
     const name = dto.expertName.trim();
+    const city = dto.city.trim();
     const specialty = dto.specialty.trim();
 
     const created = await this.prisma.$transaction(async (tx) => {
       const expert = await tx.expert.upsert({
-        where: { name_specialty: { name, specialty } },
-        create: { name, specialty },
+        where: { name_city_specialty: { name, city, specialty } },
+        create: { name, city, specialty },
         update: {},
       });
 
@@ -82,7 +84,7 @@ export class ExpertInvestigationRepository {
           stageLabel: EWI_JOB_STEP_LABELS[EWI_STAGE_IDENTIFY],
           progress: 0,
           profile: {
-            create: { displayName: name, specialty },
+            create: { displayName: name, city, specialty },
           },
           events: {
             create: {
@@ -190,15 +192,22 @@ export class ExpertInvestigationRepository {
     const storedFindings = result.evidence.map((item) => {
       const publishedRaw = item.raw?.publishedAt ?? item.raw?.publicationDate;
       const publishedAt = parsePublishedAt(publishedRaw);
+      const retrievedAt = parsePublishedAt(
+        item.retrievedAt ?? item.source?.retrievedAt,
+      );
       return toStorableFinding({
         title: item.title,
         summary: item.summary,
         url: item.url,
         sourceType: item.category,
+        sourceName: item.source?.name ?? item.sourceId,
         provider: item.sourceId,
         publishedAt,
+        retrievedAt,
         restricted:
           item.access === 'restricted' || item.source?.access === 'restricted',
+        attributes: item.raw ?? null,
+        identityMatch: item.identityMatch,
       });
     });
 
@@ -212,16 +221,27 @@ export class ExpertInvestigationRepository {
 
       for (const [provider, items] of groups) {
         const sourceTypes = new Set(items.map((item) => item.sourceType));
+        const restricted = items.some((item) => item.restricted);
         const source = await tx.researchSource.create({
           data: {
             investigationId: current.id,
             provider,
             sourceType: sourceTypes.size === 1 ? items[0].sourceType : 'mixed',
-            name: provider,
+            name: items[0]?.sourceName || provider,
             url: items.find((item) => item.url)?.url ?? null,
             publishedAt:
               items.find((item) => item.publishedAt)?.publishedAt ?? null,
-            restricted: items.some((item) => item.restricted),
+            retrievedAt:
+              items.find((item) => item.retrievedAt)?.retrievedAt ?? null,
+            evidenceStatus: items.every(
+              (item) => item.evidenceStatus === 'metadata_only',
+            )
+              ? 'metadata_only'
+              : 'recorded',
+            restricted,
+            restrictionNote: restricted
+              ? 'Metadata only. Source license does not permit storing content. LexisNexis PDFs are not stored.'
+              : null,
           },
         });
 
@@ -229,13 +249,23 @@ export class ExpertInvestigationRepository {
           data: items.map((item) => ({
             investigationId: current.id,
             sourceId: source.id,
+            category: item.category,
             title: item.title,
             summary: item.summary,
             url: item.url,
             sourceType: item.sourceType,
+            sourceName: item.sourceName,
             publishedAt: item.publishedAt,
-            verificationStatus: 'unverified',
+            retrievedAt: item.retrievedAt,
+            relevantDates: item.relevantDates,
+            evidenceStatus: item.evidenceStatus,
+            verificationStatus: 'unverified' as const,
+            restricted: item.restricted,
             notes: item.notes,
+            attributes:
+              item.attributes === null
+                ? Prisma.JsonNull
+                : (item.attributes as Prisma.InputJsonValue),
           })),
         });
       }
@@ -293,6 +323,7 @@ export class ExpertInvestigationRepository {
       const profileSummary = storedFindings.find(
         (item) =>
           !item.restricted &&
+          item.identityMatch === 'matched' &&
           item.summary &&
           (item.sourceType === 'profile' || item.sourceType === 'identity'),
       )?.summary;
@@ -425,7 +456,7 @@ export class ExpertInvestigationRepository {
     createdAt: Date;
     updatedAt: Date;
     completedAt: Date | null;
-    expert: { name: string; specialty: string };
+    expert: { name: string; city: string; specialty: string };
     report: { fileName: string; mimeType: string; storageKey: string } | null;
   }): InvestigationView {
     return {
@@ -433,6 +464,7 @@ export class ExpertInvestigationRepository {
       jobId: row.jobId,
       expertId: row.expertId,
       expertName: row.expert.name,
+      city: row.expert.city,
       specialty: row.expert.specialty,
       status: row.status,
       step: row.currentStage,
@@ -465,6 +497,7 @@ export class ExpertInvestigationRepository {
       ...base,
       result: {
         expertName: row.expert.name,
+        city: row.expert.city,
         specialty: row.expert.specialty,
         evidence: row.findings.map((finding) => ({
           sourceId: finding.source.provider,

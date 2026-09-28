@@ -19,6 +19,10 @@ export const EWI_PROGRESS_STEPS = [
   { id: "social", label: "Research public social media" },
   { id: "news", label: "Research news and blogs" },
   { id: "university-rules", label: "Research university/professional rules" },
+  {
+    id: "public-records",
+    label: "Research reviews, payments, affiliations, and public records",
+  },
   { id: "cross-check", label: "Cross-check information" },
   { id: "discrepancies", label: "Identify discrepancies" },
   { id: "summary", label: "Generate investigation summary" },

@@ -20,8 +20,8 @@ export default function EwiIntakePage() {
                 Expert Intake
               </h1>
               <p className="mt-1 text-muted-foreground">
-                Provide the expert name and medical specialty to begin automated
-                research and report generation.
+                Provide the expert name, city, and medical specialty to begin
+                automated research and report generation.
               </p>
             </div>
           </div>

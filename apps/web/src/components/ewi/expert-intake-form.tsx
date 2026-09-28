@@ -24,6 +24,7 @@ export function ExpertIntakeForm() {
     resolver: zodResolver(expertInvestigationSchema),
     defaultValues: {
       expertName: "",
+      city: "",
       specialty: "",
     },
   });
@@ -44,6 +45,14 @@ export function ExpertIntakeForm() {
         />
         {errors.expertName && (
           <p className="text-sm text-destructive">{errors.expertName.message}</p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="city">City</Label>
+        <Input id="city" placeholder="e.g. Boston" {...register("city")} />
+        {errors.city && (
+          <p className="text-sm text-destructive">{errors.city.message}</p>
         )}
       </div>
 
@@ -71,6 +80,7 @@ export function ExpertIntakeForm() {
           variant="outline"
           onClick={() => {
             setValue("expertName", "Jane A. Smith, MD");
+            setValue("city", "Boston");
             setValue("specialty", "Neurology");
           }}
         >

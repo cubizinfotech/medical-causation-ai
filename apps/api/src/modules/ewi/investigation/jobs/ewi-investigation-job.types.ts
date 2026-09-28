@@ -9,11 +9,13 @@ import type {
 
 export interface EwiInvestigationRequest {
   expertName: string;
+  city: string;
   specialty: string;
 }
 
 export interface EwiInvestigationResult {
   expertName: string;
+  city: string;
   specialty: string;
   evidence: ExpertEvidenceItem[];
   discrepancies: ExpertDiscrepancy[];

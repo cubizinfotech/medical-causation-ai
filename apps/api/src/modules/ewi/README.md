@@ -2,8 +2,8 @@
 
 Expert Witness Investigation — isolated from MCA.
 
-- `investigation/` — lifecycle, HTTP/WS/jobs/history, and the automatic stage workflow. Start with expert name and specialty. Schema `ewi` stores sources, findings, discrepancies, questions, the report file, and stage events. Restricted providers store metadata and links only.
-- `research/` — calls `ExpertResearchService`. Does not call vendor APIs directly.
+- `investigation/` — lifecycle, HTTP/WS/jobs/history, and the automatic stage workflow. Start with expert name, city, and specialty. Schema `ewi` stores the identity snapshot, categorized findings, discrepancies, questions, the report file, and stage events. Restricted providers store metadata and links only. LexisNexis PDFs are not stored.
+- `research/` — calls `ExpertResearchService`. The catalog in `integrations/expert-research` is the only provider list. Does not call vendor APIs directly.
 - `report/` — EWI Word template. Rendering goes through `@platform/report`. See `docs/ewi-report-workflow.md`.
 
 Do not import from `modules/mca`. Use `@platform` contracts and `@integrations/expert-research` adapters.

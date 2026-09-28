@@ -14,7 +14,7 @@ Attorneys handling personal injury cases often need to answer causation question
 
 **Medical Causation AI (MCA)** automates the research and analysis process by searching medical databases, retrieving scientific evidence, applying accepted causation principles, and generating attorney-ready reports with citations.
 
-The same monorepo also hosts **Expert Witness Investigation (EWI)** — research an opposing expert (name + specialty) and generate a Microsoft Word report with 100+ evidence-based cross-examination questions. MCA and EWI share infrastructure but keep separate modules, data, and UI routes so they can be split later with minimal changes.
+The same monorepo also hosts **Expert Witness Investigation (EWI)** — research an opposing expert (name, city, and specialty) and generate a Microsoft Word report with 100+ evidence-based cross-examination questions. MCA and EWI share infrastructure but keep separate modules, data, and UI routes so they can be split later with minimal changes.
 
 ## Prerequisites
 

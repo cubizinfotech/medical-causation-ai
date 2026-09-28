@@ -9,6 +9,7 @@ import { buildEwiReportDocument } from './ewi-report.template';
 
 export interface EwiReportInput {
   expertName: string;
+  city: string;
   specialty: string;
   evidence: ExpertEvidenceItem[];
   discrepancies: ExpertDiscrepancy[];

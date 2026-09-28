@@ -9,6 +9,7 @@ import {
   developmentFixtures,
   type DevelopmentFixture,
 } from './development-fixtures';
+import { researchOutcomeFor } from './research-outcome';
 import {
   ProviderRateLimitError,
   ProviderRateLimiter,
@@ -28,8 +29,16 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
     private readonly rateLimiter: ProviderRateLimiter,
     private readonly loadFixtures: (
       query: ExpertResearchQuery,
-    ) => DevelopmentFixture[] | Promise<DevelopmentFixture[]> = (query) =>
-      developmentFixtures(query)[definition.id] ?? [],
+    ) =>
+      | DevelopmentFixture[]
+      | undefined
+      | Promise<DevelopmentFixture[] | undefined> = (query) => {
+      const table = developmentFixtures(query);
+      if (!Object.prototype.hasOwnProperty.call(table, definition.id)) {
+        return undefined;
+      }
+      return table[definition.id] ?? [];
+    },
   ) {}
 
   get id() {
@@ -46,12 +55,30 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
     }
 
     if (this.runtime.mode === 'live') {
+      if (this.definition.accessClass === 'restricted') {
+        return this.emptyResult(
+          'unavailable',
+          retrievedAt,
+          `${this.definition.name} is restricted. No request was sent.${
+            this.definition.id === 'lexisnexis'
+              ? ' LexisNexis PDFs are not stored.'
+              : ''
+          }`,
+          'restricted',
+        );
+      }
+      if (this.definition.requirement !== 'free_api' && this.definition.requirement !== 'manual') {
+        return this.emptyResult(
+          'unavailable',
+          retrievedAt,
+          `${this.definition.name} requires authorized access. No request was sent.`,
+          'unavailable',
+        );
+      }
       return this.emptyResult(
         'unavailable',
         retrievedAt,
-        this.definition.accessClass === 'restricted'
-          ? `${this.definition.name} is restricted. No request was sent.`
-          : `${this.definition.name} live adapter is not connected. ${UNAVAILABLE_MESSAGE}`,
+        `${this.definition.name} live adapter is not connected. ${UNAVAILABLE_MESSAGE}`,
         'unavailable',
       );
     }
@@ -62,7 +89,7 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
         Promise.resolve(this.loadFixtures(validated.value)),
         this.runtime.timeoutMs,
       );
-      if (fixtures.length === 0) {
+      if (fixtures === undefined) {
         return this.emptyResult(
           'unavailable',
           retrievedAt,
@@ -70,13 +97,30 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
           'unavailable',
         );
       }
+      if (fixtures.length === 0) {
+        return this.emptyResult(
+          'no_result',
+          retrievedAt,
+          `${this.definition.name} returned no record. ${UNAVAILABLE_MESSAGE}`,
+          this.definition.accessClass === 'restricted'
+            ? 'restricted'
+            : 'public',
+        );
+      }
+      const items = fixtures.map((fixture) => this.toItem(fixture, retrievedAt));
+      const access = this.definition.accessClass;
       return {
         sourceId: this.definition.id,
         status: 'ok',
-        access: this.definition.accessClass,
+        outcome: researchOutcomeFor({
+          status: 'ok',
+          access,
+          itemCount: items.length,
+        }),
+        access,
         message: 'Development fixtures. Not retrieved from the live source.',
         retrievedAt,
-        items: fixtures.map((fixture) => this.toItem(fixture, retrievedAt)),
+        items,
       };
     } catch (error) {
       if (error instanceof ProviderRateLimitError) {
@@ -128,6 +172,12 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
     return {
       sourceId: this.definition.id,
       status,
+      outcome: researchOutcomeFor({
+        status,
+        access,
+        message,
+        itemCount: 0,
+      }),
       access,
       message,
       retrievedAt,

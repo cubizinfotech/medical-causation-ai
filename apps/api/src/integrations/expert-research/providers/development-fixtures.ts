@@ -18,6 +18,21 @@ export interface DevelopmentFixture {
 const FIXTURE_NOTE =
   'Development fixture only. This is not a retrieved record and does not establish a credential, publication, case, license, or award.';
 
+function matchedIdentity(
+  query: ExpertResearchQuery,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    fixture: true,
+    identity: {
+      name: query.expertName,
+      city: query.city,
+      specialty: query.specialty,
+    },
+    ...extra,
+  };
+}
+
 /**
  * Local fixtures for the investigation workflow.
  * Providers omitted here return unavailable and contribute no items.
@@ -25,17 +40,33 @@ const FIXTURE_NOTE =
 export function developmentFixtures(
   query: ExpertResearchQuery,
 ): Partial<Record<ExpertResearchProviderId, DevelopmentFixture[]>> {
-  const { expertName, specialty } = query;
+  const { expertName, specialty, city } = query;
   return {
     web_search: [
       {
         category: 'profile',
         title: `Development fixture: web search for ${expertName}`,
-        summary: `${FIXTURE_NOTE} Specialty context: ${specialty}.`,
+        summary: `${FIXTURE_NOTE} Specialty context: ${specialty}. City context: ${city}.`,
         url: 'https://example.local/search',
         access: 'public',
         informationStatus: 'unverified',
-        raw: { fixture: true },
+        raw: matchedIdentity(query),
+      },
+      {
+        category: 'profile',
+        title: 'Development fixture: same name in another city',
+        summary: `${FIXTURE_NOTE} Same name only. This is not merged with the queried expert.`,
+        url: 'https://example.local/search/other-city',
+        access: 'public',
+        informationStatus: 'unverified',
+        raw: {
+          fixture: true,
+          identity: {
+            name: expertName,
+            city: 'A different city',
+            specialty,
+          },
+        },
       },
     ],
     pubmed: [
@@ -46,7 +77,7 @@ export function developmentFixtures(
         url: 'https://pubmed.example.local/000000',
         access: 'public',
         informationStatus: 'unverified',
-        raw: { fixture: true },
+        raw: matchedIdentity(query),
       },
     ],
     author_verification: [
@@ -56,7 +87,7 @@ export function developmentFixtures(
         summary: `${FIXTURE_NOTE} Sample counts are included so discrepancy rules can be exercised.`,
         access: 'public',
         informationStatus: 'unverified',
-        raw: { fixture: true, cvCount: 42, indexedCount: 38 },
+        raw: matchedIdentity(query, { cvCount: 42, indexedCount: 38 }),
       },
     ],
     state_license: [
@@ -67,7 +98,7 @@ export function developmentFixtures(
         url: 'https://example.local/boards/ca',
         access: 'public',
         informationStatus: 'unverified',
-        raw: { fixture: true, status: 'active', state: 'CA' },
+        raw: matchedIdentity(query, { status: 'active', state: 'CA' }),
       },
     ],
     expert_website: [
@@ -78,11 +109,10 @@ export function developmentFixtures(
         url: 'https://example.local/experts/about',
         access: 'public',
         informationStatus: 'unverified',
-        raw: {
-          fixture: true,
+        raw: matchedIdentity(query, {
           claimedStates: ['CA', 'NY'],
           claimedBoard: specialty,
-        },
+        }),
       },
     ],
     courtlistener: [
@@ -93,7 +123,7 @@ export function developmentFixtures(
         url: 'https://www.courtlistener.com/example',
         access: 'public',
         informationStatus: 'unverified',
-        raw: { fixture: true },
+        raw: matchedIdentity(query),
       },
     ],
     expert_directory: [
@@ -113,7 +143,7 @@ export function developmentFixtures(
         summary: FIXTURE_NOTE,
         access: 'public',
         informationStatus: 'unverified',
-        raw: { fixture: true },
+        raw: matchedIdentity(query),
       },
     ],
     patents: [
@@ -123,9 +153,10 @@ export function developmentFixtures(
         summary: FIXTURE_NOTE,
         access: 'public',
         informationStatus: 'unverified',
-        raw: { fixture: true },
+        raw: matchedIdentity(query),
       },
     ],
+    trademarks: [],
     lexisnexis: [
       {
         category: 'legal',

@@ -23,7 +23,7 @@ import type {
   EwiProgressUpdate,
 } from '../jobs/ewi-investigation-job.types';
 import {
-  EWI_WORKFLOW_STAGES,
+  createResearchPlan,
   type InvestigationStageDefinition,
 } from './investigation-stages';
 import {
@@ -105,8 +105,17 @@ export function describeResearchStage(
   }
 
   const unavailable = results.filter(
-    (result) => result.status === 'unavailable',
+    (result) =>
+      result.status === 'unavailable' || result.outcome === 'unavailable',
   );
+  const none = results.filter(
+    (result) => result.status === 'no_result' || result.outcome === 'no_result',
+  );
+  if (none.length > 0) {
+    parts.push(
+      `${none.length} source(s) returned no record. That is not evidence of absence.`,
+    );
+  }
   if (unavailable.length > 0) {
     parts.push(
       `${unavailable.length} source(s) unavailable. No missing record was treated as a negative finding.`,
@@ -132,7 +141,7 @@ export async function executeInvestigationWorkflow(
   request: EwiInvestigationRequest,
   dependencies: InvestigationWorkflowDependencies,
 ): Promise<InvestigationWorkflowOutcome> {
-  const stages = dependencies.stages ?? EWI_WORKFLOW_STAGES;
+  const stages = dependencies.stages ?? createResearchPlan(request);
   const logger = dependencies.logger;
   const maxAttempts = dependencies.maxAttempts ?? 3;
   const retryDelayMs = dependencies.retryDelayMs ?? 200;
@@ -173,13 +182,14 @@ export async function executeInvestigationWorkflow(
 
     if (stage.kind === 'identify') {
       const name = request.expertName?.trim() ?? '';
+      const city = request.city?.trim() ?? '';
       const specialty = request.specialty?.trim() ?? '';
-      if (name.length < 2 || specialty.length < 2) {
+      if (name.length < 2 || city.length < 2 || specialty.length < 2) {
         throw new Error(
-          'Expert name and medical specialty are required to start an investigation.',
+          'Expert name, city, and medical specialty are required to start an investigation.',
         );
       }
-      const message = `Identified ${name} (${specialty}). No additional identity facts were added.`;
+      const message = `Identified ${name} in ${city} (${specialty}). No additional identity facts were added.`;
       stageNotes.push({ label: stage.label, message });
       await report(dependencies, stage, progress, message);
       continue;
@@ -260,6 +270,7 @@ export async function executeInvestigationWorkflow(
     analysis.document.summary ||
     buildInvestigationSummary({
       expertName: request.expertName,
+      city: request.city,
       specialty: request.specialty,
       evidence,
       stageNotes,
@@ -290,6 +301,7 @@ export async function executeInvestigationWorkflow(
   const generatedAt = new Date().toISOString();
   const reportArtifact = await dependencies.report.build({
     expertName: request.expertName,
+    city: request.city,
     specialty: request.specialty,
     evidence,
     discrepancies,
@@ -301,6 +313,7 @@ export async function executeInvestigationWorkflow(
 
   const result: EwiInvestigationResult = {
     expertName: request.expertName,
+    city: request.city,
     specialty: request.specialty,
     evidence,
     discrepancies,
@@ -414,6 +427,7 @@ function failedResult(
   return {
     sourceId,
     status: 'error',
+    outcome: 'api_failure',
     access: sourceId === 'lexisnexis' ? 'restricted' : 'unavailable',
     message,
     retrievedAt: new Date().toISOString(),

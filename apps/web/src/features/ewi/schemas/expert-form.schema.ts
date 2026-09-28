@@ -6,6 +6,7 @@ export const expertInvestigationSchema = z.object({
     .trim()
     .min(2, "Expert name is required")
     .max(200),
+  city: z.string().trim().min(2, "City is required").max(200),
   specialty: z
     .string()
     .trim()

@@ -1,6 +1,6 @@
 # EWI workflow
 
-An attorney starts an Expert Witness Investigation with an expert name and a medical specialty. The API creates an investigation and runs the stages below in the background. The attorney does not approve each stage.
+An attorney starts an Expert Witness Investigation with an expert name, a city, and a medical specialty. The API creates an investigation and runs the stages below in the background. The attorney does not approve each stage.
 
 Redis and BullMQ carry the job. The browser shows progress over a WebSocket, and it also polls while the job is pending or running. Status values are pending, running, completed, failed, and cancelled.
 
@@ -29,11 +29,12 @@ Local research uses fixtures. See [research-providers.md](./research-providers.m
 15. Research public social media
 16. Research news and blogs
 17. Research university and professional rules
-18. Cross-check information
-19. Identify discrepancies
-20. Generate investigation summary
-21. Generate cross-examination questions
-22. Generate final report
+18. Research reviews, payments, affiliations, and public records
+19. Cross-check information
+20. Identify discrepancies
+21. Generate investigation summary
+22. Generate cross-examination questions
+23. Generate final report
 
 ## What the attorney sees
 

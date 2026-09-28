@@ -92,6 +92,7 @@ export class EwiInvestigationController {
     try {
       const outcome = await this.investigationService.investigate({
         expertName: body.expertName.trim(),
+        city: body.city.trim(),
         specialty: body.specialty.trim(),
       });
       return outcome.result;

@@ -5,23 +5,58 @@
 
 export type ExpertResearchProviderId =
   | 'web_search'
+  | 'cv_profile'
+  | 'education_verification'
+  | 'university_accreditation'
+  | 'state_license'
+  | 'state_discipline'
+  | 'board_certification'
+  | 'certification_organization'
   | 'pubmed'
   | 'author_verification'
-  | 'orcid'
+  | 'lead_author_verification'
   | 'crossref'
   | 'openalex'
+  | 'orcid'
   | 'grants'
+  | 'grant_results'
   | 'patents'
-  | 'state_license'
-  | 'expert_directory'
+  | 'trademarks'
+  | 'awards'
+  | 'military_claims'
   | 'courtlistener'
+  | 'motions'
+  | 'orders'
+  | 'pleadings'
+  | 'depositions'
+  | 'expert_testimony'
   | 'lexisnexis'
-  | 'youtube'
-  | 'news'
-  | 'social'
-  | 'university'
+  | 'expert_directory'
+  | 'dri'
+  | 'seak'
+  | 'alm_law'
+  | 'jurispro'
+  | 'expertlaw'
+  | 'expertpages'
+  | 'expertwitness_com'
+  | 'other_expert_directories'
   | 'expert_website'
-  | 'ime_advertising';
+  | 'ime_websites'
+  | 'advertising'
+  | 'ime_advertising'
+  | 'youtube'
+  | 'presentations'
+  | 'powerpoints'
+  | 'social'
+  | 'news'
+  | 'blogs'
+  | 'university'
+  | 'google_maps'
+  | 'patient_reviews'
+  | 'open_payments'
+  | 'corporate_affiliations'
+  | 'criminal_records'
+  | 'malpractice_records';
 
 /** How the source may be accessed. Restricted sources are never scraped. */
 export type SourceAccessClass = 'public' | 'restricted' | 'unavailable';
@@ -36,6 +71,25 @@ export type SourceAccessClass = 'public' | 'restricted' | 'unavailable';
 export type InformationStatus =
   'verified' | 'unverified' | 'conflicting' | 'unavailable';
 
+/**
+ * Normalized provider outcome.
+ * no_result means the source was consulted and returned nothing.
+ * That is not evidence that a qualification is absent.
+ */
+export type ResearchOutcome =
+  | 'success'
+  | 'no_result'
+  | 'unavailable'
+  | 'restricted'
+  | 'authentication_required'
+  | 'rate_limited'
+  | 'timeout'
+  | 'api_failure'
+  | 'conflicting';
+
+/** Same name alone is not a match. Uncertain items are not merged. */
+export type IdentityMatch = 'matched' | 'uncertain';
+
 export type ProviderRequirement =
   | 'free_api'
   | 'paid_api'
@@ -48,6 +102,7 @@ export type ResearchRunMode = 'mock' | 'live';
 
 export interface ExpertResearchQuery {
   expertName: string;
+  city: string;
   specialty: string;
 }
 
@@ -69,13 +124,15 @@ export interface ExpertEvidenceItem {
   simulated?: boolean;
   access?: SourceAccessClass;
   informationStatus?: InformationStatus;
+  identityMatch?: IdentityMatch;
   retrievedAt?: string;
   source?: SourceMetadata;
 }
 
 export interface ExpertResearchSourceResult {
   sourceId: ExpertResearchProviderId;
-  status: 'ok' | 'skipped' | 'error' | 'unavailable';
+  status: 'ok' | 'skipped' | 'error' | 'unavailable' | 'no_result';
+  outcome: ResearchOutcome;
   access: SourceAccessClass;
   message?: string;
   retrievedAt: string;

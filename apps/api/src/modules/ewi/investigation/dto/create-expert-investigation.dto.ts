@@ -11,5 +11,11 @@ export class CreateExpertInvestigationDto {
   @IsNotEmpty()
   @MinLength(2)
   @MaxLength(200)
+  city!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(200)
   specialty!: string;
 }

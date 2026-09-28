@@ -50,6 +50,42 @@ describe('investigation lifecycle', () => {
     expect(stored.url).toBe('https://advance.lexis.com/example');
     expect(stored.title).toBe('Smith v. Example');
     expect(stored.notes).toMatch(/does not permit storing content/i);
+    expect(stored.evidenceStatus).toBe('metadata_only');
+    expect(stored.category).toBe('legal_case');
+    expect(stored.attributes).toBeNull();
+  });
+
+  it('drops LexisNexis document bodies and embedded PDF data', () => {
+    const stored = toStorableFinding({
+      title: 'Smith v. Example',
+      summary: 'Opinion text',
+      url: 'data:application/pdf;base64,AAAA',
+      sourceType: 'legal',
+      sourceName: 'LexisNexis',
+      provider: 'lexisnexis',
+      attributes: { fullText: 'opinion body', fixture: true },
+    });
+
+    expect(stored.url).toBeNull();
+    expect(stored.summary).toBeNull();
+    expect(stored.attributes).toBeNull();
+    expect(stored.sourceName).toBe('LexisNexis');
+  });
+
+  it('keeps permitted attributes and drops document body keys', () => {
+    const stored = toStorableFinding({
+      title: 'State license',
+      summary: 'Active license listing.',
+      url: 'https://example.test/license',
+      sourceType: 'license',
+      provider: 'state_license',
+      attributes: { state: 'CA', status: 'active', pdf: 'not-stored' },
+    });
+
+    expect(stored.restricted).toBe(false);
+    expect(stored.evidenceStatus).toBe('recorded');
+    expect(stored.category).toBe('license');
+    expect(stored.attributes).toEqual({ state: 'CA', status: 'active' });
   });
 
   it('keeps a summary when the source is not restricted', () => {

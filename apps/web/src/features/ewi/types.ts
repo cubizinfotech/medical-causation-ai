@@ -43,6 +43,7 @@ export interface EwiSourceStatus {
 
 export interface EwiInvestigationResult {
   expertName: string;
+  city: string;
   specialty: string;
   evidence: EwiEvidenceItem[];
   discrepancies: EwiDiscrepancy[];
@@ -88,6 +89,7 @@ export interface EwiHistoryListItem {
   id: string;
   jobId: string;
   expertName: string;
+  city: string;
   specialty: string;
   status: EwiJobStatus;
   step: string | null;

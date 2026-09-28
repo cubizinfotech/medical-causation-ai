@@ -10,12 +10,14 @@ export interface StageNote {
  */
 export function buildInvestigationSummary(input: {
   expertName: string;
+  city?: string;
   specialty: string;
   evidence: ExpertEvidenceItem[];
   stageNotes: StageNote[];
 }): string {
+  const place = input.city?.trim() ? ` in ${input.city.trim()}` : '';
   const lines = [
-    `Investigation for ${input.expertName} (${input.specialty}).`,
+    `Investigation for ${input.expertName}${place} (${input.specialty}).`,
     'This summary lists collected statements only. It does not confirm a credential, publication, case, license, award, or other qualification.',
   ];
 

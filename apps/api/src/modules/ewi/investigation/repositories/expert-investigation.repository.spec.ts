@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { ExpertInvestigationRepository } from './expert-investigation.repository';
 import type { EwiInvestigationResult } from '../jobs/ewi-investigation-job.types';
 
@@ -7,6 +8,10 @@ describe('ExpertInvestigationRepository persistence rules', () => {
       summary: string | null;
       url: string | null;
       title: string;
+      category: string;
+      evidenceStatus: string;
+      attributes: unknown;
+      restricted: boolean;
     }> = [];
     const sourceRows: Array<{ restricted: boolean; provider: string }> = [];
 
@@ -28,6 +33,10 @@ describe('ExpertInvestigationRepository persistence rules', () => {
               summary: string | null;
               url: string | null;
               title: string;
+              category: string;
+              evidenceStatus: string;
+              attributes: unknown;
+              restricted: boolean;
             }>;
           }) => {
             findingRows.push(...data);
@@ -55,6 +64,7 @@ describe('ExpertInvestigationRepository persistence rules', () => {
     const repo = new ExpertInvestigationRepository(prisma as never);
     const result = {
       expertName: 'Jane Smith',
+      city: 'Boston',
       specialty: 'Orthopedics',
       evidence: [
         {
@@ -86,5 +96,9 @@ describe('ExpertInvestigationRepository persistence rules', () => {
     expect(findingRows[0]?.summary).toBeNull();
     expect(findingRows[0]?.url).toBe('https://advance.lexis.com/example');
     expect(findingRows[0]?.title).toBe('Smith v. Example');
+    expect(findingRows[0]?.category).toBe('legal_case');
+    expect(findingRows[0]?.evidenceStatus).toBe('metadata_only');
+    expect(findingRows[0]?.restricted).toBe(true);
+    expect(findingRows[0]?.attributes).toEqual(Prisma.JsonNull);
   });
 });

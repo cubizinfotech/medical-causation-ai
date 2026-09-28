@@ -2,7 +2,11 @@ import type {
   ExpertResearchProviderId,
   ExpertResearchSourceResult,
 } from '@integrations/expert-research';
-import { EWI_WORKFLOW_STAGES } from './investigation-stages';
+import { researchOutcomeFor } from '@integrations/expert-research';
+import {
+  assertResearchPlanCoversCatalog,
+  EWI_WORKFLOW_STAGES,
+} from './investigation-stages';
 import {
   describeResearchStage,
   executeInvestigationWorkflow,
@@ -10,6 +14,10 @@ import {
 } from './investigation-workflow';
 
 describe('investigation workflow', () => {
+  it('plans every catalog provider once', () => {
+    expect(() => assertResearchPlanCoversCatalog()).not.toThrow();
+  });
+
   const report = {
     build: jest.fn(() =>
       Promise.resolve({
@@ -32,7 +40,7 @@ describe('investigation workflow', () => {
     );
     const calls: ExpertResearchProviderId[][] = [];
     const outcome = await executeInvestigationWorkflow(
-      { expertName: 'Jane Smith', specialty: 'Orthopedics' },
+      { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
       {
         stages,
         report,
@@ -51,7 +59,10 @@ describe('investigation workflow', () => {
       },
     );
 
-    expect(calls).toEqual([['grants']]);
+    expect(calls).toEqual([
+      ['grants', 'grant_results'],
+      ['awards', 'military_claims'],
+    ]);
     expect(outcome.result.evidence).toEqual([]);
     expect(outcome.result.summary).toMatch(/Nothing was inferred/);
     expect(outcome.result.summary).not.toMatch(
@@ -96,7 +107,7 @@ describe('investigation workflow', () => {
     );
     let attempts = 0;
     const outcome = await executeInvestigationWorkflow(
-      { expertName: 'Jane Smith', specialty: 'Orthopedics' },
+      { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
       {
         stages,
         report,
@@ -104,25 +115,28 @@ describe('investigation workflow', () => {
         retryDelayMs: 0,
         sleep: () => Promise.resolve(),
         research: {
-          collectProviders: () => {
+          collectProviders: (_query, providerIds) => {
             attempts += 1;
-            if (attempts === 1) {
-              return Promise.resolve([
-                emptyResult('patents', 'error', 'Provider timed out'),
-              ]);
-            }
-            return Promise.resolve([
-              emptyResult('patents', 'ok', 'fixture', [
-                {
-                  sourceId: 'patents',
-                  category: 'patent',
-                  title: 'Development fixture: patent search',
-                  summary: 'Development fixture only.',
-                  access: 'public',
-                  informationStatus: 'unverified',
-                },
-              ]),
-            ]);
+            return Promise.resolve(
+              providerIds.map((sourceId) => {
+                if (sourceId !== 'patents') {
+                  return emptyResult(sourceId, 'unavailable', 'No fixture');
+                }
+                if (attempts === 1) {
+                  return emptyResult('patents', 'error', 'Provider timed out');
+                }
+                return emptyResult('patents', 'ok', 'fixture', [
+                  {
+                    sourceId: 'patents',
+                    category: 'patent',
+                    title: 'Development fixture: patent search',
+                    summary: 'Development fixture only.',
+                    access: 'public',
+                    informationStatus: 'unverified',
+                  },
+                ]);
+              }),
+            );
           },
         },
       },
@@ -142,7 +156,7 @@ describe('investigation workflow', () => {
   it('fails the investigation when the expert name is missing', async () => {
     await expect(
       executeInvestigationWorkflow(
-        { expertName: ' ', specialty: 'Orthopedics' },
+        { expertName: ' ', city: 'Boston', specialty: 'Orthopedics' },
         {
           stages: EWI_WORKFLOW_STAGES.filter(
             (stage) => stage.id === 'identify-expert',
@@ -151,7 +165,7 @@ describe('investigation workflow', () => {
           research: { collectProviders: () => Promise.resolve([]) },
         },
       ),
-    ).rejects.toThrow(/expert name and medical specialty/i);
+    ).rejects.toThrow(/expert name, city, and medical specialty/i);
   });
 });
 
@@ -164,6 +178,12 @@ function emptyResult(
   return {
     sourceId,
     status,
+    outcome: researchOutcomeFor({
+      status,
+      access: 'public',
+      message,
+      itemCount: items.length,
+    }),
     access: 'public',
     message,
     retrievedAt: '2026-09-23T00:00:00.000Z',

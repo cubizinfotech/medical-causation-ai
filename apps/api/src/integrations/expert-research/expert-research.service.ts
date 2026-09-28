@@ -9,7 +9,9 @@ import type {
 } from './expert-research.types';
 import { CatalogExpertResearchProvider } from './providers/catalog-expert-research.provider';
 import { EXPERT_RESEARCH_CATALOG } from './providers/provider-catalog';
+import { applyIdentityMatch } from './providers/identity-match';
 import { markConflicts } from './providers/information-status';
+import { researchOutcomeFor } from './providers/research-outcome';
 import {
   ProviderRateLimiter,
   validateExpertResearchQuery,
@@ -71,6 +73,7 @@ export class ExpertResearchService {
       return providerIds.map((sourceId) => ({
         sourceId,
         status: 'error' as const,
+        outcome: 'api_failure' as const,
         access: 'unavailable' as const,
         message: validated.message,
         retrievedAt,
@@ -88,6 +91,7 @@ export class ExpertResearchService {
           return {
             sourceId: providerId,
             status: 'unavailable' as const,
+            outcome: 'unavailable' as const,
             access: 'unavailable' as const,
             message:
               'No adapter is registered for this source. Nothing was inferred.',
@@ -103,6 +107,12 @@ export class ExpertResearchService {
           return {
             sourceId: provider.id,
             status: 'error' as const,
+            outcome: researchOutcomeFor({
+              status: 'error',
+              access: provider.definition.accessClass,
+              message,
+              itemCount: 0,
+            }),
             access: provider.definition.accessClass,
             message,
             retrievedAt: new Date().toISOString(),
@@ -112,12 +122,26 @@ export class ExpertResearchService {
       }),
     );
 
-    const marked = markConflicts(results.flatMap((result) => result.items));
+    const identified = results.map((result) => ({
+      ...result,
+      items: applyIdentityMatch(validated.value, result.items),
+    }));
+    const marked = markConflicts(identified.flatMap((result) => result.items));
     let offset = 0;
-    return results.map((result) => {
+    return identified.map((result) => {
       const items = marked.slice(offset, offset + result.items.length);
       offset += result.items.length;
-      return { ...result, items };
+      const conflicting = items.some(
+        (item) => item.informationStatus === 'conflicting',
+      );
+      return {
+        ...result,
+        items,
+        outcome:
+          result.outcome === 'success' && conflicting
+            ? 'conflicting'
+            : result.outcome,
+      };
     });
   }
 }

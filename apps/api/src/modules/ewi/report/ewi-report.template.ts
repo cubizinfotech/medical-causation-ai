@@ -117,6 +117,7 @@ export const EWI_REPORT_SECTIONS: SectionSpec[] = [
 
 export function buildEwiReportDocument(input: {
   expertName: string;
+  city: string;
   specialty: string;
   evidence: ExpertEvidenceItem[];
   discrepancies: ExpertDiscrepancy[];
@@ -159,7 +160,7 @@ export function buildEwiReportDocument(input: {
     templateId: EWI_REPORT_TEMPLATE_ID,
     templateVersion: EWI_REPORT_TEMPLATE_VERSION,
     title: 'Expert Witness Investigation Report',
-    subtitle: `${input.expertName} — ${input.specialty}`,
+    subtitle: `${input.expertName} — ${input.city} — ${input.specialty}`,
     headerLabel: 'Expert Witness Investigation',
     fileName: `ewi-${safeName || 'expert'}-report.docx`,
     generatedAt: input.generatedAt,
@@ -172,6 +173,7 @@ export function buildEwiReportDocument(input: {
 
 function overview(input: {
   expertName: string;
+  city: string;
   specialty: string;
   evidence: ExpertEvidenceItem[];
   questions: CrossExamQuestion[];
@@ -181,7 +183,7 @@ function overview(input: {
     title: '1. Expert Overview',
     blocks: [
       {
-        text: `This report concerns ${input.expertName}, identified for research in ${input.specialty}. It is attorney work product and is not a certification of any credential.`,
+        text: `This report concerns ${input.expertName}, identified for research in ${input.city} in ${input.specialty}. It is attorney work product and is not a certification of any credential.`,
       },
       {
         text: `${input.evidence.length} collected item(s) and ${input.questions.length} cross-examination question(s) are included. Items that are unverified are labeled as such.`,
@@ -225,6 +227,12 @@ function findingBlocks(item: ExpertEvidenceItem): ReportSectionModel['blocks'] {
       style: 'citation',
     },
   ];
+  if (item.identityMatch === 'uncertain') {
+    blocks.push({
+      text: 'Identity was not established. This record was not merged with the expert.',
+      style: 'note',
+    });
+  }
   if (item.access === 'restricted') {
     blocks.push({
       text: 'This source requires authorized access. The underlying content was not stored.',

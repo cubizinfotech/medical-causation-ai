@@ -7,26 +7,43 @@ import {
 } from './provider-runtime';
 
 describe('expert research provider runtime', () => {
-  it('rejects an empty expert name and specialty', () => {
+  it('rejects an empty expert name, city, and specialty', () => {
     expect(
-      validateExpertResearchQuery({ expertName: ' ', specialty: 'Ortho' }).ok,
+      validateExpertResearchQuery({
+        expertName: ' ',
+        city: 'Boston',
+        specialty: 'Ortho',
+      }).ok,
     ).toBe(false);
     expect(
       validateExpertResearchQuery({
         expertName: 'Ada Lovelace',
+        city: ' ',
+        specialty: 'Orthopedics',
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateExpertResearchQuery({
+        expertName: 'Ada Lovelace',
+        city: 'Boston',
         specialty: ' ',
       }).ok,
     ).toBe(false);
   });
 
-  it('accepts a name and specialty', () => {
+  it('accepts a name, city, and specialty', () => {
     const result = validateExpertResearchQuery({
       expertName: ' Ada Lovelace ',
+      city: ' Boston ',
       specialty: ' Orthopedics ',
     });
     expect(result).toEqual({
       ok: true,
-      value: { expertName: 'Ada Lovelace', specialty: 'Orthopedics' },
+      value: {
+        expertName: 'Ada Lovelace',
+        city: 'Boston',
+        specialty: 'Orthopedics',
+      },
     });
   });
 

@@ -4,7 +4,7 @@ EWI is a product module inside the shared monorepo (`apps/api` + `apps/web`). It
 
 ## Purpose
 
-An attorney starts an investigation with **Expert Name** and **Medical Specialty**. Later stages research credentials, publications, legal history, and public footprint, detect discrepancies, generate cross-examination questions, and produce a Microsoft Word (`.docx`) report.
+An attorney starts an investigation with **Expert Name**, **City**, and **Medical Specialty**. Those three values are the primary investigation input. Later stages research credentials, publications, legal history, and public footprint, detect discrepancies, generate cross-examination questions, and produce a Microsoft Word (`.docx`) report.
 
 Research goes through `ExpertResearchService`. Each source is an independent provider. Live HTTP adapters are not connected. See [research-providers.md](./research-providers.md).
 
@@ -26,11 +26,11 @@ MCA lives under `apps/api/src/modules/mca/` and `/mca/*`. Shared AI, document pr
 
 ## Investigation lifecycle
 
-`POST /ewi/jobs` with `{ expertName, specialty }` creates:
+`POST /ewi/jobs` with `{ expertName, city, specialty }` creates:
 
-1. An `experts` row (reused when the same name and specialty already exist)
+1. An `experts` row (reused when the same name, city, and specialty already exist)
 2. An `investigations` row in status **pending**, stage `intake`
-3. An `expert_profiles` snapshot (display name and specialty)
+3. An `expert_profiles` snapshot (display name, city, and specialty)
 4. An `investigation_events` audit row (`created`)
 
 Statuses:
@@ -55,27 +55,32 @@ The history detail page shows the stage label and percent while the investigatio
 
 | Table | Stores |
 |-------|--------|
-| `experts` | Name and specialty |
+| `experts` | Name, city, and specialty. Reused for the same three values |
 | `investigations` | Status, current stage, progress, notes, timestamps |
-| `expert_profiles` | Identity snapshot for that investigation |
-| `research_sources` | Provider, source type, URL, publication date, restricted flag |
-| `research_findings` | Evidence item: title, optional summary, URL, verification status, notes |
-| `discrepancies` | Severity, title, description, related URLs |
+| `expert_profiles` | Identity snapshot for that investigation, including city |
+| `research_sources` | Provider, source type, source name, URL, publication date, retrieval date, evidence status, restricted flag, restriction note |
+| `research_findings` | Collected item: category, title, optional summary, source URL, source type, source name, retrieval date, relevant dates, evidence status, verification status, notes, permitted attributes |
+| `discrepancies` | Inconsistencies: severity, description, related URLs, and the same source metadata fields |
 | `cross_exam_questions` | Numbered questions and evidence basis |
 | `investigation_reports` | Generated `.docx` file name, MIME type, local storage key, byte size, template id, template version |
+| `investigation_analyses` | Model or deterministic analysis JSON, stored apart from source findings |
 | `investigation_events` | Audit trail: event type, status, stage, message, timestamp |
 
-Indexes cover status, expert, created time, provider, verification status, and question order.
+Collected categories on `research_findings.category` are identity/profile, location, specialty, CVs, education, universities, licenses, state licensing records, board certifications, certification organizations, memberships, publications, grants, patents, awards, military claims, legal cases, orders (`court_order`), motions, depositions, testimony, directories, websites, IME information, advertising, videos, presentations, PowerPoints, social media, news, university rules, income/bias, patient reviews, office/address, corporate affiliations, criminal records, malpractice, FOIA requests, university information requests, graduation requests, and a general research finding. Inconsistencies, questions, and the Word report stay on the tables that already held them.
+
+Indexes cover status, expert name, city, specialty, created time, provider, category, evidence status, verification status, and question order.
+
+`attributes` holds category-specific fields only when the source license allows storage. Restricted items store a title, source name, source type, URL, retrieval date, and a restriction note. Summary text and document bodies are cleared. LexisNexis PDFs are not stored.
 
 ## Restricted sources
 
-LexisNexis, commercial expert directories, social platforms, and IME advertising sites are restricted. Findings from those providers store title, URL, source type, publication date, and verification status. Summary text is not stored. The generated Word report is our document and is stored as a local file, not as third-party article or PDF bytes. See [ewi-report-workflow.md](./ewi-report-workflow.md).
+LexisNexis, commercial expert directories, social platforms, and IME advertising sites are restricted. Findings from those providers store title, URL, source type, source name, publication date, retrieval date, and verification status. Summary text, article bodies, and LexisNexis PDFs are not stored. The generated Word report is our document and is stored as a local file, not as third-party article or PDF bytes. See [ewi-report-workflow.md](./ewi-report-workflow.md).
 
 ## Workflow
 
-Starting an investigation with expert name and specialty queues a BullMQ job on `ewi-investigation`. The user does not approve each stage.
+Starting an investigation with expert name, city, and specialty queues a BullMQ job on `ewi-investigation`. The user does not approve each stage.
 
-The web app collects the name and specialty at `/ewi/intake`, then follows the job at `/ewi/investigation`. The screen groups the backend stages into the attorney-facing list (identifying the expert through the final report), and shows the current stage, completed stages, a failed stage when the job stops, overall progress, and status. Socket.IO updates the job, and TanStack Query refetches it while it is pending or running. A failed job can be retried from that screen.
+The web app collects the name, city, and specialty at `/ewi/intake`, then follows the job at `/ewi/investigation`. The screen groups the backend stages into the attorney-facing list (identifying the expert through the final report), and shows the current stage, completed stages, a failed stage when the job stops, overall progress, and status. Socket.IO updates the job, and TanStack Query refetches it while it is pending or running. A failed job can be retried from that screen.
 
 When the job completes, `/ewi/histories/:id` shows the summary, findings, discrepancies, source outcomes (including empty and unavailable sources), cross-examination questions, and the Word download. Raw findings stay on the investigation record. The download is `GET /ewi/histories/:id/report`.
 
@@ -100,11 +105,12 @@ Stages:
 15. Research public social media
 16. Research news and blogs
 17. Research university/professional rules
-18. Cross-check information
-19. Identify discrepancies
-20. Generate investigation summary
-21. Generate cross-examination questions
-22. Generate final report
+18. Research reviews, payments, affiliations, and public records
+19. Cross-check information
+20. Identify discrepancies
+21. Generate investigation summary
+22. Generate cross-examination questions
+23. Generate final report
 
 A stage with no connected source, no results, an unavailable source, a rate limit, or an API error is recorded and the workflow continues. Transient provider errors (timeout, rate limit, 502/503/504) are retried up to three times inside the job. LexisNexis and other restricted sources are recorded as requiring authorized access. Their content is not stored.
 
@@ -114,7 +120,7 @@ Each stage change is written to `investigation_events` and logged.
 
 ## Research providers
 
-`ExpertResearchOrchestrator` calls `ExpertResearchService`. The service validates the expert name and specialty, then asks each provider in `EXPERT_RESEARCH_CATALOG`. Providers apply timeout and rate-limit handling and return normalized items with source metadata, a source URL when one exists, a retrieval timestamp, and an access class (`public`, `restricted`, or `unavailable`).
+`createResearchPlan` selects every provider in `EXPERT_RESEARCH_CATALOG` once. `ExpertResearchOrchestrator` calls `ExpertResearchService`. The service validates the expert name, city, and specialty, then asks each provider for that stage. Providers apply timeout and rate-limit handling and return a normalized outcome: success, no result, unavailable, restricted, authentication required, rate limited, timeout, API failure, or conflicting. One failed provider does not stop the others. A record is `matched` only when the name agrees and the city or specialty also agrees. A same-name record that does not meet that test is `uncertain` and is not merged into the expert profile. Restricted providers are not scraped. LexisNexis is authorized access only, and its PDFs are not stored.
 
 Information status is `verified`, `unverified`, `conflicting`, or `unavailable`. An unavailable provider returns no items. That is not a finding that the expert lacks a qualification. Development fixtures are labeled and stay `unverified` unless two collected statements disagree, in which case those items are marked `conflicting`.
 

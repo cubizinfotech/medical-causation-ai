@@ -34,7 +34,7 @@ Copy names from `.env.example`. Do not invent production passwords in this file.
 
 1. The home page offers Medical Causation Analysis and Expert Witness Investigation.
 2. MCA: open `/mca`, start a demo case, and watch progress if a chat provider is configured. History is under `/mca/histories`.
-3. EWI: open `/ewi/intake`, enter an expert name and a specialty, and start the investigation. Progress advances without confirming each stage. The finished page includes findings, discrepancies, questions, and a Word download.
+3. EWI: open `/ewi/intake`, enter an expert name, a city, and a specialty, and start the investigation. Progress advances without confirming each stage. The finished page includes findings, discrepancies, questions, and a Word download.
 
 EWI will show some sources as unavailable. That is the local fixture behavior, not a missing paid account.
 

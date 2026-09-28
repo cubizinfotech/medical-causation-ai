@@ -31,14 +31,22 @@ export type QueryValidation =
 
 export function validateExpertResearchQuery(query: {
   expertName?: string;
+  city?: string;
   specialty?: string;
 }): QueryValidation {
   const expertName = query.expertName?.trim() ?? '';
+  const city = query.city?.trim() ?? '';
   const specialty = query.specialty?.trim() ?? '';
   if (expertName.length < NAME_MIN || expertName.length > NAME_MAX) {
     return {
       ok: false,
       message: 'Expert name must be between 2 and 200 characters.',
+    };
+  }
+  if (city.length < NAME_MIN || city.length > NAME_MAX) {
+    return {
+      ok: false,
+      message: 'City must be between 2 and 200 characters.',
     };
   }
   if (specialty.length < NAME_MIN || specialty.length > NAME_MAX) {
@@ -47,7 +55,7 @@ export function validateExpertResearchQuery(query: {
       message: 'Medical specialty must be between 2 and 200 characters.',
     };
   }
-  return { ok: true, value: { expertName, specialty } };
+  return { ok: true, value: { expertName, city, specialty } };
 }
 
 export function withTimeout<T>(

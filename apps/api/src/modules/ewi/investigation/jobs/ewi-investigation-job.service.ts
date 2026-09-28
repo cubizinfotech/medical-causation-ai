@@ -91,6 +91,7 @@ export class EwiInvestigationJobService
         jobId,
         request: {
           expertName: dto.expertName.trim(),
+          city: dto.city.trim(),
           specialty: dto.specialty.trim(),
         },
       },

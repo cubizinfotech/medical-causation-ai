@@ -25,6 +25,7 @@ describe('ExpertResearchService', () => {
     });
     const results = await service.collect({
       expertName: 'Jane Smith',
+      city: 'Boston',
       specialty: 'Orthopedics',
     });
 
@@ -48,6 +49,7 @@ describe('ExpertResearchService', () => {
     });
     const results = await service.collect({
       expertName: 'Jane Smith',
+      city: 'Boston',
       specialty: 'Orthopedics',
     });
     const lexis = results.find((result) => result.sourceId === 'lexisnexis');
@@ -65,6 +67,7 @@ describe('ExpertResearchService', () => {
     });
     const results = await service.collect({
       expertName: 'Jane Smith',
+      city: 'Boston',
       specialty: 'Orthopedics',
     });
     const licenses = results
@@ -85,6 +88,7 @@ describe('ExpertResearchService', () => {
     });
     const results = await service.collect({
       expertName: 'Jane Smith',
+      city: 'Boston',
       specialty: 'Orthopedics',
     });
     expect(results).toHaveLength(EXPERT_RESEARCH_CATALOG.length);
@@ -105,6 +109,7 @@ describe('ExpertResearchService', () => {
     });
     const results = await service.collect({
       expertName: ' ',
+      city: 'Boston',
       specialty: 'Ortho',
     });
     expect(results).toHaveLength(EXPERT_RESEARCH_CATALOG.length);
@@ -123,11 +128,81 @@ describe('ExpertResearchService', () => {
     );
     const result = await provider.search({
       expertName: 'Jane Smith',
+      city: 'Boston',
       specialty: 'Orthopedics',
     });
     expect(result.status).toBe('error');
     expect(result.message).toMatch(/timed out/i);
     expect(result.items).toEqual([]);
+  });
+
+  it('returns no result for an empty fixture without inventing a record', async () => {
+    const service = serviceWith({
+      mode: 'mock',
+      timeoutMs: 1000,
+      minIntervalMs: 0,
+    });
+    const results = await service.collect({
+      expertName: 'Jane Smith',
+      city: 'Boston',
+      specialty: 'Orthopedics',
+    });
+    const trademarks = results.find((result) => result.sourceId === 'trademarks');
+    expect(trademarks?.status).toBe('no_result');
+    expect(trademarks?.outcome).toBe('no_result');
+    expect(trademarks?.items).toEqual([]);
+    expect(trademarks?.message).toMatch(/does not establish/i);
+  });
+
+  it('does not merge a same-name record from another city', async () => {
+    const service = serviceWith({
+      mode: 'mock',
+      timeoutMs: 1000,
+      minIntervalMs: 0,
+    });
+    const results = await service.collect({
+      expertName: 'Jane Smith',
+      city: 'Boston',
+      specialty: 'Orthopedics',
+    });
+    const profiles = results
+      .flatMap((result) => result.items)
+      .filter((item) => item.sourceId === 'web_search');
+    expect(profiles.map((item) => item.identityMatch)).toEqual([
+      'matched',
+      'uncertain',
+    ]);
+  });
+
+  it('keeps collecting when one provider fails', async () => {
+    const pubmed = EXPERT_RESEARCH_CATALOG.find((item) => item.id === 'pubmed');
+    const patents = EXPERT_RESEARCH_CATALOG.find((item) => item.id === 'patents');
+    if (!pubmed || !patents) throw new Error('catalog entries missing');
+    const service = new ExpertResearchService([
+      new CatalogExpertResearchProvider(
+        pubmed,
+        { mode: 'mock', timeoutMs: 1000, minIntervalMs: 0 },
+        new ProviderRateLimiter(),
+        () => Promise.reject(new Error('API failure')),
+      ),
+      new CatalogExpertResearchProvider(
+        patents,
+        { mode: 'mock', timeoutMs: 1000, minIntervalMs: 0 },
+        new ProviderRateLimiter(),
+      ),
+    ]);
+    const results = await service.collectProviders(
+      {
+        expertName: 'Jane Smith',
+        city: 'Boston',
+        specialty: 'Orthopedics',
+      },
+      ['pubmed', 'patents'],
+    );
+    expect(results[0]?.outcome).toBe('api_failure');
+    expect(results[0]?.items).toEqual([]);
+    expect(results[1]?.status).toBe('ok');
+    expect(results[1]?.items.length).toBeGreaterThan(0);
   });
 });
 

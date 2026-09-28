@@ -11,7 +11,7 @@ Local development uses the Postgres container from `npm run docker:infra`. A Dig
 | `documents` | Knowledge-base document records and chunks |
 | `vectors` | Embeddings for those chunks |
 | `cases` | MCA case history and analysis results |
-| `ewi` | Experts, investigations, findings, analysis, and report metadata |
+| `ewi` | Experts (name, city, specialty), investigations, categorized findings, inconsistencies, analysis, and report metadata |
 | `platform` | Users, roles, and user-role links |
 
 Init scripts in `docker/postgres/init/` create the extension and schemas the first time the data volume is empty. Tables come from Prisma migrations.

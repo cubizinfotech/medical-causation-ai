@@ -77,6 +77,7 @@ export default function EwiHistoriesView() {
                   <div>
                     <p className="font-semibold">{row.expertName}</p>
                     <p className="text-sm text-muted-foreground">
+                      {row.city ? `${row.city} · ` : ""}
                       {row.specialty}
                     </p>
                   </div>
