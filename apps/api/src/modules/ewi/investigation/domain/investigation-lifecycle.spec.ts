@@ -43,6 +43,12 @@ describe('investigation lifecycle', () => {
       sourceType: 'legal',
       provider: 'LexisNexis',
       publishedAt: new Date('2020-01-02'),
+      attributes: {
+        fullText: 'opinion body',
+        caseName: 'Smith v. Example',
+        caseNumber: '1:20-cv-1',
+        court: 'U.S. District Court',
+      },
     });
 
     expect(stored.restricted).toBe(true);
@@ -52,7 +58,11 @@ describe('investigation lifecycle', () => {
     expect(stored.notes).toMatch(/does not permit storing content/i);
     expect(stored.evidenceStatus).toBe('metadata_only');
     expect(stored.category).toBe('legal_case');
-    expect(stored.attributes).toBeNull();
+    expect(stored.attributes).toEqual({
+      caseName: 'Smith v. Example',
+      caseNumber: '1:20-cv-1',
+      court: 'U.S. District Court',
+    });
   });
 
   it('drops LexisNexis document bodies and embedded PDF data', () => {

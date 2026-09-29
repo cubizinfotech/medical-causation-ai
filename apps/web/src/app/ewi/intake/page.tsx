@@ -17,11 +17,11 @@ export default function EwiIntakePage() {
             </div>
             <div>
               <h1 className="text-3xl font-bold tracking-tight">
-                Expert Intake
+                New Investigation
               </h1>
               <p className="mt-1 text-muted-foreground">
-                Provide the expert name, city, and medical specialty to begin
-                automated research and report generation.
+                Enter the expert name, city, and medical specialty. Research
+                starts automatically after you submit.
               </p>
             </div>
           </div>

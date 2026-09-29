@@ -2,19 +2,35 @@
 
 ## Current product status
 
-MCA and EWI run in one monorepo. Local development uses Docker for PostgreSQL and Redis and does not need DigitalOcean or paid API credentials.
+MCA and EWI run in one monorepo. Local development uses Docker for PostgreSQL and Redis and does not need DigitalOcean or paid research API credentials.
 
 - [x] MCA case analysis, history, and on-screen report (`/mca`)
-- [x] EWI investigation workflow, grounded questions, and Word report (`/ewi`)
+- [x] EWI end-to-end mock investigation: intake → BullMQ stages → evidence → analysis → 100+ grounded questions → Word report → download (`/ewi`)
+- [x] EWI UI: dashboard, validated intake, live timeline, summary metrics, tabbed findings, cancel/retry, error states
 - [x] Shared platform auth (off unless `AUTH_ENABLED=true`) and demo user seed
 - [x] Email providers: console locally, SMTP only when delivery is explicitly enabled
+- [x] EWI request/email API with role gates (no web UI yet); workflow off by default
 - [x] Research provider catalog with local mock fixtures. Live vendor HTTP is not connected
 - [x] Documentation set under `docs/`, including [digitalocean.md](docs/digitalocean.md) and [index.html](docs/index.html)
-- [ ] Law-firm tenancy
-- [ ] Live research and literature HTTP calls
+- [ ] Law-firm tenancy / per-investigation ownership isolation
+- [ ] Live research HTTP adapters (paid/free vendor credentials + legal access where required)
+- [ ] EWI request/email web UI
 - [ ] MCA PDF file export
 - [ ] Production backups (not approved)
 - [ ] CI pipeline and Swagger
+
+### EWI integration review (verified locally)
+
+Verified with mock providers against a running API:
+
+- Full job completes through `report` with Word download
+- Partial/unavailable/restricted sources recorded without inventing success
+- Cancel mid-run leaves job + history `cancelled` (progress race fixed)
+- Retry = new job with same expert/city/specialty
+- Email prepare returns 401 without authenticated privileged role
+- Lint, typecheck, unit tests, production builds, Docker image builds, Compose config validation
+
+EWI is **demo-ready with mocks**. It is **not** production-ready for live opposing-expert research until vendor integrations, subscriptions/legal access, firm tenancy, and production auth/email are configured.
 
 ## Phase 1 — Project Foundation ✅
 
@@ -173,6 +189,10 @@ MCA and EWI run in one monorepo. Local development uses Docker for PostgreSQL an
 - [x] Extend `ewi` experts, profiles, sources, findings, and discrepancies for categorized evidence and source metadata
 - [x] Restricted sources, including LexisNexis, store metadata and links only. PDFs are not stored
 - [x] Compare collected statements, including CV versions, and store inconsistencies with source evidence
+- [x] Legal research dossier for cases, orders, motions, pleadings, depositions, and testimony contradictions
+- [x] Online presence dossier for websites, directories, IME, videos, social, news, reviews, and maps
+- [x] Professional and financial background dossier for grants, patents, trademarks, awards, military claims, memberships, organizations, affiliations, and public financial records
+- [x] Configurable FOIA / university / follow-up / TrialSmith request email workflow with approval gates and mock-safe local delivery
 - [ ] Live research providers for the expanded evidence categories
 
 ## Phase 2 — Database & API Foundation

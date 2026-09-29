@@ -72,6 +72,7 @@ const CATEGORY_ALIASES: Record<string, EwiEvidenceCategory> = {
   publication: 'publication',
   grant: 'grant',
   patent: 'patent',
+  trademark: 'patent',
   award: 'award',
   medal: 'award',
   military: 'military',
@@ -112,6 +113,9 @@ const CATEGORY_ALIASES: Record<string, EwiEvidenceCategory> = {
 };
 
 export function mapEvidenceCategory(sourceType: string): EwiEvidenceCategory {
-  const key = sourceType.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const key = sourceType
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
   return CATEGORY_ALIASES[key] ?? 'research_finding';
 }

@@ -20,6 +20,18 @@ import {
 } from '../domain/investigation-lifecycle';
 import type { InconsistencySource } from '../../research/inconsistency-analyzer';
 import type { VerificationField } from '../../research/verification-labels';
+import {
+  LEGAL_RESEARCH_PROVIDER_IDS,
+  buildLegalResearchDossier,
+} from '../../research/legal';
+import {
+  ONLINE_PRESENCE_PROVIDER_IDS,
+  buildOnlinePresenceDossier,
+} from '../../research/online-presence';
+import {
+  PROFESSIONAL_BACKGROUND_PROVIDER_IDS,
+  buildProfessionalBackgroundDossier,
+} from '../../research/professional-background';
 
 const EWI_RESULT_DISCLAIMER =
   'Expert Witness Investigation output is for attorney research only. Restricted sources are stored as metadata and links only.';
@@ -27,6 +39,7 @@ const EWI_RESULT_DISCLAIMER =
 const detailInclude = {
   expert: true,
   profile: true,
+  sources: true,
   findings: { include: { source: true } },
   discrepancies: { orderBy: { priority: 'asc' as const } },
   questions: { orderBy: { number: 'asc' as const } },
@@ -140,7 +153,13 @@ export class ExpertInvestigationRepository {
     },
   ) {
     const current = await this.requireByJobId(jobId);
-    if (current.status === 'cancelled') return current;
+    if (
+      current.status === 'cancelled' ||
+      current.status === 'completed' ||
+      current.status === 'failed'
+    ) {
+      return current;
+    }
     if (data.status && data.status !== current.status) {
       this.guardTransition(current.status, data.status);
     }
@@ -148,8 +167,12 @@ export class ExpertInvestigationRepository {
     const stageChanged =
       data.step !== undefined && data.step !== current.currentStage;
 
-    return this.prisma.investigation.update({
-      where: { jobId },
+    // Atomic guard: refuse to overwrite a concurrent cancel/complete/fail.
+    const updated = await this.prisma.investigation.updateMany({
+      where: {
+        jobId,
+        status: { in: ['pending', 'running'] },
+      },
       data: {
         status: data.status,
         currentStage: data.step,
@@ -161,18 +184,26 @@ export class ExpertInvestigationRepository {
           data.status === 'running' && !current.startedAt
             ? new Date()
             : undefined,
-        events: stageChanged
-          ? {
-              create: {
-                eventType: 'stage_changed',
-                status: data.status ?? current.status,
-                stage: data.step,
-                message: data.message ?? data.stepLabel ?? null,
-              },
-            }
-          : undefined,
       },
     });
+
+    if (updated.count === 0) {
+      return this.requireByJobId(jobId);
+    }
+
+    if (stageChanged) {
+      await this.prisma.investigationEvent.create({
+        data: {
+          investigationId: current.id,
+          eventType: 'stage_changed',
+          status: data.status ?? current.status,
+          stage: data.step ?? current.currentStage,
+          message: data.message ?? data.stepLabel ?? null,
+        },
+      });
+    }
+
+    return this.requireByJobId(jobId);
   }
 
   async markCompleted(
@@ -188,7 +219,7 @@ export class ExpertInvestigationRepository {
     },
   ) {
     const current = await this.requireByJobId(jobId);
-    if (current.status === 'cancelled') return;
+    if (current.status === 'cancelled') return null;
     this.guardTransition(current.status, 'completed');
 
     const storedFindings = result.evidence.map((item) => {
@@ -272,6 +303,25 @@ export class ExpertInvestigationRepository {
         });
       }
 
+      for (const attempt of result.sourceStatuses ?? []) {
+        if (groups.has(attempt.sourceId)) continue;
+        const restricted =
+          attempt.attemptStatus === 'restricted' ||
+          attempt.disposition === 'paid_access';
+        await tx.researchSource.create({
+          data: {
+            investigationId: current.id,
+            provider: attempt.sourceId,
+            sourceType: 'attempt',
+            name: attempt.sourceId,
+            retrievedAt: new Date(),
+            evidenceStatus: restricted ? 'metadata_only' : 'unavailable',
+            restricted,
+            restrictionNote: attempt.message ?? null,
+          },
+        });
+      }
+
       if (result.discrepancies.length > 0) {
         await tx.discrepancy.createMany({
           data: result.discrepancies.map((item) => ({
@@ -313,15 +363,33 @@ export class ExpertInvestigationRepository {
         });
       }
 
-      if (result.analysis) {
+      if (result.analysis || (result.sourceStatuses?.length ?? 0) > 0) {
         await tx.investigationAnalysis.create({
           data: {
             investigationId: current.id,
-            origin: result.analysis.origin,
-            providerName: result.analysis.providerName,
-            schemaVersion: result.analysis.document.schemaVersion,
-            payload: result.analysis
-              .document as unknown as Prisma.InputJsonValue,
+            origin: result.analysis?.origin ?? 'deterministic',
+            providerName: result.analysis?.providerName ?? null,
+            schemaVersion: result.analysis?.document.schemaVersion ?? '1.1',
+            payload: {
+              document:
+                result.analysis?.document ??
+                ({
+                  schemaVersion: '1.1',
+                  groups: [],
+                  duplicates: [],
+                  comparisons: [],
+                  conflicts: [],
+                  missing: [],
+                  cvDiscrepancies: [],
+                  assessments: [],
+                  sectionSummaries: [],
+                  investigationFindings: [],
+                  summary: result.summary,
+                  conclusions: [],
+                  questions: [],
+                } as unknown as Prisma.InputJsonValue),
+              sourceStatuses: result.sourceStatuses ?? [],
+            } as unknown as Prisma.InputJsonValue,
           },
         });
       }
@@ -376,6 +444,11 @@ export class ExpertInvestigationRepository {
         },
       });
     });
+
+    return {
+      investigationId: current.id,
+      expertId: current.expertId,
+    };
   }
 
   async markFailed(jobId: string, errorMessage: string) {
@@ -407,6 +480,13 @@ export class ExpertInvestigationRepository {
     if (!current) {
       throw new NotFoundException(`Investigation "${id}" not found`);
     }
+    if (current.status === 'cancelled') {
+      const view = await this.findById(id);
+      if (!view) {
+        throw new NotFoundException(`Investigation "${id}" not found`);
+      }
+      return view;
+    }
     this.guardTransition(current.status, 'cancelled');
 
     await this.prisma.investigation.update({
@@ -431,6 +511,28 @@ export class ExpertInvestigationRepository {
       throw new NotFoundException(`Investigation "${id}" not found`);
     }
     return view;
+  }
+
+  /** Re-assert cancelled after a race with progress updates. */
+  async cancelByJobId(jobId: string): Promise<void> {
+    const current = await this.prisma.investigation.findUnique({
+      where: { jobId },
+    });
+    if (!current) return;
+    if (current.status === 'cancelled') return;
+    if (current.status === 'completed' || current.status === 'failed') return;
+
+    await this.prisma.investigation.updateMany({
+      where: {
+        jobId,
+        status: { in: ['pending', 'running'] },
+      },
+      data: {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        message: 'Investigation cancelled',
+      },
+    });
   }
 
   async delete(id: string): Promise<void> {
@@ -514,75 +616,195 @@ export class ExpertInvestigationRepository {
 
     return {
       ...base,
-      result: {
-        expertName: row.expert.name,
-        city: row.expert.city,
-        specialty: row.expert.specialty,
-        evidence: row.findings.map((finding) => ({
-          sourceId: finding.source.provider,
-          category: finding.sourceType,
-          title: finding.title,
-          summary: finding.summary ?? '',
-          url: finding.url ?? undefined,
-        })),
-        discrepancies: row.discrepancies.map((item) => ({
-          id: item.id,
-          severity: item.severity as 'low' | 'medium' | 'high',
-          title: item.title,
-          description: item.description,
-          evidenceIds: [],
-          relatedUrls: item.relatedUrls,
-          label: item.label,
-          field: (item.field ?? 'cv') as VerificationField,
-          previousValue: item.previousValue,
-          currentValue: item.currentValue,
-          change: item.changeText,
-          cvDate: item.cvDate,
-          cvSource: item.cvSource,
-          supportingSource: item.supportingSource,
-          priority: item.priority,
-          sources: readInconsistencySources(item.evidence),
-        })),
-        questions: row.questions.map((item) => ({
-          number: item.number,
-          category: item.category,
-          question: item.question,
-          evidenceBasis: item.evidenceBasis,
-        })),
-        questionCount: row.questions.length,
-        sourceStatuses: [],
-        reportFileName: row.report?.fileName ?? '',
-        generatedAt: (row.report?.generatedAt ?? row.updatedAt).toISOString(),
-        disclaimer: EWI_RESULT_DISCLAIMER,
-        summary: row.notes ?? '',
-        analysis: row.analysis
-          ? {
-              origin: row.analysis.origin === 'ai' ? 'ai' : 'deterministic',
-              providerName: row.analysis.providerName,
-              document: row.analysis
-                .payload as unknown as EwiInvestigationResult['analysis']['document'],
-            }
-          : {
-              origin: 'deterministic',
-              providerName: null,
-              document: {
-                schemaVersion: '1.0',
-                groups: [],
-                duplicates: [],
-                comparisons: [],
-                conflicts: [],
-                missing: [],
-                cvDiscrepancies: [],
-                assessments: [],
-                summary:
-                  row.notes ?? 'Could not verify. No analysis was stored.',
-                conclusions: [],
-                questions: [],
+      result: (() => {
+        const evidence = row.findings.map((finding) => {
+          const attributes =
+            finding.attributes &&
+            typeof finding.attributes === 'object' &&
+            !Array.isArray(finding.attributes)
+              ? (finding.attributes as Record<string, unknown>)
+              : undefined;
+          return {
+            sourceId: finding.source.provider,
+            category: finding.sourceType,
+            title: finding.title,
+            summary: finding.summary ?? '',
+            url: finding.url ?? undefined,
+            access: finding.restricted
+              ? ('restricted' as const)
+              : ('public' as const),
+            retrievedAt: finding.retrievedAt?.toISOString(),
+            raw: attributes,
+            identityMatch:
+              attributes?.identityMatch === 'matched'
+                ? ('matched' as const)
+                : attributes?.identityMatch === 'uncertain'
+                  ? ('uncertain' as const)
+                  : undefined,
+          };
+        });
+        return {
+          expertName: row.expert.name,
+          city: row.expert.city,
+          specialty: row.expert.specialty,
+          evidence,
+          discrepancies: row.discrepancies.map((item) => ({
+            id: item.id,
+            severity: item.severity as 'low' | 'medium' | 'high',
+            title: item.title,
+            description: item.description,
+            evidenceIds: [],
+            relatedUrls: item.relatedUrls,
+            label: item.label,
+            field: (item.field ?? 'cv') as VerificationField,
+            previousValue: item.previousValue,
+            currentValue: item.currentValue,
+            change: item.changeText,
+            cvDate: item.cvDate,
+            cvSource: item.cvSource,
+            supportingSource: item.supportingSource,
+            priority: item.priority,
+            sources: readInconsistencySources(item.evidence),
+          })),
+          questions: row.questions.map((item) => ({
+            number: item.number,
+            category: item.category,
+            question: item.question,
+            evidenceBasis: item.evidenceBasis,
+          })),
+          questionCount: row.questions.length,
+          sourceStatuses: readSourceStatuses(row),
+          reportFileName: row.report?.fileName ?? '',
+          generatedAt: (row.report?.generatedAt ?? row.updatedAt).toISOString(),
+          disclaimer: EWI_RESULT_DISCLAIMER,
+          summary: row.notes ?? '',
+          legalResearch: buildLegalResearchDossier({
+            evidence,
+            legalProviderIds: LEGAL_RESEARCH_PROVIDER_IDS,
+          }),
+          onlinePresence: buildOnlinePresenceDossier({
+            evidence,
+            presenceProviderIds: ONLINE_PRESENCE_PROVIDER_IDS,
+          }),
+          professionalBackground: buildProfessionalBackgroundDossier({
+            evidence,
+            professionalProviderIds: PROFESSIONAL_BACKGROUND_PROVIDER_IDS,
+          }),
+          analysis: row.analysis
+            ? {
+                origin: row.analysis.origin === 'ai' ? 'ai' : 'deterministic',
+                providerName: row.analysis.providerName,
+                document: readAnalysisDocument(row.analysis.payload),
+              }
+            : {
+                origin: 'deterministic',
+                providerName: null,
+                document: {
+                  schemaVersion: '1.1',
+                  groups: [],
+                  duplicates: [],
+                  comparisons: [],
+                  conflicts: [],
+                  missing: [],
+                  cvDiscrepancies: [],
+                  assessments: [],
+                  sectionSummaries: [],
+                  investigationFindings: [],
+                  summary:
+                    row.notes ?? 'Could not verify. No analysis was stored.',
+                  conclusions: [],
+                  questions: [],
+                },
               },
-            },
-      },
+        };
+      })(),
     };
   }
+}
+
+function readAnalysisDocument(
+  payload: unknown,
+): EwiInvestigationResult['analysis']['document'] {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    if (record.document && typeof record.document === 'object') {
+      return record.document as EwiInvestigationResult['analysis']['document'];
+    }
+    if ('schemaVersion' in record) {
+      return payload as EwiInvestigationResult['analysis']['document'];
+    }
+  }
+  return {
+    schemaVersion: '1.1',
+    groups: [],
+    duplicates: [],
+    comparisons: [],
+    conflicts: [],
+    missing: [],
+    cvDiscrepancies: [],
+    assessments: [],
+    sectionSummaries: [],
+    investigationFindings: [],
+    summary: 'Could not verify. No analysis was stored.',
+    conclusions: [],
+    questions: [],
+  };
+}
+
+function readSourceStatuses(
+  row: InvestigationDetail,
+): EwiInvestigationResult['sourceStatuses'] {
+  const fromPayload = readStoredSourceStatuses(row.analysis?.payload);
+  if (fromPayload.length > 0) return fromPayload;
+
+  const counts = new Map<string, number>();
+  for (const finding of row.findings) {
+    const provider = finding.source.provider;
+    counts.set(provider, (counts.get(provider) ?? 0) + 1);
+  }
+
+  const fromSources = row.sources.map((source) => {
+    const itemCount = counts.get(source.provider) ?? 0;
+    const restricted = source.restricted;
+    const unavailable = source.evidenceStatus === 'unavailable';
+    return {
+      sourceId: source.provider,
+      status: unavailable ? 'unavailable' : restricted ? 'unavailable' : 'ok',
+      attemptStatus: restricted
+        ? ('restricted' as const)
+        : unavailable
+          ? ('unavailable' as const)
+          : itemCount > 0
+            ? ('completed' as const)
+            : ('completed' as const),
+      disposition: restricted
+        ? ('paid_access' as const)
+        : unavailable
+          ? ('unavailable' as const)
+          : ('completed' as const),
+      message: source.restrictionNote ?? undefined,
+      itemCount,
+      checked: true,
+    };
+  });
+  return fromSources;
+}
+
+function readStoredSourceStatuses(
+  payload: unknown,
+): EwiInvestigationResult['sourceStatuses'] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return [];
+  }
+  const record = payload as Record<string, unknown>;
+  const listed = record.sourceStatuses;
+  if (!Array.isArray(listed)) return [];
+  return listed.filter(
+    (entry): entry is EwiInvestigationResult['sourceStatuses'][number] =>
+      Boolean(entry) &&
+      typeof entry === 'object' &&
+      typeof (entry as { sourceId?: unknown }).sourceId === 'string',
+  );
 }
 
 function parsePublishedAt(value: unknown): Date | null {
@@ -605,7 +827,10 @@ function readInconsistencySources(value: unknown): InconsistencySource[] {
   return value.flatMap((entry) => {
     if (!entry || typeof entry !== 'object') return [];
     const row = entry as Record<string, unknown>;
-    if (typeof row.sourceId !== 'string' || typeof row.sourceName !== 'string') {
+    if (
+      typeof row.sourceId !== 'string' ||
+      typeof row.sourceName !== 'string'
+    ) {
       return [];
     }
     return [

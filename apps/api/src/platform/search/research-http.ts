@@ -1,3 +1,10 @@
+import {
+  assertPublicHttpUrl,
+  UnsafeResearchUrlError,
+} from './safe-research-url';
+
+export { assertPublicHttpUrl, UnsafeResearchUrlError };
+
 export class UpstreamHttpError extends Error {
   constructor(
     message: string,
@@ -21,13 +28,16 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Shared HTTP helper for research/search adapters.
- * Applies timeout, retry, and Retry-After aware backoff. Does not log request headers.
+ * Validates the URL is public http(s), applies timeout/retry, and does not log
+ * request headers or credentials.
  */
 export async function fetchResearch(
   url: string,
   init: RequestInit,
   options: ResearchHttpOptions,
 ): Promise<Response> {
+  assertPublicHttpUrl(url);
+
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= options.maxRetries; attempt++) {
@@ -58,6 +68,9 @@ export async function fetchResearch(
       }
       return response;
     } catch (error) {
+      if (error instanceof UnsafeResearchUrlError) {
+        throw error;
+      }
       if (
         error instanceof UpstreamHttpError &&
         error.status < 500 &&

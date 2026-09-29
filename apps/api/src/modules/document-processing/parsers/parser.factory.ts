@@ -4,6 +4,7 @@ import { UnsupportedFileTypeException } from '../exceptions';
 import { PdfParser } from './pdf.parser';
 import { DocxParser } from './docx.parser';
 import { TxtParser, MarkdownParser } from './plain-text.parser';
+import { ImageParser } from './image.parser';
 
 /**
  * Resolves the correct parser for a given file extension.
@@ -18,6 +19,7 @@ export class ParserFactory {
       new DocxParser(),
       new TxtParser(),
       new MarkdownParser(),
+      new ImageParser(),
     ];
   }
 

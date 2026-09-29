@@ -5,7 +5,12 @@ import { AiModule } from '@ai/ai.module';
 import { AuthModule } from '@platform/auth/auth.module';
 import { ReportModule } from '@platform/report/report.module';
 import { ExpertResearchIntegrationsModule } from '@integrations/expert-research';
+import { EwiCorrespondenceModule } from '../correspondence/ewi-correspondence.module';
+import { EwiDocumentsModule } from '../documents/ewi-documents.module';
 import { ExpertResearchOrchestrator } from '../research/expert-research.orchestrator';
+import { LegalResearchService } from '../research/legal';
+import { OnlinePresenceResearchService } from '../research/online-presence';
+import { ProfessionalBackgroundResearchService } from '../research/professional-background';
 import { EwiWordReportService } from '../report/ewi-word-report.service';
 import { EwiAnalysisService } from './analysis/ewi-analysis.service';
 import { ExpertInvestigationRepository } from './repositories/expert-investigation.repository';
@@ -24,10 +29,15 @@ import { EwiInvestigationController } from './controllers/ewi-investigation.cont
     AuthModule,
     ReportModule,
     ExpertResearchIntegrationsModule,
+    EwiCorrespondenceModule,
+    EwiDocumentsModule,
   ],
   controllers: [EwiInvestigationController],
   providers: [
     ExpertResearchOrchestrator,
+    LegalResearchService,
+    OnlinePresenceResearchService,
+    ProfessionalBackgroundResearchService,
     EwiWordReportService,
     EwiAnalysisService,
     ExpertInvestigationRepository,

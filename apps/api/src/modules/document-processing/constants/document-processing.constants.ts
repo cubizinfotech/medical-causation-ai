@@ -6,7 +6,6 @@ export const PARSER_TYPES = {
   DOCX: 'docx',
   TXT: 'txt',
   MARKDOWN: 'markdown',
-  /** Future parsers */
   IMAGE: 'image',
   OCR: 'ocr',
   HTML: 'html',
@@ -18,7 +17,18 @@ export type ParserType = (typeof PARSER_TYPES)[keyof typeof PARSER_TYPES];
 /**
  * Extensions handled by the document processing pipeline.
  */
-export const PROCESSABLE_EXTENSIONS = ['pdf', 'docx', 'txt', 'md'] as const;
+export const PROCESSABLE_EXTENSIONS = [
+  'pdf',
+  'docx',
+  'txt',
+  'md',
+  'png',
+  'jpg',
+  'jpeg',
+  'tif',
+  'tiff',
+  'webp',
+] as const;
 
 export type ProcessableExtension = (typeof PROCESSABLE_EXTENSIONS)[number];
 
@@ -28,11 +38,17 @@ export const EXTENSION_PARSER_MAP: Record<ProcessableExtension, ParserType> = {
   docx: PARSER_TYPES.DOCX,
   txt: PARSER_TYPES.TXT,
   md: PARSER_TYPES.MARKDOWN,
+  png: PARSER_TYPES.IMAGE,
+  jpg: PARSER_TYPES.IMAGE,
+  jpeg: PARSER_TYPES.IMAGE,
+  tif: PARSER_TYPES.IMAGE,
+  tiff: PARSER_TYPES.IMAGE,
+  webp: PARSER_TYPES.IMAGE,
 };
 
 /**
  * Minimum extracted character count to consider a PDF as text-based (not scanned).
- * Below this threshold, `needsOcr` is set to true for future OCR fallback.
+ * Below this threshold, `needsOcr` is set to true.
  */
 export const OCR_TEXT_THRESHOLD_CHARS = 50;
 

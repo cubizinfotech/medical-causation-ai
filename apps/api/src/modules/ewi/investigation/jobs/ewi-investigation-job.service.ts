@@ -140,7 +140,9 @@ export class EwiInvestigationJobService
     jobId: string,
     update: EwiProgressUpdate,
   ): Promise<void> {
+    if (await this.isCancelled(jobId)) return;
     const record = await this.requireRecord(jobId);
+    if (record.status === EWI_JOB_STATUS.CANCELLED) return;
     record.step = update.step;
     record.stepLabel = update.stepLabel;
     record.progress = update.progress;
@@ -154,6 +156,35 @@ export class EwiInvestigationJobService
       progress: update.progress,
       message: update.message ?? null,
     });
+    this.emit(record);
+  }
+
+  async saveCheckpoint(
+    jobId: string,
+    checkpoint: import('../workflow/investigation-workflow').InvestigationWorkflowCheckpoint,
+  ): Promise<void> {
+    const record = await this.requireRecord(jobId);
+    if (record.status === EWI_JOB_STATUS.CANCELLED) return;
+    record.checkpoint = checkpoint;
+    record.updatedAt = new Date().toISOString();
+    await this.saveRecord(record);
+  }
+
+  async isCancelled(jobId: string): Promise<boolean> {
+    const record = await this.loadRecord(jobId);
+    if (record?.status === EWI_JOB_STATUS.CANCELLED) return true;
+    return this.historyService.isCancelledByJobId(jobId);
+  }
+
+  async markCancelled(jobId: string): Promise<void> {
+    const record = await this.loadRecord(jobId);
+    if (!record) return;
+    record.status = EWI_JOB_STATUS.CANCELLED;
+    record.message = 'Investigation cancelled';
+    record.updatedAt = new Date().toISOString();
+    await this.saveRecord(record);
+    // Re-assert DB cancelled after any concurrent progress write.
+    await this.historyService.cancelByJobId(jobId);
     this.emit(record);
   }
 

@@ -17,7 +17,7 @@ export function SiteHeader() {
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <Link
           href="/"
-          className="text-lg font-semibold tracking-tight text-foreground"
+          className="max-w-[11rem] truncate text-lg font-semibold tracking-tight text-foreground sm:max-w-none"
         >
           {isEwi
             ? "Expert Witness Investigation"
@@ -42,6 +42,9 @@ export function SiteHeader() {
           )}
           {isEwi ? (
             <>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/ewi">Dashboard</Link>
+              </Button>
               <Button asChild variant="ghost" size="sm">
                 <Link href="/ewi/histories">Histories</Link>
               </Button>

@@ -1,17 +1,22 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { StorageSettings } from '@config/config.types';
+import { targetsFromEvidence } from '../../correspondence/ewi-request-from-evidence';
+import { EwiRequestWorkflowService } from '../../correspondence/ewi-request-workflow.service';
 import { ExpertInvestigationRepository } from '../repositories/expert-investigation.repository';
 import type { CreateExpertInvestigationDto } from '../dto/create-expert-investigation.dto';
 import type { EwiInvestigationResult } from '../jobs/ewi-investigation-job.types';
 
 @Injectable()
 export class InvestigationHistoryService {
+  private readonly logger = new Logger(InvestigationHistoryService.name);
+
   constructor(
     private readonly repo: ExpertInvestigationRepository,
     private readonly config: ConfigService,
+    private readonly requestWorkflow: EwiRequestWorkflowService,
   ) {}
 
   create(jobId: string, dto: CreateExpertInvestigationDto) {
@@ -37,6 +42,15 @@ export class InvestigationHistoryService {
 
   cancel(id: string) {
     return this.repo.cancel(id);
+  }
+
+  cancelByJobId(jobId: string) {
+    return this.repo.cancelByJobId(jobId);
+  }
+
+  async isCancelledByJobId(jobId: string): Promise<boolean> {
+    const row = await this.repo.findByJobId(jobId);
+    return row?.status === 'cancelled';
   }
 
   async getReport(id: string): Promise<{
@@ -78,7 +92,7 @@ export class InvestigationHistoryService {
     await mkdir(directory, { recursive: true });
     const storageKey = join(directory, `${jobId}.docx`);
     await writeFile(storageKey, report.buffer);
-    return this.repo.markCompleted(jobId, result, {
+    const completed = await this.repo.markCompleted(jobId, result, {
       fileName: report.fileName,
       mimeType: report.mimeType,
       storageKey,
@@ -86,10 +100,44 @@ export class InvestigationHistoryService {
       templateId: report.templateId,
       templateVersion: report.templateVersion,
     });
+
+    if (completed) {
+      await this.prepareConfiguredRequests(completed.investigationId, result);
+    }
+    return completed;
   }
 
   markFailed(jobId: string, errorMessage: string) {
     return this.repo.markFailed(jobId, errorMessage);
+  }
+
+  private async prepareConfiguredRequests(
+    investigationId: string,
+    result: EwiInvestigationResult,
+  ): Promise<void> {
+    try {
+      const targets = targetsFromEvidence(result.evidence);
+      if (targets.length === 0) return;
+      const prepared = await this.requestWorkflow.prepare({
+        investigationId,
+        expertName: result.expertName,
+        city: result.city,
+        specialty: result.specialty,
+        caseReference: `EWI-${investigationId.slice(0, 8)}`,
+        targets,
+      });
+      if (prepared.length > 0) {
+        this.logger.log(
+          `Prepared ${prepared.length} EWI request draft(s) for investigation=${investigationId}`,
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Request prepare failed';
+      this.logger.warn(
+        `EWI request prepare skipped for investigation=${investigationId}: ${message}`,
+      );
+    }
   }
 
   private reportsDirectory(): string {

@@ -21,6 +21,17 @@ export interface ReportSectionModel {
   blocks: ReportBlock[];
 }
 
+export interface ReportDocumentMetadata {
+  expertName?: string;
+  city?: string;
+  specialty?: string;
+  investigationDate?: string;
+  reportVersion?: string;
+  templateId?: string;
+  product?: string;
+  disclaimer?: string;
+}
+
 export interface ReportDocumentModel {
   product: 'mca' | 'ewi';
   templateId: string;
@@ -33,4 +44,7 @@ export interface ReportDocumentModel {
   mimeType: string;
   format: ReportFormat;
   sections: ReportSectionModel[];
+  /** When true, a Word TOC field is inserted after the cover block. */
+  includeTableOfContents?: boolean;
+  metadata?: ReportDocumentMetadata;
 }

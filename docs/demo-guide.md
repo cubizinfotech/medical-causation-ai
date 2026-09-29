@@ -34,9 +34,9 @@ Copy names from `.env.example`. Do not invent production passwords in this file.
 
 1. The home page offers Medical Causation Analysis and Expert Witness Investigation.
 2. MCA: open `/mca`, start a demo case, and watch progress if a chat provider is configured. History is under `/mca/histories`.
-3. EWI: open `/ewi/intake`, enter an expert name, a city, and a specialty, and start the investigation. Progress advances without confirming each stage. The finished page includes findings, inconsistencies, questions, and a Word download.
+3. EWI: open `/ewi` (dashboard), then **New Investigation** (`/ewi/intake`). Enter expert name, city, and specialty. Progress runs at `/ewi/investigation` with a live stage timeline. When complete, `/ewi/histories/:id` shows the summary dashboard, tabbed findings (inconsistencies, legal, publications, credentials, presence, income/bias, questions, sources), and Word download. Cancel mid-run from progress or history; retry starts a new job with the same intake values.
 
-EWI will show some sources as unavailable. That is the local fixture behavior, not a missing paid account.
+EWI will show some sources as unavailable or restricted. That is expected with mock fixtures and unpaid sources — not a fake “all green” success path. Questions are grounded; the run aims for 100+ when evidence or source attempts exist.
 
 ## Demo accounts
 

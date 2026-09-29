@@ -29,6 +29,7 @@ function isTerminal(status: EwiInvestigationJobRecord["status"]): boolean {
 export function useEwiInvestigationJob() {
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState<string | null>(null);
+  const [investigationId, setInvestigationId] = useState<string | null>(null);
 
   const jobQuery = useQuery({
     queryKey: ewiKeys.job(jobId ?? "none"),
@@ -41,6 +42,15 @@ export function useEwiInvestigationJob() {
       }
       return false;
     },
+    retry: (failureCount, error) => {
+      if (
+        error instanceof Error &&
+        /401|unauthorized|session/i.test(error.message)
+      ) {
+        return false;
+      }
+      return failureCount < 2;
+    },
   });
 
   const mutation = useMutation({
@@ -48,6 +58,30 @@ export function useEwiInvestigationJob() {
       ewiClient.submitJob(values),
     onSuccess: (created) => {
       setJobId(created.jobId);
+      setInvestigationId(created.investigationId);
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async (id: string) => ewiClient.cancelHistory(id),
+    onSuccess: (detail) => {
+      if (detail.jobId) {
+        queryClient.setQueryData(ewiKeys.job(detail.jobId), (prev: unknown) => {
+          const current = prev as EwiInvestigationJobRecord | undefined;
+          if (!current) return prev;
+          return {
+            ...current,
+            status: "cancelled" as const,
+            error: detail.errorMessage ?? "Investigation cancelled",
+          };
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: ewiKeys.histories });
+      if (detail.id) {
+        void queryClient.invalidateQueries({
+          queryKey: ewiKeys.history(detail.id),
+        });
+      }
     },
   });
 
@@ -67,6 +101,9 @@ export function useEwiInvestigationJob() {
     socket.on("job:update", (update: EwiInvestigationJobRecord) => {
       if (update.jobId !== jobId) return;
       queryClient.setQueryData(ewiKeys.job(jobId), update);
+      if (update.investigationId) {
+        setInvestigationId(update.investigationId);
+      }
       if (isTerminal(update.status)) {
         socket.disconnect();
       }
@@ -80,6 +117,8 @@ export function useEwiInvestigationJob() {
 
   const job = jobQuery.data ?? null;
   const status = job?.status;
+  const resolvedInvestigationId =
+    investigationId ?? job?.investigationId ?? null;
 
   let phase: EwiJobPhase = "idle";
   if (status === "completed") {
@@ -106,25 +145,47 @@ export function useEwiInvestigationJob() {
         ? mutation.error
         : jobQuery.error instanceof Error
           ? jobQuery.error
-          : null;
+          : cancelMutation.error instanceof Error
+            ? cancelMutation.error
+            : null;
 
   const submit = useCallback(
     async (
       values: ExpertInvestigationFormValues,
     ): Promise<CreateEwiJobResponse> => {
       setJobId(null);
+      setInvestigationId(null);
       return mutation.mutateAsync(values);
     },
     [mutation],
   );
 
   const resume = useCallback(
-    (nextJobId: string) => {
+    (nextJobId: string, nextInvestigationId?: string) => {
       mutation.reset();
+      cancelMutation.reset();
       setJobId(nextJobId);
+      setInvestigationId(nextInvestigationId ?? null);
     },
-    [mutation],
+    [mutation, cancelMutation],
   );
 
-  return { phase, job, error, submit, resume };
+  const cancel = useCallback(async () => {
+    const id = resolvedInvestigationId;
+    if (!id) {
+      throw new Error("Unable to cancel — investigation id is not available yet.");
+    }
+    return cancelMutation.mutateAsync(id);
+  }, [resolvedInvestigationId, cancelMutation]);
+
+  return {
+    phase,
+    job,
+    error,
+    submit,
+    resume,
+    cancel,
+    isCancelling: cancelMutation.isPending,
+    investigationId: resolvedInvestigationId,
+  };
 }

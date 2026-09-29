@@ -9,6 +9,10 @@ export const EWI_PROGRESS_STEPS = [
   { id: "patents", label: "Research patents" },
   { id: "awards", label: "Research awards and medals" },
   {
+    id: "memberships",
+    label: "Research memberships and professional organizations",
+  },
+  {
     id: "legal",
     label: "Research legal cases, motions, orders and available references",
   },
@@ -25,6 +29,9 @@ export const EWI_PROGRESS_STEPS = [
   },
   { id: "cross-check", label: "Cross-check information" },
   { id: "discrepancies", label: "Identify inconsistencies" },
+  { id: "analyze-legal", label: "Analyze legal materials" },
+  { id: "analyze-presence", label: "Analyze online presence" },
+  { id: "analyze-financial", label: "Analyze income and bias information" },
   { id: "summary", label: "Generate investigation summary" },
   { id: "questions", label: "Generate cross-examination questions" },
   { id: "report", label: "Generate final report" },

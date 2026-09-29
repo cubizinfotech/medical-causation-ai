@@ -415,21 +415,23 @@ Sign in at [http://localhost:3000/login](http://localhost:3000/login). The heade
 
 ## Expert Witness Investigation
 
-EWI is a separate product from the medical causation demo. It does not use the knowledge base. With `RESEARCH_PROVIDER=mock` (the local default), the investigation runs on development fixtures and does not call paid research APIs.
+EWI is a separate product from the medical causation demo. It does not use the knowledge base. With `RESEARCH_PROVIDER=mock` (the local default), the investigation runs on development fixtures and does not call paid research APIs. Live vendor HTTP is not connected. Some sources will show as unavailable or restricted — that is expected, not a fake all-green path.
 
-1. Open [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake).
+1. Open [http://localhost:3000/ewi](http://localhost:3000/ewi) (dashboard), then **New Investigation**, or go directly to [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake).
 2. Enter an expert name, city, and medical specialty, or use **Load Example**, then click **Start Investigation**.
-3. The progress screen lists the investigation stages, the current stage, overall percent, and status. A failed run can be retried from that screen. Sources that are unavailable are recorded and the run continues.
-4. When the job completes, the history page shows the investigation summary, findings, inconsistencies, sources, and cross-examination questions.
-5. **Download Word Report** saves the `.docx` file.
+3. Progress at `/ewi/investigation` shows a live stage timeline, percent, and status from the backend job. Cancel mid-run if needed. Retry starts a new job with the same intake values.
+4. When complete, `/ewi/histories/:id` shows the summary dashboard, tabbed findings (inconsistencies, legal, publications, credentials, presence, income/bias, questions, sources), and **Download Word Report**.
+5. Histories list: [http://localhost:3000/ewi/histories](http://localhost:3000/ewi/histories).
 
-Histories: [http://localhost:3000/ewi/histories](http://localhost:3000/ewi/histories).
+Request/email prepare-approve-send is API-only (role-gated) and off by default. There is no request UI in the demo yet.
 
 ## Related Documentation
 
 - [README.md](./README.md)
+- [docs/demo-guide.md](./docs/demo-guide.md)
 - [docs/frontend-demo.md](./docs/frontend-demo.md)
 - [docs/ewi-architecture.md](./docs/ewi-architecture.md)
+- [docs/ewi-workflow.md](./docs/ewi-workflow.md)
 - [docs/medical-analysis.md](./docs/medical-analysis.md)
 - [docs/indexing.md](./docs/indexing.md)
 - [DEPLOYMENT.md](./DEPLOYMENT.md)

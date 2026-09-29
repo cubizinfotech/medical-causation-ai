@@ -346,7 +346,9 @@ npm run dev:web
 
 - Landing (product chooser): [http://localhost:3000](http://localhost:3000)
 - MCA: [http://localhost:3000/mca](http://localhost:3000/mca) · Case [http://localhost:3000/mca/case](http://localhost:3000/mca/case)
-- EWI: [http://localhost:3000/ewi](http://localhost:3000/ewi) · Intake [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake) · after Start Investigation, progress is at `/ewi/investigation` and the completed summary, findings, inconsistencies, sources, questions, and Word download are at `/ewi/histories/:id`
+- EWI: [http://localhost:3000/ewi](http://localhost:3000/ewi) (dashboard) · Intake [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake) · Progress [http://localhost:3000/ewi/investigation](http://localhost:3000/ewi/investigation) · Results and Word download at `/ewi/histories/:id`
+
+Local EWI demo uses `RESEARCH_PROVIDER=mock` (fixtures). Live vendor HTTP is not connected. The mock path is a full investigation through report download; unavailable/restricted sources are recorded honestly.
 - Legacy MCA URLs (`/case`, `/analysis`, `/report`, `/histories`) redirect to `/mca/*`
 
 See [DEMO_GUIDE.md](./DEMO_GUIDE.md) for the full client demonstration script (step-by-step).
@@ -405,6 +407,10 @@ npm run typecheck    # TypeScript check
 | [Medical analysis](./docs/medical-analysis.md) | MCA analysis engine |
 | [EWI report](./docs/ewi-report-workflow.md) | Word report |
 | [EWI AI analysis](./docs/ewi-ai-analysis.md) | Grounded analysis rules |
+| [EWI legal research](./docs/ewi-legal-research.md) | Cases, orders, depositions, Lexis rules |
+| [EWI online presence](./docs/ewi-online-presence.md) | Websites, social, videos, maps, reviews |
+| [EWI professional background](./docs/ewi-professional-background.md) | Grants, patents, awards, memberships, Open Payments |
+| [EWI request email workflow](./docs/ewi-request-email-workflow.md) | FOIA, university, follow-up, TrialSmith gates |
 | [Frontend demo](./docs/frontend-demo.md) | MCA demonstration UI |
 
 ## Roadmap
@@ -422,11 +428,13 @@ npm run typecheck    # TypeScript check
 | **Phase 2e** | Prisma schema, health checks, Swagger, KB/AI API endpoints | Health checks done; Swagger planned |
 | **Phase 3** | Demonstration UI — landing, case form, analysis workflow | ✅ Complete |
 | **Phase 4** | Case history, report viewer, PDF export | ✅ Complete |
-| **Phase 4b** | Dual-product architecture (MCA + EWI), EWI workflow, Word report | ✅ Complete |
+| **Phase 4b** | Dual-product architecture (MCA + EWI), EWI workflow, Word report | ✅ Mock path complete end-to-end. Live research HTTP not connected |
 | **Phase 4c** | Shared login and roles (off unless `AUTH_ENABLED=true`) | ✅ Foundation complete. Firm tenancy is not built |
 | **Phase 4d** | Email provider adapters (console locally; SMTP when confirmed) | ✅ Complete |
+| **Phase 4e** | EWI attorney UI (dashboard, timeline, findings, cancel/retry) | ✅ Complete for mock investigations |
 | **Phase 5** | Law-firm tenancy | Planned |
 | **Phase 6** | Live medical literature and research vendor calls | Catalog only. Live HTTP is not connected |
+| **Phase 6b** | EWI request/email web UI | API only; UI planned |
 | **Phase 7** | MCA PDF file export | On-screen MCA report exists. PDF file export is planned |
 | **Phase 8** | Admin panel, audit UI, notifications | Planned |
 | **Phase 9** | Subscription and billing | Planned |

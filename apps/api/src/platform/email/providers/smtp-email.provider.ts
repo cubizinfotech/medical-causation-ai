@@ -121,13 +121,38 @@ function toDeliveryError(error: unknown): EmailDeliveryError {
     code === 'ESOCKET' ||
     code === 'EAI_AGAIN' ||
     (responseCode >= 400 && responseCode < 500);
-  const message =
-    error instanceof Error ? error.message : 'SMTP delivery failed';
+  const raw = error instanceof Error ? error.message : 'SMTP delivery failed';
   return new EmailDeliveryError(
-    message,
+    sanitizeSmtpErrorMessage(raw, code, responseCode),
     retryable ? 'transient' : 'rejected',
     retryable,
   );
+}
+
+/** Strip credentials and verbose vendor text from SMTP failures before logging. */
+function sanitizeSmtpErrorMessage(
+  message: string,
+  code: string,
+  responseCode: number,
+): string {
+  const lowered = message.toLowerCase();
+  if (
+    lowered.includes('pass') ||
+    lowered.includes('auth') ||
+    lowered.includes('credential') ||
+    lowered.includes('login')
+  ) {
+    return code
+      ? `SMTP authentication or authorization failed (${code}).`
+      : 'SMTP authentication or authorization failed.';
+  }
+  if (responseCode > 0) {
+    return `SMTP delivery failed (response ${responseCode}).`;
+  }
+  if (code) {
+    return `SMTP delivery failed (${code}).`;
+  }
+  return 'SMTP delivery failed.';
 }
 
 function readCode(error: unknown): string {

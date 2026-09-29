@@ -86,9 +86,12 @@ Templates live in `apps/api/src/modules/ewi/correspondence` and use the same `{{
 
 | Template | Use |
 |----------|-----|
-| `ewi/foia-request` | Public-records request |
-| `ewi/university-record-request` | Education or university records |
-| `ewi/graduation-verification` | Degree verification |
+| `ewi/foia-request` | Public-records request (asks about fees) |
+| `ewi/university-record-request` | Education or university file request |
+| `ewi/graduation-announcement` | Graduation announcement request |
+| `ewi/university-employment-request` | University employment/activity request |
+| `ewi/follow-up-request` | Status follow-up after about two weeks |
+| `ewi/trialsmith-outreach` | TrialSmith outreach when specifically configured |
 | `ewi/research-request` | Other client-approved research request |
 
-`EwiCorrespondenceService.compose` builds the message. `deliver` sends it through the shared email service. The investigation job does not call either method, so starting an investigation does not email a university, agency, or other organization.
+`EwiCorrespondenceService.compose` builds the message. `deliver` sends it through the shared email service. The configurable prepare/approve/send workflow is documented in [ewi-request-email-workflow.md](./ewi-request-email-workflow.md). Investigation completion may prepare drafts when enabled. It does not send to an organization unless the workflow is authorized, a recipient is known, and send gates pass.

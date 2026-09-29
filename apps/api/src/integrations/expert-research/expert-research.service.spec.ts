@@ -56,7 +56,13 @@ describe('ExpertResearchService', () => {
     expect(lexis?.access).toBe('restricted');
     expect(lexis?.items[0]?.summary).toBe('');
     expect(lexis?.items[0]?.url).toBe('https://advance.lexis.com/example');
-    expect(lexis?.items[0]?.raw).toEqual({ metadataOnly: true, fixture: true });
+    expect(lexis?.items[0]?.raw).toMatchObject({
+      metadataOnly: true,
+      caseName: 'Licensed Case Caption',
+      caseNumber: 'LN-001',
+    });
+    expect(lexis?.items[0]?.raw).not.toHaveProperty('fullText');
+    expect(lexis?.items[0]?.raw).not.toHaveProperty('fixture');
   });
 
   it('marks disagreeing license fixtures as conflicting without adding records', async () => {
@@ -147,7 +153,9 @@ describe('ExpertResearchService', () => {
       city: 'Boston',
       specialty: 'Orthopedics',
     });
-    const trademarks = results.find((result) => result.sourceId === 'trademarks');
+    const trademarks = results.find(
+      (result) => result.sourceId === 'trademarks',
+    );
     expect(trademarks?.status).toBe('no_result');
     expect(trademarks?.outcome).toBe('no_result');
     expect(trademarks?.items).toEqual([]);
@@ -176,7 +184,9 @@ describe('ExpertResearchService', () => {
 
   it('keeps collecting when one provider fails', async () => {
     const pubmed = EXPERT_RESEARCH_CATALOG.find((item) => item.id === 'pubmed');
-    const patents = EXPERT_RESEARCH_CATALOG.find((item) => item.id === 'patents');
+    const patents = EXPERT_RESEARCH_CATALOG.find(
+      (item) => item.id === 'patents',
+    );
     if (!pubmed || !patents) throw new Error('catalog entries missing');
     const service = new ExpertResearchService([
       new CatalogExpertResearchProvider(

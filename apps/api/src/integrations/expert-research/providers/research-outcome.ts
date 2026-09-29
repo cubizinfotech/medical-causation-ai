@@ -24,7 +24,10 @@ export function researchOutcomeFor(input: {
     return 'authentication_required';
   }
   if (input.status === 'error') return 'api_failure';
-  if (input.status === 'no_result' || (input.status === 'ok' && input.itemCount === 0)) {
+  if (
+    input.status === 'no_result' ||
+    (input.status === 'ok' && input.itemCount === 0)
+  ) {
     return 'no_result';
   }
   if (input.status === 'unavailable' || input.status === 'skipped') {

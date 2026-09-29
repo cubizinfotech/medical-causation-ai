@@ -10,7 +10,10 @@ import { QUEUE_PREFIXES } from '@platform/queues/queue-prefixes';
 import { EWI_INVESTIGATION_QUEUE_NAME } from './ewi-investigation-job.constants';
 import { EwiInvestigationJobService } from './ewi-investigation-job.service';
 import type { EwiInvestigationJobPayload } from './ewi-investigation-job.types';
-import { ExpertInvestigationService } from '../services/expert-investigation.service';
+import {
+  ExpertInvestigationService,
+  InvestigationCancelledError,
+} from '../services/expert-investigation.service';
 
 @Injectable()
 export class EwiInvestigationProcessor
@@ -37,6 +40,7 @@ export class EwiInvestigationProcessor
     );
 
     this.worker.on('failed', (job, error) => {
+      if (error instanceof InvestigationCancelledError) return;
       this.logger.error(
         `EWI job ${job?.id ?? 'unknown'} failed: ${error.message}`,
       );
@@ -51,12 +55,27 @@ export class EwiInvestigationProcessor
 
   private async process(payload: EwiInvestigationJobPayload): Promise<void> {
     const { jobId, request } = payload;
+    if (await this.jobService.isCancelled(jobId)) {
+      await this.jobService.markCancelled(jobId);
+      return;
+    }
+
     await this.jobService.markRunning(jobId);
+    const existing = await this.jobService.getJob(jobId);
 
     try {
       const outcome = await this.investigationService.investigate(request, {
+        jobId,
+        checkpoint: existing.checkpoint,
         onProgress: (update) => this.jobService.reportProgress(jobId, update),
+        onCheckpoint: (checkpoint) =>
+          this.jobService.saveCheckpoint(jobId, checkpoint),
+        shouldContinue: async () => !(await this.jobService.isCancelled(jobId)),
       });
+      if (await this.jobService.isCancelled(jobId)) {
+        await this.jobService.markCancelled(jobId);
+        return;
+      }
       await this.jobService.markCompleted(
         jobId,
         outcome.result,
@@ -64,6 +83,11 @@ export class EwiInvestigationProcessor
       );
       this.logger.log(`EWI investigation job ${jobId} completed`);
     } catch (error) {
+      if (error instanceof InvestigationCancelledError) {
+        await this.jobService.markCancelled(jobId);
+        this.logger.log(`EWI investigation job ${jobId} cancelled`);
+        return;
+      }
       const message =
         error instanceof Error ? error.message : 'Unknown investigation error';
       await this.jobService.markFailed(jobId, message);

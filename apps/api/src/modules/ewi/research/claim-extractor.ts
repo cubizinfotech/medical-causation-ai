@@ -51,15 +51,47 @@ function claimsFromItem(item: ExpertEvidenceItem): ExtractedClaim[] {
     }
   }
 
-  pushScalar(found, item, raw, 'graduationYear', 'graduation_date', cvDate, cvSource);
-  pushScalar(found, item, raw, 'graduationDate', 'graduation_date', cvDate, cvSource);
+  pushScalar(
+    found,
+    item,
+    raw,
+    'graduationYear',
+    'graduation_date',
+    cvDate,
+    cvSource,
+  );
+  pushScalar(
+    found,
+    item,
+    raw,
+    'graduationDate',
+    'graduation_date',
+    cvDate,
+    cvSource,
+  );
   pushScalar(found, item, raw, 'degreeYear', 'degree_date', cvDate, cvSource);
   pushScalar(found, item, raw, 'degreeDate', 'degree_date', cvDate, cvSource);
   pushScalar(found, item, raw, 'university', 'university', cvDate, cvSource);
   pushScalar(found, item, raw, 'degree', 'education', cvDate, cvSource);
-  pushScalar(found, item, raw, 'accreditation', 'university_accreditation', cvDate, cvSource);
+  pushScalar(
+    found,
+    item,
+    raw,
+    'accreditation',
+    'university_accreditation',
+    cvDate,
+    cvSource,
+  );
   pushScalar(found, item, raw, 'specialty', 'specialty', cvDate, cvSource);
-  pushScalar(found, item, raw, 'board', 'board_certification', cvDate, cvSource);
+  pushScalar(
+    found,
+    item,
+    raw,
+    'board',
+    'board_certification',
+    cvDate,
+    cvSource,
+  );
   pushScalar(
     found,
     item,
@@ -112,7 +144,10 @@ function claimsFromItem(item: ExpertEvidenceItem): ExtractedClaim[] {
   }
 
   const licenseStatus = readString(raw.licenseStatus) ?? readString(raw.status);
-  if (licenseStatus && (raw.licenseStatus != null || item.category === 'license')) {
+  if (
+    licenseStatus &&
+    (raw.licenseStatus != null || item.category === 'license')
+  ) {
     found.push(
       build(
         item,
@@ -130,7 +165,16 @@ function claimsFromItem(item: ExpertEvidenceItem): ExtractedClaim[] {
   const state = readString(raw.state);
   if (state && item.category === 'license') {
     found.push(
-      build(item, 'license', state, state, roleFor(item), 'stated', cvDate, cvSource),
+      build(
+        item,
+        'license',
+        state,
+        state,
+        roleFor(item),
+        'stated',
+        cvDate,
+        cvSource,
+      ),
     );
   }
 
@@ -139,7 +183,16 @@ function claimsFromItem(item: ExpertEvidenceItem): ExtractedClaim[] {
     for (const value of claimedStates) {
       if (typeof value !== 'string' || !value.trim()) continue;
       found.push(
-        build(item, 'license', value.trim(), value.trim(), 'claim', 'stated', cvDate, cvSource),
+        build(
+          item,
+          'license',
+          value.trim(),
+          value.trim(),
+          'claim',
+          'stated',
+          cvDate,
+          cvSource,
+        ),
       );
     }
   }
@@ -203,7 +256,16 @@ function pushScalar(
   const value = readString(raw[key]);
   if (!value) return;
   found.push(
-    build(item, field, defaultSubject(field, value), value, roleFor(item), 'stated', cvDate, cvSource),
+    build(
+      item,
+      field,
+      defaultSubject(field, value),
+      value,
+      roleFor(item),
+      'stated',
+      cvDate,
+      cvSource,
+    ),
   );
 }
 
@@ -215,18 +277,41 @@ function pushAuthorship(
   cvSource: string | null,
 ): void {
   const subject =
-    readString(raw.publication) ?? readString(raw.publicationTitle) ?? item.title;
+    readString(raw.publication) ??
+    readString(raw.publicationTitle) ??
+    item.title;
   const position = readString(raw.authorPosition);
   if (position) {
     found.push(
-      build(item, 'authorship', subject, position, roleFor(item), 'stated', cvDate, cvSource),
+      build(
+        item,
+        'authorship',
+        subject,
+        position,
+        roleFor(item),
+        'stated',
+        cvDate,
+        cvSource,
+      ),
     );
     found.push(
-      build(item, 'lead_author', subject, position, roleFor(item), 'stated', cvDate, cvSource),
+      build(
+        item,
+        'lead_author',
+        subject,
+        position,
+        roleFor(item),
+        'stated',
+        cvDate,
+        cvSource,
+      ),
     );
   }
 
-  if (typeof raw.leadAuthor === 'boolean' || typeof raw.firstAuthor === 'boolean') {
+  if (
+    typeof raw.leadAuthor === 'boolean' ||
+    typeof raw.firstAuthor === 'boolean'
+  ) {
     const lead = raw.leadAuthor === true || raw.firstAuthor === true;
     found.push(
       build(
@@ -244,14 +329,24 @@ function pushAuthorship(
     const lead = readString(raw.leadAuthor) ?? readString(raw.firstAuthor);
     if (lead) {
       found.push(
-        build(item, 'lead_author', subject, lead, roleFor(item), 'stated', cvDate, cvSource),
+        build(
+          item,
+          'lead_author',
+          subject,
+          lead,
+          roleFor(item),
+          'stated',
+          cvDate,
+          cvSource,
+        ),
       );
     }
   }
 }
 
 function roleFor(item: ExpertEvidenceItem): 'claim' | 'record' {
-  if (item.category === 'cv' || CLAIM_SOURCES.has(item.sourceId)) return 'claim';
+  if (item.category === 'cv' || CLAIM_SOURCES.has(item.sourceId))
+    return 'claim';
   if (item.raw?.cvDate || item.raw?.documentDate) return 'claim';
   return 'record';
 }

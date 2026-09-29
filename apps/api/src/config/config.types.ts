@@ -113,6 +113,31 @@ export interface EmailSettings {
   retryDelayMs: number;
 }
 
+/**
+ * EWI FOIA / university / outreach request workflow.
+ * Recipient addresses are supplied per request. Credentials stay in email env only.
+ */
+export interface EwiRequestWorkflowSettings {
+  /** When false, preparation and send paths stay inactive for investigations. */
+  enabled: boolean;
+  /** When true and other gates pass, approved requests may be sent without a second click. */
+  autoSend: boolean;
+  /** When true, requests must be approved before send. */
+  requireApproval: boolean;
+  /** Days after a successful send before a follow-up draft is due. */
+  followUpDays: number;
+  /** TrialSmith outreach only when specifically enabled. */
+  trialsmithEnabled: boolean;
+  /** Display name used in templates when the caller does not supply one. */
+  senderName: string;
+  /** Per-type automation flags. False forces manual review for that type. */
+  allowFoia: boolean;
+  allowUniversityFile: boolean;
+  allowGraduationAnnouncement: boolean;
+  allowUniversityEmployment: boolean;
+  allowFollowUp: boolean;
+}
+
 export interface AuthSettings {
   enabled: boolean;
   jwtSecret: string;
@@ -158,6 +183,11 @@ export interface RagConfigSettings {
   defaultReranker: string;
 }
 
+export interface OcrSettings {
+  provider: 'mock' | 'disabled';
+  autoOcr: boolean;
+}
+
 export interface RootConfig {
   app: AppSettings;
   database: DatabaseSettings;
@@ -167,8 +197,10 @@ export interface RootConfig {
   prompt: import('./ai-config.types').PromptConfigSettings;
   token: import('./ai-config.types').TokenConfigSettings;
   storage: StorageSettings;
+  ocr: OcrSettings;
   logging: LoggingSettings;
   email: EmailSettings;
+  ewiRequest: EwiRequestWorkflowSettings;
   auth: AuthSettings;
   jobs: JobsSettings;
   research: ResearchProviderSettings;

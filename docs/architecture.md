@@ -35,6 +35,10 @@ Local development does not need a DigitalOcean server. Production deployment is 
 | [ewi-architecture.md](./ewi-architecture.md) | EWI design |
 | [ewi-workflow.md](./ewi-workflow.md) | Investigation stages |
 | [research-providers.md](./research-providers.md) | Research adapters |
+| [ewi-legal-research.md](./ewi-legal-research.md) | Legal research dossier |
+| [ewi-online-presence.md](./ewi-online-presence.md) | Online presence dossier |
+| [ewi-professional-background.md](./ewi-professional-background.md) | Professional and financial background |
+| [ewi-request-email-workflow.md](./ewi-request-email-workflow.md) | FOIA / university request email workflow |
 | [email.md](./email.md) | Email |
 | [authentication.md](./authentication.md) | Login and roles |
 | [database.md](./database.md) | PostgreSQL schemas |

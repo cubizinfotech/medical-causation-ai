@@ -187,7 +187,8 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     category: 'award',
     accessClass: 'public',
     requirement: 'manual',
-    summary: 'User-supplied or future public award listings. No award is invented.',
+    summary:
+      'Authoritative award listings or user-supplied records. No award is invented.',
   }),
   source({
     id: 'military_claims',
@@ -196,7 +197,25 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     accessClass: 'public',
     requirement: 'manual',
     summary:
-      'Records the user supplies. No military service or claim is invented.',
+      'Public authoritative military records the investigation can use. No military service or medal is invented.',
+  }),
+  source({
+    id: 'memberships',
+    name: 'Professional memberships',
+    category: 'membership',
+    accessClass: 'public',
+    requirement: 'manual',
+    summary:
+      'Public organization membership records compared with CV claims. No membership is invented.',
+  }),
+  source({
+    id: 'professional_organizations',
+    name: 'Professional organizations',
+    category: 'membership',
+    accessClass: 'public',
+    requirement: 'manual',
+    summary:
+      'Public professional organization records. Membership is verified only when public evidence exists.',
   }),
   source({
     id: 'courtlistener',
@@ -209,12 +228,31 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
       'Free Law Project API. A free account token is required. Not called locally.',
   }),
   source({
+    id: 'justia',
+    name: 'Justia',
+    category: 'legal',
+    accessClass: 'public',
+    requirement: 'manual',
+    summary:
+      'Public Justia case links the user supplies or a future permitted API. No case is invented and no restricted page is scraped.',
+  }),
+  source({
+    id: 'state_court_records',
+    name: 'State court records',
+    category: 'legal',
+    accessClass: 'public',
+    requirement: 'manual',
+    summary:
+      'Public state court dockets and opinions that are legally available. No record is invented and no login wall is bypassed.',
+  }),
+  source({
     id: 'motions',
     name: 'Motions',
     category: 'motion',
     accessClass: 'public',
     requirement: 'manual',
-    summary: 'Public docket motions supplied for the investigation. No motion is invented.',
+    summary:
+      'Public docket motions supplied for the investigation. No motion is invented.',
   }),
   source({
     id: 'orders',
@@ -222,7 +260,8 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     category: 'court_order',
     accessClass: 'public',
     requirement: 'manual',
-    summary: 'Public court orders supplied for the investigation. No order is invented.',
+    summary:
+      'Public court orders supplied for the investigation. No order is invented.',
   }),
   source({
     id: 'pleadings',
@@ -240,7 +279,7 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     accessClass: 'restricted',
     requirement: 'manual',
     summary:
-      'Depositions are not scraped. A user-supplied transcript reference may be recorded as metadata.',
+      'Depositions are not scraped. A user-supplied transcript reference may be recorded as permitted metadata only.',
   }),
   source({
     id: 'expert_testimony',
@@ -332,7 +371,8 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     accessClass: 'restricted',
     requirement: 'subscription',
     credentialEnv: 'EXPERTWITNESS_API_KEY',
-    summary: 'ExpertWitness.com subscription or manual export only. No scraping.',
+    summary:
+      'ExpertWitness.com subscription or manual export only. No scraping.',
   }),
   source({
     id: 'other_expert_directories',
@@ -347,11 +387,11 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
   source({
     id: 'expert_website',
     name: 'Expert websites',
-    category: 'profile',
+    category: 'website',
     accessClass: 'public',
     requirement: 'manual',
     summary:
-      'A site URL supplied for the investigation. No general web crawl.',
+      'A site URL supplied for the investigation. No general web crawl. Copyrighted page bodies are not copied unless permitted.',
   }),
   source({
     id: 'ime_websites',
@@ -372,6 +412,15 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
       'Commercial advertising directories. Subscription or manual access only. No scraping.',
   }),
   source({
+    id: 'other_public_websites',
+    name: 'Other public websites',
+    category: 'website',
+    accessClass: 'public',
+    requirement: 'manual',
+    summary:
+      'Other publicly accessible pages supplied for the investigation. No scrape of restricted content and no copyrighted body copy unless permitted.',
+  }),
+  source({
     id: 'ime_advertising',
     name: 'IME advertising',
     category: 'advertising',
@@ -389,7 +438,7 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     requirement: 'account',
     credentialEnv: 'YOUTUBE_API_KEY',
     summary:
-      'YouTube Data API. A Google API key is required. Not called locally.',
+      'YouTube Data API. Public video metadata only. Transcripts are stored only when legally and technically permitted. Not called locally.',
   }),
   source({
     id: 'presentations',
@@ -416,7 +465,7 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     requirement: 'user_credentials',
     credentialEnv: 'SOCIAL_API_KEY',
     summary:
-      'Official platform APIs and user-provided credentials only. No scraping of profiles.',
+      'Official platform APIs for publicly accessible content only. No friend requests, no private accounts, no bypass of privacy controls, and no scraping.',
   }),
   source({
     id: 'news',

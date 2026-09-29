@@ -7,8 +7,10 @@ import {
   Header,
   HeadingLevel,
   Packer,
+  PageBreak,
   PageNumber,
   Paragraph,
+  TableOfContents,
   TextRun,
 } from 'docx';
 import type { ReportArtifact } from './report.types';
@@ -31,12 +33,72 @@ export class DocxReportRenderer {
     if (model.subtitle) {
       children.push(paragraph({ text: model.subtitle, style: 'subtitle' }));
     }
-    children.push(
-      paragraph({
-        text: `Generated ${model.generatedAt} · Template ${model.templateId} ${model.templateVersion}`,
-        style: 'note',
-      }),
-    );
+
+    const meta = model.metadata;
+    if (meta) {
+      const metaLines = [
+        meta.expertName ? `Expert: ${meta.expertName}` : null,
+        meta.city ? `City: ${meta.city}` : null,
+        meta.specialty ? `Specialty: ${meta.specialty}` : null,
+        meta.investigationDate
+          ? `Investigation date: ${meta.investigationDate}`
+          : null,
+        `Generated: ${model.generatedAt}`,
+        `Report version: ${meta.reportVersion ?? model.templateVersion}`,
+        `Template: ${meta.templateId ?? model.templateId}`,
+        meta.product ? `Product: ${meta.product}` : null,
+      ].filter((line): line is string => Boolean(line));
+      for (const line of metaLines) {
+        children.push(paragraph({ text: line, style: 'note' }));
+      }
+      if (meta.disclaimer) {
+        children.push(paragraph({ text: meta.disclaimer, style: 'note' }));
+      }
+    } else {
+      children.push(
+        paragraph({
+          text: `Generated ${model.generatedAt} · Template ${model.templateId} ${model.templateVersion}`,
+          style: 'note',
+        }),
+      );
+    }
+
+    if (model.includeTableOfContents) {
+      children.push(
+        new Paragraph({
+          spacing: { before: 240, after: 120 },
+          children: [
+            new TextRun({
+              text: 'Table of Contents',
+              bold: true,
+              size: 28,
+              font: 'Calibri',
+              color: NAVY,
+            }),
+          ],
+        }),
+        new Paragraph({
+          children: [
+            new TableOfContents('Table of Contents', {
+              hyperlink: true,
+            }),
+          ],
+        }),
+        new Paragraph({
+          spacing: { after: 200 },
+          children: [
+            new TextRun({
+              text: 'Open this document in Microsoft Word and update the table of contents field if entries are blank.',
+              italics: true,
+              size: 18,
+              font: 'Calibri',
+              color: '666666',
+            }),
+          ],
+        }),
+        new Paragraph({ children: [new PageBreak()] }),
+      );
+    }
 
     for (const section of model.sections) {
       children.push(paragraph({ text: section.title, style: 'heading' }));
@@ -48,6 +110,18 @@ export class DocxReportRenderer {
     const document = new Document({
       title: model.title,
       description: `${model.product} report ${model.templateVersion}`,
+      creator: 'Expert Witness Investigation',
+      keywords: [
+        model.product,
+        model.templateId,
+        model.metadata?.expertName,
+        model.metadata?.specialty,
+      ]
+        .filter(Boolean)
+        .join(', '),
+      features: {
+        updateFields: true,
+      },
       styles: {
         default: {
           document: {
@@ -77,6 +151,12 @@ export class DocxReportRenderer {
                       size: 18,
                       font: 'Calibri',
                     }),
+                    new TextRun({
+                      text: `  ·  ${model.templateVersion}`,
+                      color: '666666',
+                      size: 16,
+                      font: 'Calibri',
+                    }),
                   ],
                 }),
               ],
@@ -89,7 +169,7 @@ export class DocxReportRenderer {
                   alignment: AlignmentType.RIGHT,
                   children: [
                     new TextRun({
-                      text: `${model.templateVersion}  ·  Page `,
+                      text: `${model.templateId} ${model.templateVersion}  ·  Page `,
                       size: 16,
                       font: 'Calibri',
                       color: '666666',

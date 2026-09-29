@@ -30,7 +30,7 @@ describe('email providers', () => {
         port: 1025,
         secure: false,
         user: '',
-        password: 'super-secret-pass',
+        password: 'test-only-not-a-real-secret',
       },
       transport,
     );
@@ -54,7 +54,7 @@ describe('email providers', () => {
     );
   });
 
-  it('marks SMTP timeouts as retryable', async () => {
+  it('marks SMTP timeouts as retryable without leaking details', async () => {
     const sendMail = jest.fn(() =>
       Promise.reject(
         Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' }),
@@ -74,6 +74,33 @@ describe('email providers', () => {
     await expect(provider.send(message)).rejects.toMatchObject({
       retryable: true,
       code: 'transient',
+      message: 'SMTP delivery failed (ETIMEDOUT).',
+    });
+  });
+
+  it('sanitizes SMTP authentication failures so passwords are not logged', async () => {
+    const sendMail = jest.fn(() =>
+      Promise.reject(
+        Object.assign(new Error('Invalid login: password rejected'), {
+          code: 'EAUTH',
+          responseCode: 535,
+        }),
+      ),
+    );
+    const transport: SmtpTransport = { sendMail };
+    const provider = new SmtpEmailProvider(
+      {
+        host: 'smtp.example.com',
+        port: 587,
+        secure: false,
+        user: 'records@example.com',
+        password: 'test-only-not-a-real-secret',
+      },
+      transport,
+    );
+    await expect(provider.send(message)).rejects.toMatchObject({
+      retryable: false,
+      message: 'SMTP authentication or authorization failed (EAUTH).',
     });
   });
 

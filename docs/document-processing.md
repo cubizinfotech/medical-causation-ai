@@ -1,10 +1,10 @@
 # Document Processing
 
-**Current status.** Parsing is implemented and is used by the indexing pipeline. Chunking and embeddings live in [indexing.md](./indexing.md), not in this module.
+**Current status.** Parsing, OCR fallback for scanned PDFs/images, Bates detection, and storage policy checks are implemented. The indexing pipeline consumes processed text. EWI builds evidence references on top of this module.
 
 ## Purpose
 
-The **Document Processing Pipeline** extracts structured text and metadata from medical documents in the knowledge base.
+The **Document Processing Pipeline** extracts structured text and metadata from documents (knowledge base and EWI evidence uploads).
 
 ## Supported Formats
 
@@ -14,76 +14,63 @@ The **Document Processing Pipeline** extracts structured text and metadata from 
 | Word | `.docx` | `DocxParser` | Headings, paragraphs, tables |
 | Plain text | `.txt` | `TxtParser` | Paragraph sections |
 | Markdown | `.md` | `MarkdownParser` | Headings and paragraphs |
+| Images | `.png` `.jpg` `.jpeg` `.tif` `.tiff` `.webp` | `ImageParser` | Single page → OCR |
 
-### Future Formats (Prepared)
+Scanned PDFs are detected via low text density (`needsOcr`). When `OCR_AUTO=true`, the configured OCR provider runs. Failures set `ocrStatus: failed` and do not invent text.
 
-| Format | Status |
-|--------|--------|
-| Images (PNG, JPG) | Planned — OCR pipeline |
-| HTML | Planned |
-| EPUB | Planned |
+## OCR
 
-Scanned PDFs are detected via low text density; the `needsOcr` flag is set for future OCR fallback.
+| Setting | Values |
+|---------|--------|
+| `OCR_PROVIDER` | `mock` (default, tests/dev) · `disabled` |
+| `OCR_AUTO` | `true` (default) · `false` |
+
+Providers implement `IOcrProvider`. Inject additional engines later without changing callers.
+
+## Bates stamps
+
+`detectBatesNumbers` extracts Bates-like tokens from collected text only. Numbers are never fabricated. Detected values attach to pages and evidence references.
+
+## Storage policy
+
+`evaluateDocumentStorage` enforces:
+
+- LexisNexis / Westlaw PDFs: **rejected** (no file, no extracted body)
+- Restricted access: **metadata only**
+- Public documents: store only when permissions allow
 
 ## Module Location
 
 ```
 apps/api/src/modules/document-processing/
-├── constants/          # Parser types, extensions, OCR thresholds
-├── controllers/        # Reserved for future API endpoints
-├── dto/                # Response DTOs for future API
-├── entities/           # Reserved for future persistence
-├── exceptions/         # Reusable processing exceptions
-├── interfaces/         # IDocumentParser, IDocumentProcessingService
-├── parsers/            # PDF, DOCX, TXT, Markdown parsers + factory
-├── services/           # DocumentProcessingService (pipeline entry point)
-├── types/              # ProcessedDocumentResult, ProcessedPage, etc.
-└── utils/              # Text normalization, metadata extraction
+├── constants/
+├── ocr/                 # OcrService, mock/disabled providers
+├── parsers/             # PDF, DOCX, TXT, Markdown, Image
+├── services/            # DocumentProcessingService
+├── types/               # ProcessedDocumentResult (+ Bates, OCR, page refs)
+└── utils/               # Bates detection, storage policy, normalization
 ```
 
-Frontend types (no UI, no API):
+EWI evidence layer:
 
 ```
-apps/web/src/features/document-processing/
-├── types.ts
-├── document-processing.service.ts   # Client stubs
-└── index.ts
+apps/api/src/modules/ewi/documents/
+├── ewi-evidence-reference.types.ts   # document/page/Bates/URL/evidence ID
+├── ewi-document-intake.service.ts    # ingest + duplicates
+└── ewi-report-reference.service.ts   # TOC / searchable report refs
 ```
 
-## Parser Architecture
+## Evidence reference model (EWI)
 
-Every parser implements the same contract:
+Each important finding can link to:
 
-```typescript
-interface IDocumentParser {
-  readonly parserType: ParserType;
-  readonly supportedExtensions: readonly string[];
-  canParse(extension: string): boolean;
-  parse(input: ParserInput): Promise<ParserOutput>;
-}
-```
+- `documentId`
+- `pageNumber` (only when observed)
+- `batesNumber` (only when detected)
+- `sourceUrl`
+- `evidenceId`
 
-The `ParserFactory` selects the correct parser by file extension. Parsing logic is **not duplicated** — each format has a dedicated parser class.
-
-### PDF Parser
-
-- Library: **pdfjs-dist** (Mozilla PDF.js)
-- Extracts text **page-by-page** preserving page numbers and reading order
-- Processes one page at a time for large medical books
-- Detects scanned/low-text PDFs and sets `needsOcr: true`
-- Extracts PDF metadata (title, author) when available
-
-### DOCX Parser
-
-- Library: **mammoth**
-- Extracts headings, paragraphs, and basic tables
-- Converts to structured sections with type and order
-
-### TXT / Markdown Parsers
-
-- UTF-8 text extraction
-- Markdown: parses `#` headings into structured sections
-- Output normalized via shared text utilities
+`EwiReportReferenceService` builds a 40-section TOC index with Bates and page search maps.
 
 ## Processing Workflow
 
@@ -92,116 +79,31 @@ Discover Document
        ↓
    Validate (size, extension, path)
        ↓
-   Choose Parser (ParserFactory)
+   Storage policy (Lexis / restricted / public)
        ↓
-   Extract Metadata (file stats + parser output)
+   Choose Parser (ParserFactory)
        ↓
    Extract Text (pages / sections)
        ↓
-   Normalize (whitespace, unicode, line endings)
+   OCR when needsOcr (configured provider)
        ↓
-   Return ProcessedDocumentResult
+   Detect Bates + preserve page refs
+       ↓
+   Normalize → ProcessedDocumentResult
 ```
 
-### Entry Point
+## Tests
 
-```typescript
-// Process any file by path
-const result = await documentProcessingService.processDocument({
-  filePath: '/absolute/path/to/document.pdf',
-  documentId: 'optional-kb-id',
-  relativePath: 'articles/mild tbi/study.pdf',
-});
-
-// Process a knowledge base document by ID
-const result = await documentProcessingService.processKnowledgeBaseDocument(documentId);
-```
-
-## Metadata Extraction
-
-Each processed document includes:
-
-| Field | Description |
-|-------|-------------|
-| `title` | From PDF metadata or filename |
-| `filename` | Original file name |
-| `extension` | Lowercase extension |
-| `fileSize` | Bytes on disk |
-| `pageCount` | Number of pages (PDF) |
-| `wordCount` | Total words in normalized text |
-| `charCount` | Total characters |
-| `estimatedTokens` | ~4 chars per token estimate |
-| `createdAt` / `modifiedAt` | File system timestamps |
-| `author` | From PDF/DOCX metadata when available |
-| `language` | Reserved for future detection |
-| `needsOcr` | True when PDF appears scanned |
-
-## Text Normalization
-
-Shared utilities in `utils/text-normalization.util.ts`:
-
-- Normalize Unicode (NFKC)
-- Strip zero-width and invisible characters
-- Normalize line endings (`\r\n` → `\n`)
-- Collapse repeated blank lines
-- Trim trailing whitespace per line
-- Preserve paragraph structure
-
-## Error Handling
-
-| Exception | When |
-|-----------|------|
-| `UnsupportedFileTypeException` | Extension has no parser |
-| `DocumentCorruptedException` | File is unreadable or invalid |
-| `DocumentTooLargeException` | Exceeds `KNOWLEDGE_BASE_MAX_FILE_SIZE_MB` |
-| `ParsingFailedException` | Parser error during extraction |
-| `EmptyDocumentException` | No extractable text after parsing |
-
-## Future OCR Support
-
-When a PDF has very little extractable text:
-
-1. `needsOcr` is set to `true` on metadata
-2. A warning is added to `ProcessedDocumentResult.warnings`
-3. A future OCR parser (Tesseract, cloud vision) will plug into the same `IDocumentParser` interface
-
-## Configuration
-
-Uses existing storage config from `.env`:
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `KNOWLEDGE_BASE_MAX_FILE_SIZE_MB` | `500` | Max file size for processing |
-| `KNOWLEDGE_BASE_PATH` | `./knowledge-base` | Root for KB document discovery |
-
-## Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `pdfjs-dist` | PDF page-by-page text extraction |
-| `mammoth` | DOCX to structured text |
-
-## Testing
+- Scanned PDF OCR detection and completion
+- OCR failure marking
+- Bates detection (and no fabrication)
+- Page references preserved / not invented for TXT
+- Corrupted PDF rejection
+- Duplicate intake by checksum
+- Lexis storage rejection
+- Report TOC Bates/page search
 
 ```bash
 cd apps/api
-npm run test
+npm test -- src/modules/document-processing src/modules/ewi/documents
 ```
-
-Integration tests cover:
-
-- TXT and Markdown parsing (temp files)
-- DOCX parsing (generated fixture via `docx` dev dependency)
-- PDF parsing (real knowledge base article PDF)
-- Metadata and page numbering verification
-- Text normalization unit tests
-
-## Next Phase
-
-After document processing:
-
-1. **Chunking** — split `normalizedText` into overlapping chunks
-2. **Embeddings** — generate vectors via `AiService`
-3. **Vector indexing** — store in pgvector
-4. **RAG retrieval** — semantic search over processed documents
-5. **API endpoints** — expose processing via REST

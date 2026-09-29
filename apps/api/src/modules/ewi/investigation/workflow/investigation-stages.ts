@@ -15,6 +15,9 @@ export interface InvestigationStageDefinition {
     | 'research'
     | 'cross-check'
     | 'discrepancy'
+    | 'analyze-legal'
+    | 'analyze-presence'
+    | 'analyze-financial'
     | 'summary'
     | 'questions'
     | 'report';
@@ -84,11 +87,19 @@ export const EWI_WORKFLOW_STAGES: readonly InvestigationStageDefinition[] = [
     providers: ['awards', 'military_claims'],
   },
   {
+    id: 'memberships',
+    label: 'Research memberships and professional organizations',
+    kind: 'research',
+    providers: ['memberships', 'professional_organizations'],
+  },
+  {
     id: 'legal',
     label: 'Research legal cases, motions, orders and available references',
     kind: 'research',
     providers: [
       'courtlistener',
+      'justia',
+      'state_court_records',
       'motions',
       'orders',
       'pleadings',
@@ -117,7 +128,12 @@ export const EWI_WORKFLOW_STAGES: readonly InvestigationStageDefinition[] = [
     id: 'websites',
     label: 'Research expert websites and advertising',
     kind: 'research',
-    providers: ['expert_website', 'advertising', 'google_maps'],
+    providers: [
+      'expert_website',
+      'advertising',
+      'other_public_websites',
+      'google_maps',
+    ],
   },
   {
     id: 'ime',
@@ -174,6 +190,24 @@ export const EWI_WORKFLOW_STAGES: readonly InvestigationStageDefinition[] = [
     providers: [],
   },
   {
+    id: 'analyze-legal',
+    label: 'Analyze legal materials',
+    kind: 'analyze-legal',
+    providers: [],
+  },
+  {
+    id: 'analyze-presence',
+    label: 'Analyze online presence',
+    kind: 'analyze-presence',
+    providers: [],
+  },
+  {
+    id: 'analyze-financial',
+    label: 'Analyze income and bias information',
+    kind: 'analyze-financial',
+    providers: [],
+  },
+  {
     id: 'summary',
     label: 'Generate investigation summary',
     kind: 'summary',
@@ -201,8 +235,9 @@ export type EwiWorkflowStageId = (typeof EWI_WORKFLOW_STAGES)[number]['id'];
 
 /** The investigation plan is the stage list. Every catalog provider is included once. */
 export function createResearchPlan(
-  _query: ExpertResearchQuery,
+  _query?: ExpertResearchQuery,
 ): readonly InvestigationStageDefinition[] {
+  void _query;
   return EWI_WORKFLOW_STAGES;
 }
 

@@ -10,8 +10,11 @@ import {
 import {
   describeResearchStage,
   executeInvestigationWorkflow,
+  InvestigationCancelledError,
   isTransientResearchFailure,
 } from './investigation-workflow';
+import { exponentialBackoffMs, mapProviderAttempt } from './provider-attempt';
+import { PublicResearchCache } from './research-cache';
 
 describe('investigation workflow', () => {
   it('plans every catalog provider once', () => {
@@ -31,6 +34,10 @@ describe('investigation workflow', () => {
       }),
     ),
   };
+
+  beforeEach(() => {
+    report.build.mockClear();
+  });
 
   it('continues when a source is unavailable and does not invent awards', async () => {
     const stages = EWI_WORKFLOW_STAGES.filter((stage) =>
@@ -68,9 +75,22 @@ describe('investigation workflow', () => {
     expect(outcome.result.summary).not.toMatch(
       /award recipient|received a medal/i,
     );
-    expect(outcome.result.questionCount).toBe(0);
+    // Empty findings still yield uncertainty questions grounded in empty source attempts.
+    expect(outcome.result.questionCount).toBeGreaterThanOrEqual(100);
+    expect(
+      outcome.result.questions.every((item) => item.evidenceBasis.length > 0),
+    ).toBe(true);
+    expect(JSON.stringify(outcome.result.questions)).not.toMatch(
+      /award recipient|received a medal/i,
+    );
     expect(outcome.result.analysis.origin).toBe('deterministic');
     expect(outcome.result.summary).toMatch(/could not be verified/i);
+    expect(
+      outcome.result.sourceStatuses.every(
+        (status) =>
+          status.attemptStatus === 'unavailable' && status.checked === true,
+      ),
+    ).toBe(true);
   });
 
   it('records that LexisNexis requires authorized access and keeps no content', () => {
@@ -101,19 +121,23 @@ describe('investigation workflow', () => {
     expect(message).toMatch(/Continuing|1 item/i);
   });
 
-  it('retries a transient provider failure and then keeps the successful result', async () => {
+  it('retries a transient provider failure with exponential backoff', async () => {
     const stages = EWI_WORKFLOW_STAGES.filter((stage) =>
       ['identify-expert', 'patents', 'report'].includes(stage.id),
     );
     let attempts = 0;
+    const delays: number[] = [];
     const outcome = await executeInvestigationWorkflow(
       { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
       {
         stages,
         report,
         maxAttempts: 3,
-        retryDelayMs: 0,
-        sleep: () => Promise.resolve(),
+        retryDelayMs: 10,
+        sleep: (ms) => {
+          delays.push(ms);
+          return Promise.resolve();
+        },
         research: {
           collectProviders: (_query, providerIds) => {
             attempts += 1;
@@ -143,6 +167,7 @@ describe('investigation workflow', () => {
     );
 
     expect(attempts).toBe(2);
+    expect(delays[0]).toBe(exponentialBackoffMs(10, 1));
     expect(
       isTransientResearchFailure(
         emptyResult('patents', 'error', 'Rate limited. Retry after 10ms.'),
@@ -151,6 +176,10 @@ describe('investigation workflow', () => {
     expect(outcome.result.evidence.map((item) => item.title)).toEqual([
       'Development fixture: patent search',
     ]);
+    expect(
+      outcome.result.sourceStatuses.find((item) => item.sourceId === 'patents')
+        ?.attemptStatus,
+    ).toBe('completed');
   });
 
   it('fails the investigation when the expert name is missing', async () => {
@@ -166,6 +195,271 @@ describe('investigation workflow', () => {
         },
       ),
     ).rejects.toThrow(/expert name, city, and medical specialty/i);
+  });
+
+  it('stops when the investigation is cancelled mid-run', async () => {
+    let continueChecks = 0;
+    await expect(
+      executeInvestigationWorkflow(
+        { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
+        {
+          stages: EWI_WORKFLOW_STAGES.filter((stage) =>
+            ['identify-expert', 'grants', 'report'].includes(stage.id),
+          ),
+          report,
+          retryDelayMs: 0,
+          sleep: () => Promise.resolve(),
+          shouldContinue: () => {
+            continueChecks += 1;
+            return continueChecks < 3;
+          },
+          research: {
+            collectProviders: () =>
+              Promise.resolve([
+                emptyResult('grants', 'ok', 'fixture', [
+                  {
+                    sourceId: 'grants',
+                    category: 'grant',
+                    title: 'Grant',
+                    summary: 'fixture',
+                    access: 'public',
+                    informationStatus: 'unverified',
+                  },
+                ]),
+              ]),
+          },
+        },
+      ),
+    ).rejects.toBeInstanceOf(InvestigationCancelledError);
+    expect(report.build).not.toHaveBeenCalled();
+  });
+
+  it('skips duplicate provider searches within one investigation', async () => {
+    const stages = [
+      ...EWI_WORKFLOW_STAGES.filter((stage) => stage.id === 'identify-expert'),
+      {
+        id: 'grants-a',
+        label: 'Grants A',
+        kind: 'research' as const,
+        providers: ['grants' as const],
+      },
+      {
+        id: 'grants-b',
+        label: 'Grants B',
+        kind: 'research' as const,
+        providers: ['grants' as const],
+      },
+      ...EWI_WORKFLOW_STAGES.filter((stage) => stage.id === 'report'),
+    ];
+    const calls: ExpertResearchProviderId[][] = [];
+    const outcome = await executeInvestigationWorkflow(
+      { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
+      {
+        stages,
+        report,
+        retryDelayMs: 0,
+        sleep: () => Promise.resolve(),
+        research: {
+          collectProviders: (_query, providerIds) => {
+            calls.push([...providerIds]);
+            return Promise.resolve(
+              providerIds.map((sourceId) =>
+                emptyResult(sourceId, 'ok', 'fixture', [
+                  {
+                    sourceId,
+                    category: 'grant',
+                    title: 'Grant listing',
+                    summary: 'fixture',
+                    access: 'public',
+                    informationStatus: 'unverified',
+                  },
+                ]),
+              ),
+            );
+          },
+        },
+      },
+    );
+
+    expect(calls).toEqual([['grants']]);
+    const grantStatuses = outcome.result.sourceStatuses.filter(
+      (item) => item.sourceId === 'grants',
+    );
+    expect(
+      grantStatuses.some((item) => item.attemptStatus === 'completed'),
+    ).toBe(true);
+    expect(grantStatuses.some((item) => item.attemptStatus === 'skipped')).toBe(
+      true,
+    );
+    expect(
+      grantStatuses.find((item) => item.attemptStatus === 'skipped')?.checked,
+    ).toBe(false);
+  });
+
+  it('resumes from a checkpoint and does not re-run completed stages', async () => {
+    const stages = EWI_WORKFLOW_STAGES.filter((stage) =>
+      ['identify-expert', 'grants', 'report'].includes(stage.id),
+    );
+    const calls: ExpertResearchProviderId[][] = [];
+    const outcome = await executeInvestigationWorkflow(
+      { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
+      {
+        stages,
+        report,
+        retryDelayMs: 0,
+        sleep: () => Promise.resolve(),
+        checkpoint: {
+          completedStageIds: ['identify-expert', 'grants'],
+          sourceResults: [
+            emptyResult('grants', 'ok', 'fixture', [
+              {
+                sourceId: 'grants',
+                category: 'grant',
+                title: 'Cached grant',
+                summary: 'from checkpoint',
+                access: 'public',
+                informationStatus: 'unverified',
+              },
+            ]),
+          ],
+          evidence: [
+            {
+              sourceId: 'grants',
+              category: 'grant',
+              title: 'Cached grant',
+              summary: 'from checkpoint',
+              access: 'public',
+              informationStatus: 'unverified',
+              identityMatch: 'matched',
+            },
+          ],
+          stageNotes: [{ label: 'Research grants', message: 'Resumed' }],
+        },
+        research: {
+          collectProviders: (_query, providerIds) => {
+            calls.push([...providerIds]);
+            return Promise.resolve(
+              providerIds.map((sourceId) =>
+                emptyResult(sourceId, 'ok', 'should not run'),
+              ),
+            );
+          },
+        },
+      },
+    );
+
+    expect(calls).toEqual([]);
+    expect(outcome.result.evidence.map((item) => item.title)).toEqual([
+      'Cached grant',
+    ]);
+    expect(report.build).toHaveBeenCalled();
+  });
+
+  it('completes with legal, presence, and financial analysis stages', async () => {
+    const stages = EWI_WORKFLOW_STAGES.filter((stage) =>
+      [
+        'identify-expert',
+        'analyze-legal',
+        'analyze-presence',
+        'analyze-financial',
+        'summary',
+        'questions',
+        'report',
+      ].includes(stage.id),
+    );
+    const progress: string[] = [];
+    const outcome = await executeInvestigationWorkflow(
+      { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
+      {
+        stages,
+        report,
+        research: { collectProviders: () => Promise.resolve([]) },
+        onProgress: (update) => {
+          progress.push(update.step);
+        },
+      },
+    );
+
+    expect(progress).toEqual(
+      expect.arrayContaining([
+        'analyze-legal',
+        'analyze-presence',
+        'analyze-financial',
+        'summary',
+        'questions',
+        'report',
+      ]),
+    );
+    expect(outcome.result.legalResearch).toBeDefined();
+    expect(outcome.result.onlinePresence).toBeDefined();
+    expect(outcome.result.professionalBackground).toBeDefined();
+    expect(report.build).toHaveBeenCalled();
+  });
+
+  it('marks restricted providers without treating them as completed checks of public content', () => {
+    const attempt = mapProviderAttempt({
+      ...emptyResult('lexisnexis', 'unavailable', 'Authorized access required'),
+      access: 'restricted',
+      outcome: 'restricted',
+    });
+    expect(attempt.attemptStatus).toBe('restricted');
+    expect(attempt.disposition).toBe('paid_access');
+    expect(attempt.checked).toBe(true);
+  });
+
+  it('caches safe public results and avoids a second provider call', async () => {
+    const cache = new PublicResearchCache(60_000);
+    const stages = EWI_WORKFLOW_STAGES.filter((stage) =>
+      ['identify-expert', 'patents', 'report'].includes(stage.id),
+    );
+    let calls = 0;
+    const research = {
+      collectProviders: (
+        _query: unknown,
+        providerIds: readonly ExpertResearchProviderId[],
+      ) => {
+        calls += 1;
+        return Promise.resolve(
+          providerIds.map((sourceId) =>
+            emptyResult(sourceId, 'ok', 'fixture', [
+              {
+                sourceId,
+                category: 'patent',
+                title: 'Patent',
+                summary: 'fixture',
+                access: 'public',
+                informationStatus: 'unverified',
+              },
+            ]),
+          ),
+        );
+      },
+    };
+
+    await executeInvestigationWorkflow(
+      { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
+      {
+        stages,
+        report,
+        research,
+        researchCache: cache,
+        retryDelayMs: 0,
+        sleep: () => Promise.resolve(),
+      },
+    );
+    await executeInvestigationWorkflow(
+      { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
+      {
+        stages,
+        report,
+        research,
+        researchCache: cache,
+        retryDelayMs: 0,
+        sleep: () => Promise.resolve(),
+      },
+    );
+
+    expect(calls).toBe(1);
   });
 });
 

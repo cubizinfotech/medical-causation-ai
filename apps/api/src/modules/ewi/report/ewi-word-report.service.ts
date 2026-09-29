@@ -5,6 +5,9 @@ import type { ExpertEvidenceItem } from '@integrations/expert-research';
 import type { ExpertDiscrepancy } from '../research/discrepancy-analyzer';
 import type { CrossExamQuestion } from '../research/cross-exam-question.generator';
 import type { EwiAnalysisDocument } from '../investigation/analysis/ewi-analysis.types';
+import type { LegalResearchDossier } from '../research/legal';
+import type { OnlinePresenceDossier } from '../research/online-presence';
+import type { ProfessionalBackgroundDossier } from '../research/professional-background';
 import { buildEwiReportDocument } from './ewi-report.template';
 
 export interface EwiReportInput {
@@ -17,6 +20,9 @@ export interface EwiReportInput {
   generatedAt: string;
   summary?: string;
   analysis?: EwiAnalysisDocument;
+  legalResearch?: LegalResearchDossier;
+  onlinePresence?: OnlinePresenceDossier;
+  professionalBackground?: ProfessionalBackgroundDossier;
 }
 
 export interface EwiReportOutput extends ReportArtifact {

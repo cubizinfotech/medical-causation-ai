@@ -5,4 +5,6 @@ export type {
   ProcessedDocumentResult,
   ProcessDocumentInput,
   ProcessDocumentOptions,
+  PageReference,
+  OcrStatus,
 } from './document-processing.types';

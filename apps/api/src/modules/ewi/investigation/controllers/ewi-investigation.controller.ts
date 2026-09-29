@@ -42,8 +42,12 @@ export class EwiInvestigationController {
   }
 
   @Post('histories/:id/cancel')
-  cancelHistory(@Param('id') id: string) {
-    return this.historyService.cancel(id);
+  async cancelHistory(@Param('id') id: string) {
+    const view = await this.historyService.cancel(id);
+    if (view.jobId) {
+      await this.jobService.markCancelled(view.jobId);
+    }
+    return view;
   }
 
   @Delete('histories/:id')
@@ -89,6 +93,15 @@ export class EwiInvestigationController {
   async investigate(
     @Body() body: CreateExpertInvestigationDto,
   ): Promise<EwiInvestigationResult> {
+    // Sync path is for tests/tools only. Product UI must use POST /ewi/jobs.
+    if (process.env.EWI_ALLOW_SYNC_INVESTIGATE !== 'true') {
+      this.logger.warn(
+        'Rejected sync /ewi/investigate. Use POST /ewi/jobs for async Redis/BullMQ execution.',
+      );
+      throw new InternalServerErrorException(
+        'Synchronous investigation is disabled. Start an investigation with POST /ewi/jobs.',
+      );
+    }
     try {
       const outcome = await this.investigationService.investigate({
         expertName: body.expertName.trim(),

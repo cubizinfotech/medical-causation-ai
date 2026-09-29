@@ -37,6 +37,13 @@ export class EwiClient {
     return parseApiResponse<EwiHistoryDetail>(response);
   }
 
+  async cancelHistory(id: string): Promise<EwiHistoryDetail> {
+    const response = await apiFetch(`/ewi/histories/${id}/cancel`, {
+      method: "POST",
+    });
+    return parseApiResponse<EwiHistoryDetail>(response);
+  }
+
   async deleteHistory(id: string): Promise<void> {
     const response = await apiFetch(`/ewi/histories/${id}`, {
       method: "DELETE",
@@ -52,12 +59,20 @@ export class EwiClient {
       await parseApiResponse<never>(response);
     }
     const blob = await response.blob();
+    if (blob.size === 0) {
+      throw new ApiError("The report file was empty or could not be read.", 502);
+    }
     const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    try {
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName || "ewi-report.docx";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 }
 

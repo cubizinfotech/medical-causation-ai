@@ -15,6 +15,6 @@ These defaults apply until explicitly changed. They resolve the open questions f
 | 9 | KB migration | Keep current flat `knowledge-base/{books,articles,...}` as **MCA default root**. Add `knowledge-base/ewi/` for EWI. Optional `KNOWLEDGE_BASE_MCA_PATH` / `KNOWLEDGE_BASE_EWI_PATH`. |
 | 10 | API prefixes | Keep `/medical-analysis` for MCA. Use `/ewi/...` for EWI. |
 | 11 | Authentication | Shared platform users and roles for MCA and EWI. `AUTH_ENABLED=false` leaves product APIs open. When it is true, the API requires a JWT. Demo accounts are local only. |
-| 12 | Email | Shared `EmailService` with console, SMTP, and a transactional seam. Local default logs messages and does not transmit them. Production SMTP credentials come from the environment. EWI request templates are not sent by the investigation job. See `docs/email.md`. |
+| 12 | Email | Shared `EmailService` with console, SMTP, and a transactional seam. Local default logs messages and does not transmit them. Production SMTP credentials come from the environment. EWI request templates are prepared through a gated workflow and are not sent unless configured and authorized. See `docs/email.md` and `docs/ewi-request-email-workflow.md`. |
 
 Related: [architecture.md](./architecture.md), [ewi-architecture.md](./ewi-architecture.md).

@@ -12,9 +12,11 @@ import { tokenConfig } from './token.config';
 import { indexingConfig } from './indexing.config';
 import { ragConfig } from './rag.config';
 import { emailConfig } from './email.config';
+import { ewiRequestConfig } from './ewi-request.config';
 import { authConfig } from './auth.config';
 import { jobsConfig } from './jobs.config';
 import { researchConfig } from './research.config';
+import { ocrConfig } from './ocr.config';
 
 export const configuration = (): RootConfig => ({
   app: appConfig(),
@@ -25,8 +27,10 @@ export const configuration = (): RootConfig => ({
   prompt: promptConfig(),
   token: tokenConfig(),
   storage: storageConfig(),
+  ocr: ocrConfig(),
   logging: loggingConfig(),
   email: emailConfig(),
+  ewiRequest: ewiRequestConfig(),
   auth: authConfig(),
   jobs: jobsConfig(),
   research: researchConfig(),

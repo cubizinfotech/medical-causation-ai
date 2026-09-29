@@ -73,7 +73,10 @@ export const FIELD_LABEL: Record<VerificationField, string> = {
 };
 
 /** Providers that can confirm a field. An empty list means no catalog source checks it. */
-export const CONFIRMING_PROVIDERS: Record<VerificationField, readonly string[]> = {
+export const CONFIRMING_PROVIDERS: Record<
+  VerificationField,
+  readonly string[]
+> = {
   cv: ['cv_profile'],
   education: ['education_verification'],
   degree_date: ['education_verification'],
@@ -85,7 +88,7 @@ export const CONFIRMING_PROVIDERS: Record<VerificationField, readonly string[]> 
   license_status: ['state_license', 'state_discipline'],
   board_certification: ['board_certification'],
   certification_organization: ['certification_organization'],
-  membership: [],
+  membership: ['memberships', 'professional_organizations'],
   publication: ['pubmed', 'crossref', 'openalex'],
   authorship: ['author_verification'],
   lead_author: ['lead_author_verification', 'author_verification'],
@@ -122,7 +125,10 @@ const MULTI_VALUE_FIELDS = new Set<VerificationField>([
   'corporate_affiliation',
 ]);
 
-export function defaultSubject(field: VerificationField, value: string): string {
+export function defaultSubject(
+  field: VerificationField,
+  value: string,
+): string {
   return MULTI_VALUE_FIELDS.has(field) ? value : field;
 }
 
@@ -165,7 +171,8 @@ export function severityFor(
   label: InconsistencyLabel,
 ): 'low' | 'medium' | 'high' {
   if (field === 'license_status') return 'high';
-  if (label === 'conflicting') return HIGH_FIELDS.has(field) ? 'high' : 'medium';
+  if (label === 'conflicting')
+    return HIGH_FIELDS.has(field) ? 'high' : 'medium';
   if (label === 'partially_verified') return 'medium';
   if (label === 'not_found' || label === 'unable_to_verify') return 'medium';
   return 'low';

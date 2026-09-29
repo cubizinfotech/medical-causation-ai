@@ -11,7 +11,14 @@ function resolvePromptsDir(): string {
 
   const candidates = [
     __dirname,
-    join(process.cwd(), 'dist', 'modules', 'mca', 'medical-analysis', 'prompts'),
+    join(
+      process.cwd(),
+      'dist',
+      'modules',
+      'mca',
+      'medical-analysis',
+      'prompts',
+    ),
     join(process.cwd(), 'src', 'modules', 'mca', 'medical-analysis', 'prompts'),
   ];
 

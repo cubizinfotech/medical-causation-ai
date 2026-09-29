@@ -64,6 +64,91 @@ const STORED_CONTENT_KEYS = new Set([
   'filebytes',
   'documentbody',
   'html',
+  'transcript',
+  'transcripttext',
+]);
+
+/** Permitted metadata for restricted sources. Bodies and PDFs stay out. */
+const RESTRICTED_METADATA_ATTRIBUTE_KEYS = new Set([
+  'documenttype',
+  'casename',
+  'casenumber',
+  'court',
+  'jurisdiction',
+  'filingdate',
+  'documentdate',
+  'date',
+  'relevance',
+  'findingsregardingexpert',
+  'evidencereference',
+  'evidencereferences',
+  'matterkind',
+  'ordertags',
+  'shortdescription',
+  'transcriptmetadata',
+  'importantstatements',
+  'publishedat',
+  'publicationdate',
+  'metadataonly',
+  'identity',
+  'identitymatch',
+  'presencekind',
+  'platform',
+  'pagetitle',
+  'retrievedat',
+  'relevantclaims',
+  'advertisingclaims',
+  'forensicclaims',
+  'expertwitnessclaims',
+  'treatmentpracticeinfo',
+  'conflictorbiasindicators',
+  'description',
+  'transcriptavailable',
+  'transcriptunavailablereason',
+  'rating',
+  'reviewdate',
+  'reviewtextpermitted',
+  'neutralsummary',
+  'address',
+  'businessname',
+  'locationflags',
+  'locationnote',
+  'claimedstates',
+  'claimedboard',
+  'professionalkind',
+  'name',
+  'title',
+  'identifier',
+  'grantid',
+  'patentnumber',
+  'trademarknumber',
+  'filingdate',
+  'startdate',
+  'enddate',
+  'dates',
+  'status',
+  'role',
+  'participation',
+  'authorship',
+  'institution',
+  'organization',
+  'source',
+  'resulturl',
+  'resultsavailable',
+  'resultsunavailablereason',
+  'cvclaim',
+  'publicrecord',
+  'paymentdate',
+  'paymentamount',
+  'payer',
+  'natureofpayment',
+  'forensicwork',
+  'defensework',
+  'hourlyrate',
+  'referralinfo',
+  'percentforensicwork',
+  'percentdefensework',
+  'verificationnote',
 ]);
 
 export type StoredEvidenceStatus = 'recorded' | 'metadata_only' | 'unavailable';
@@ -153,7 +238,10 @@ export function toStorableFinding(draft: FindingDraft): StorableFinding {
     restricted,
     notes: restricted
       ? draft.notes?.trim() || METADATA_ONLY_NOTE
-      : [draft.notes?.trim(), identityMatch === 'uncertain' ? uncertainNote : '']
+      : [
+          draft.notes?.trim(),
+          identityMatch === 'uncertain' ? uncertainNote : '',
+        ]
           .filter(Boolean)
           .join(' ') || null,
     attributes: withIdentity(
@@ -170,7 +258,13 @@ function withIdentity(
   identityMatch: 'matched' | 'uncertain' | undefined,
   restricted: boolean,
 ): Record<string, unknown> | null {
-  if (restricted || !identityMatch) return attributes;
+  if (!identityMatch) return attributes;
+  if (restricted) {
+    return {
+      ...(attributes ?? {}),
+      identityMatch,
+    };
+  }
   return { ...(attributes ?? {}), identityMatch };
 }
 
@@ -185,13 +279,15 @@ function storableAttributes(
   value: Record<string, unknown> | null | undefined,
   restricted: boolean,
 ): Record<string, unknown> | null {
-  if (restricted || !value) return null;
+  if (!value) return null;
   const next: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
-    if (STORED_CONTENT_KEYS.has(key.toLowerCase())) continue;
+    const lower = key.toLowerCase();
+    if (STORED_CONTENT_KEYS.has(lower)) continue;
     if (typeof entry === 'string' && entry.toLowerCase().startsWith('data:')) {
       continue;
     }
+    if (restricted && !RESTRICTED_METADATA_ATTRIBUTE_KEYS.has(lower)) continue;
     next[key] = entry;
   }
   return Object.keys(next).length > 0 ? next : null;

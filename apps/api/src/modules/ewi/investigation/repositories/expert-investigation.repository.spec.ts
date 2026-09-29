@@ -46,6 +46,7 @@ describe('ExpertInvestigationRepository persistence rules', () => {
       discrepancy: { createMany: jest.fn() },
       crossExamQuestion: { createMany: jest.fn() },
       investigationReport: { create: jest.fn() },
+      investigationAnalysis: { create: jest.fn() },
       expertProfile: { update: jest.fn() },
       investigation: { update: jest.fn() },
     };

@@ -271,6 +271,7 @@ model Investigation {
   report        InvestigationReport?
   analysis      InvestigationAnalysis?
   events        InvestigationEvent[]
+  requests      InvestigationRequest[]
 
   @@index([status])
   @@index([expertId])
@@ -453,6 +454,72 @@ model InvestigationEvent {
 
   @@index([investigationId, createdAt])
   @@map("investigation_events")
+  @@schema("ewi")
+}
+
+enum InvestigationRequestType {
+  foia
+  university_file
+  graduation_announcement
+  university_employment
+  follow_up
+  trialsmith
+
+  @@schema("ewi")
+}
+
+enum InvestigationRequestStatus {
+  draft
+  pending_approval
+  approved
+  queued
+  sent
+  logged_not_sent
+  failed
+  cancelled
+  needs_manual_review
+
+  @@schema("ewi")
+}
+
+/// Prepared or sent FOIA / university / outreach request for an investigation.
+/// Recipient addresses and credentials are never hardcoded; they come from
+/// configuration or per-request input. Passwords are never stored here.
+model InvestigationRequest {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  investigationId    String                       @map("investigation_id") @db.Uuid
+  requestType        InvestigationRequestType     @map("request_type")
+  status             InvestigationRequestStatus   @default(draft)
+  organizationName   String                       @map("organization_name")
+  recipientEmail     String?                      @map("recipient_email")
+  recipientName      String?                      @map("recipient_name")
+  subject            String
+  bodyText           String                       @map("body_text") @db.Text
+  templateId         String                       @map("template_id")
+  caseReference      String                       @map("case_reference")
+  followUpAt         DateTime?                    @map("follow_up_at")
+  parentRequestId    String?                      @map("parent_request_id") @db.Uuid
+  approvedAt         DateTime?                    @map("approved_at")
+  approvedBy         String?                      @map("approved_by")
+  sentAt             DateTime?                    @map("sent_at")
+  provider           String?
+  providerMessageId  String?                      @map("provider_message_id")
+  delivered          Boolean                      @default(false)
+  errorMessage       String?                      @map("error_message") @db.Text
+  /// Structured generation fields. No credentials.
+  metadata           Json?
+  createdAt          DateTime                     @default(now()) @map("created_at")
+  updatedAt          DateTime                     @updatedAt @map("updated_at")
+
+  investigation Investigation          @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  parentRequest InvestigationRequest?  @relation("RequestFollowUps", fields: [parentRequestId], references: [id], onDelete: SetNull)
+  followUps     InvestigationRequest[] @relation("RequestFollowUps")
+
+  @@index([investigationId])
+  @@index([investigationId, requestType])
+  @@index([status])
+  @@index([followUpAt])
+  @@map("investigation_requests")
   @@schema("ewi")
 }
 

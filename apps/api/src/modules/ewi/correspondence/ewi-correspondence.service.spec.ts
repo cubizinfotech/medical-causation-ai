@@ -24,9 +24,20 @@ describe('EwiCorrespondenceService', () => {
         recordType: 'Enrollment verification',
         dateRange: '1998-2002',
       },
-      'graduation-verification': {
+      'graduation-announcement': {
         claimedDegree: 'M.D.',
         claimedYear: '2002',
+      },
+      'university-employment-request': {
+        employmentRole: 'Clinical faculty',
+        activityDescription: 'Outside consulting policy confirmation',
+      },
+      'follow-up-request': {
+        originalSubject: 'Public records request regarding Jane Smith',
+        originalSentDate: '2026-09-01',
+      },
+      'trialsmith-outreach': {
+        requestPurpose: 'Configured TrialSmith inquiry for this matter.',
       },
       'research-request': {
         requestPurpose: 'Confirm the published faculty appointment.',
@@ -44,6 +55,34 @@ describe('EwiCorrespondenceService', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it('asks about applicable fees on FOIA and graduation templates', () => {
+    const foia = service.compose({
+      ...base,
+      kind: 'foia-request',
+      requestDescription: 'Public roster',
+    });
+    expect(foia.text).toMatch(/applicable fees/i);
+
+    const graduation = service.compose({
+      ...base,
+      kind: 'graduation-announcement',
+      claimedDegree: 'M.D.',
+      claimedYear: '2002',
+    });
+    expect(graduation.text).toMatch(/graduation announcement/i);
+    expect(graduation.text).toMatch(/applicable fees|charges/i);
+  });
+
+  it('accepts the legacy graduation-verification template id', () => {
+    const message = service.compose({
+      ...base,
+      kind: 'graduation-verification',
+      claimedDegree: 'M.D.',
+      claimedYear: '2002',
+    });
+    expect(message.templateId).toBe('ewi/graduation-announcement');
+  });
+
   it('escapes HTML and leaves the text body unchanged', () => {
     const message = service.compose({
       ...base,
@@ -58,7 +97,7 @@ describe('EwiCorrespondenceService', () => {
 
   it('rejects a graduation request that omits the claimed credential', () => {
     expect(() =>
-      service.compose({ ...base, kind: 'graduation-verification' }),
+      service.compose({ ...base, kind: 'graduation-announcement' }),
     ).toThrow(/claimedDegree/);
   });
 

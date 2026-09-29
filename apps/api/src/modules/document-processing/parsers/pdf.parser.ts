@@ -67,12 +67,12 @@ export class PdfParser implements IDocumentParser {
       if (totalChars < 50) {
         needsOcr = true;
         warnings.push(
-          'PDF contains very little extractable text — likely scanned. OCR will be required in a future phase.',
+          'PDF contains very little extractable text — likely scanned. OCR is required.',
         );
       } else if (avgCharsPerPage < 20 && pageCount > 1) {
         needsOcr = true;
         warnings.push(
-          'Low text density per page — document may contain scanned pages. OCR fallback prepared.',
+          'Low text density per page — document may contain scanned pages. OCR will be attempted.',
         );
       }
 

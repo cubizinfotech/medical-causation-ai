@@ -4,49 +4,77 @@ The final Expert Witness Investigation output is a Microsoft Word document. MCA 
 
 ## Shared renderer
 
-`apps/api/src/platform/report/` defines a product-neutral document model (`ReportDocumentModel`) and `DocxReportRenderer`. The renderer uses the `docx` library already used by the API. It applies the heading styles, header, footer, page number, and hyperlinks. It does not choose section content.
+`apps/api/src/platform/report/` defines a product-neutral document model (`ReportDocumentModel`) and `DocxReportRenderer`. The renderer uses the `docx` library already used by the API. It applies heading styles, header, footer, page numbers, hyperlinks, optional table-of-contents field, and document metadata. It does not choose section content.
 
 `ReportModule` provides that renderer. EWI imports the module. MCA PDF export is unchanged.
 
 ## EWI template
 
-`apps/api/src/modules/ewi/report/ewi-report.template.ts` builds template `ewi/investigation-report` version `1.0.0`. The document always contains these sections. A section with no collected record says the information could not be verified and does not infer a qualification.
+`apps/api/src/modules/ewi/report/ewi-report.template.ts` builds template `ewi/investigation-report` version `2.0.0`. The document always contains the sections below. A section with no collected record says the information could not be verified and does not infer a qualification.
 
-1. Expert Overview
-2. Executive Summary
-3. Identity/Profile
-4. Education and Degrees
-5. Medical Licenses
-6. Board Certifications
-7. Publications and Authorship
-8. Grants
-9. Patents
-10. Awards and Medals
-11. Legal/Case Research
-12. Expert Witness Directories
-13. Expert Websites
-14. IME/Advertising Research
-15. Videos and Presentations
-16. Social Media
-17. News and Blogs
-18. University/Professional Rules
-19. Inconsistencies
-20. Sources and Links
-21. Research Limitations
-22. Cross-Examination Questions
+Report metadata on the cover includes expert name, city, specialty, investigation date, template id/version, and an attorney-review disclaimer. A Word TOC field is inserted when supported; open the file in Microsoft Word and update fields if the TOC entries are blank.
 
-Source URLs are written as links. Restricted items keep the title and link. Their body text is not copied into the report. Section 19 lists inconsistencies in significance order. Each entry keeps the evidence label, the compared values, and the sources those values came from.
+1. Expert Name
+2. City
+3. Specialty
+4. Investigation Date
+5. Executive Summary
+6. Expert Background
+7. Inconsistencies in Background
+8. CV Comparison
+9. Education and Degrees
+10. University Accreditation
+11. Licenses
+12. State Licensing/Board Actions
+13. Board Certifications
+14. Certification Organizations
+15. Memberships
+16. Publications
+17. Grants
+18. Patents
+19. Awards/Military Claims
+20. Expert Websites
+21. IME/Advertising
+22. Expert Directories
+23. Orders
+24. Pleadings/Motions
+25. Depositions
+26. Testimony Inconsistencies
+27. Income/Bias
+28. Lawsuits/Malpractice
+29. Criminal Records
+30. Social Media
+31. Videos/Transcripts
+32. News/Blogs
+33. University Rules
+34. Corporate Affiliations
+35. Patient Reviews
+36. Office/Location Findings
+37. Miscellaneous Findings
+38. Overall Research Findings
+39. Source Index
+40. Cross-Examination Questions
+
+### Important section behavior
+
+- **Inconsistencies** are a primary focus. Entries highlight collected conflicts such as graduation years, license dates, specialty claims, missing publications/authorship, memberships, expired licenses, disciplinary actions, CV conflicts, and testimony inconsistencies. Labels come from collected comparisons only.
+- **Orders** are prioritized (limiting, striking, critical, credibility, qualification-related) then chronological. Each entry includes case, case number, date, finding, source link, and evidence reference when collected. Page numbers are never invented.
+- **Pleadings/motions** are chronological with brief descriptions and source links.
+- **Depositions** include case, date, source, and summary, with a separate **Testimony Inconsistencies** comparison section.
+- **Income/Bias** is chronological. Forensic/defense percentages and rates appear only when the source stated them.
+- **Publications** list authors, date, journal, source, first/lead author status, and retraction status when available.
+- **Memberships** compare CV claims against verified public membership information when both are present.
+- **Social media** provides links and factual summaries of relevant public content.
+- Restricted items keep title and link. Body text is not copied. The report does not claim a PDF was saved unless storage was legally permitted and actually performed.
 
 ## Cross-examination questions
 
-`buildGroundedCrossExamQuestions` writes the questions stored on the investigation and printed in section 22.
+`buildGroundedCrossExamQuestions` writes aggressive leading questions stored on the investigation and printed in section 40.
 
 - Each question names a collected finding or a collected discrepancy.
 - When at least one finding exists, the list reaches 100 leading questions by varying the examination angle on those findings.
-- When no finding exists, the list is empty. Facts are not invented to fill it.
+- When no finding exists, the list is empty unless the investigation analysis layer already produced grounded uncertainty questions from source attempts.
 - An unverified, conflicting, or restricted item is described with that status. The question does not treat it as a confirmed credential.
-
-The shorter questions inside the analysis JSON stay with the analysis record. The report questions are a separate list built from the same findings.
 
 ## Storage and download
 

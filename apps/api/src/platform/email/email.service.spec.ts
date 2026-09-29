@@ -15,7 +15,7 @@ const baseSettings: EmailSettings = {
   host: 'localhost',
   port: 1025,
   user: '',
-  password: 'super-secret-pass',
+  password: 'test-only-not-a-real-secret',
   secure: false,
   maxAttempts: 3,
   retryDelayMs: 0,
@@ -71,7 +71,8 @@ describe('EmailService', () => {
     expect(result.delivered).toBe(false);
     expect(create).toHaveBeenCalledWith('console', baseSettings);
     expect(send).toHaveBeenCalledTimes(1);
-    expect(lines.join('\n')).not.toContain('super-secret-pass');
+    expect(lines.join('\n')).not.toContain('test-only-not-a-real-secret');
+    expect(lines.join('\n')).not.toMatch(/password\s*[:=]/i);
   });
 
   it('retries a transient SMTP failure and then succeeds', async () => {

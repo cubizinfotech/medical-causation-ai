@@ -12,6 +12,7 @@ export { storageConfig } from './storage.config';
 export { loggingConfig } from './logging.config';
 export { featureFlagsConfig } from './feature-flags.config';
 export { emailConfig } from './email.config';
+export { ewiRequestConfig } from './ewi-request.config';
 export { authConfig } from './auth.config';
 export { jobsConfig } from './jobs.config';
 export { researchConfig } from './research.config';
@@ -27,6 +28,7 @@ export type {
   ProductKnowledgeBaseSettings,
   LoggingSettings,
   FeatureFlags,
+  EwiRequestWorkflowSettings,
 } from './config.types';
 export type {
   ProviderConfigSettings,

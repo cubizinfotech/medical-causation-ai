@@ -22,6 +22,105 @@ import {
 const UNAVAILABLE_MESSAGE =
   'No record was retrieved. This does not establish that the expert lacks a credential, publication, case, license, or award.';
 
+/** Permitted metadata keys. Document bodies and PDFs are never kept. */
+const RESTRICTED_METADATA_KEYS = new Set([
+  'documenttype',
+  'casename',
+  'casenumber',
+  'court',
+  'jurisdiction',
+  'filingdate',
+  'documentdate',
+  'date',
+  'relevance',
+  'findingsregardingexpert',
+  'evidencereference',
+  'evidencereferences',
+  'matterkind',
+  'ordertags',
+  'shortdescription',
+  'transcriptmetadata',
+  'importantstatements',
+  'publishedat',
+  'publicationdate',
+  'metadataonly',
+  'identity',
+  'presencekind',
+  'platform',
+  'pagetitle',
+  'retrievedat',
+  'relevantclaims',
+  'advertisingclaims',
+  'forensicclaims',
+  'expertwitnessclaims',
+  'treatmentpracticeinfo',
+  'conflictorbiasindicators',
+  'description',
+  'transcriptavailable',
+  'transcriptunavailablereason',
+  'rating',
+  'reviewdate',
+  'reviewtextpermitted',
+  'neutralsummary',
+  'address',
+  'businessname',
+  'locationflags',
+  'locationnote',
+  'claimedstates',
+  'claimedboard',
+  'professionalkind',
+  'name',
+  'title',
+  'identifier',
+  'grantid',
+  'patentnumber',
+  'trademarknumber',
+  'filingdate',
+  'startdate',
+  'enddate',
+  'dates',
+  'status',
+  'role',
+  'participation',
+  'authorship',
+  'institution',
+  'organization',
+  'source',
+  'resulturl',
+  'resultsavailable',
+  'resultsunavailablereason',
+  'cvclaim',
+  'publicrecord',
+  'paymentdate',
+  'paymentamount',
+  'payer',
+  'natureofpayment',
+  'forensicwork',
+  'defensework',
+  'hourlyrate',
+  'referralinfo',
+  'percentforensicwork',
+  'percentdefensework',
+  'verificationnote',
+]);
+
+const BLOCKED_CONTENT_KEYS = new Set([
+  'fulltext',
+  'body',
+  'content',
+  'pdf',
+  'pdfbytes',
+  'bytes',
+  'opiniontext',
+  'articletext',
+  'file',
+  'filebytes',
+  'documentbody',
+  'html',
+  'transcript',
+  'transcripttext',
+]);
+
 export class CatalogExpertResearchProvider implements IExpertResearchProvider {
   constructor(
     readonly definition: ProviderDefinition,
@@ -67,7 +166,10 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
           'restricted',
         );
       }
-      if (this.definition.requirement !== 'free_api' && this.definition.requirement !== 'manual') {
+      if (
+        this.definition.requirement !== 'free_api' &&
+        this.definition.requirement !== 'manual'
+      ) {
         return this.emptyResult(
           'unavailable',
           retrievedAt,
@@ -107,7 +209,9 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
             : 'public',
         );
       }
-      const items = fixtures.map((fixture) => this.toItem(fixture, retrievedAt));
+      const items = fixtures.map((fixture) =>
+        this.toItem(fixture, retrievedAt),
+      );
       const access = this.definition.accessClass;
       return {
         sourceId: this.definition.id,
@@ -159,7 +263,7 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
         retrievedAt,
         access: restricted ? 'restricted' : fixture.access,
       },
-      raw: restricted ? { metadataOnly: true, fixture: true } : fixture.raw,
+      raw: restricted ? permittedLegalMetadata(fixture.raw) : fixture.raw,
     };
   }
 
@@ -184,4 +288,21 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
       items: [],
     };
   }
+}
+
+function permittedLegalMetadata(
+  raw: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { metadataOnly: true };
+  if (!raw) return next;
+  for (const [key, value] of Object.entries(raw)) {
+    const lower = key.toLowerCase();
+    if (BLOCKED_CONTENT_KEYS.has(lower)) continue;
+    if (!RESTRICTED_METADATA_KEYS.has(lower)) continue;
+    if (typeof value === 'string' && value.toLowerCase().startsWith('data:')) {
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
 }

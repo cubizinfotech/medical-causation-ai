@@ -93,7 +93,9 @@ describe('CV comparison', () => {
         title: 'CV',
         raw: {
           cvDate: '2020-01-01',
-          claims: [{ field: 'graduation_date', value: '1998', subject: 'M.D.' }],
+          claims: [
+            { field: 'graduation_date', value: '1998', subject: 'M.D.' },
+          ],
         },
       }),
       item({
@@ -103,7 +105,9 @@ describe('CV comparison', () => {
         identityMatch: 'uncertain',
         raw: {
           cvDate: '2021-01-01',
-          claims: [{ field: 'graduation_date', value: '1970', subject: 'M.D.' }],
+          claims: [
+            { field: 'graduation_date', value: '1970', subject: 'M.D.' },
+          ],
         },
       }),
     ]);
@@ -114,16 +118,36 @@ describe('CV comparison', () => {
 
 describe('conflicting and unverified evidence', () => {
   const attempts: VerificationAttempt[] = [
-    { providerId: 'state_license', status: 'ok', outcome: 'success', itemCount: 1 },
-    { providerId: 'grants', status: 'no_result', outcome: 'no_result', itemCount: 0 },
+    {
+      providerId: 'state_license',
+      status: 'ok',
+      outcome: 'success',
+      itemCount: 1,
+    },
+    {
+      providerId: 'grants',
+      status: 'no_result',
+      outcome: 'no_result',
+      itemCount: 0,
+    },
     {
       providerId: 'university_accreditation',
       status: 'unavailable',
       outcome: 'unavailable',
       itemCount: 0,
     },
-    { providerId: 'awards', status: 'no_result', outcome: 'no_result', itemCount: 0 },
-    { providerId: 'board_certification', status: 'unavailable', outcome: 'unavailable', itemCount: 0 },
+    {
+      providerId: 'awards',
+      status: 'no_result',
+      outcome: 'no_result',
+      itemCount: 0,
+    },
+    {
+      providerId: 'board_certification',
+      status: 'unavailable',
+      outcome: 'unavailable',
+      itemCount: 0,
+    },
     { providerId: 'pubmed', status: 'ok', outcome: 'success', itemCount: 1 },
   ];
 
@@ -141,15 +165,43 @@ describe('conflicting and unverified evidence', () => {
             claims: [
               { field: 'license_date', value: '2001-04-01', subject: 'NY' },
               { field: 'specialty', value: 'Neurology' },
-              { field: 'publication', value: 'Stroke outcomes 2010', subject: 'Stroke outcomes 2010' },
-              { field: 'lead_author', value: 'first', subject: 'Stroke outcomes 2010' },
-              { field: 'grant', value: 'NIH R01 NS000', subject: 'NIH R01 NS000' },
-              { field: 'membership', value: 'AAN Fellow', subject: 'AAN Fellow' },
+              {
+                field: 'publication',
+                value: 'Stroke outcomes 2010',
+                subject: 'Stroke outcomes 2010',
+              },
+              {
+                field: 'lead_author',
+                value: 'first',
+                subject: 'Stroke outcomes 2010',
+              },
+              {
+                field: 'grant',
+                value: 'NIH R01 NS000',
+                subject: 'NIH R01 NS000',
+              },
+              {
+                field: 'membership',
+                value: 'AAN Fellow',
+                subject: 'AAN Fellow',
+              },
               { field: 'certification_organization', value: 'ABIM' },
-              { field: 'university_accreditation', value: 'Regional accreditation', subject: 'State University' },
+              {
+                field: 'university_accreditation',
+                value: 'Regional accreditation',
+                subject: 'State University',
+              },
               { field: 'award', value: 'Silver Star', subject: 'Silver Star' },
-              { field: 'military', value: 'Bronze Star', subject: 'Bronze Star' },
-              { field: 'publication', value: 'Unlisted chapter', subject: 'Unlisted chapter' },
+              {
+                field: 'military',
+                value: 'Bronze Star',
+                subject: 'Bronze Star',
+              },
+              {
+                field: 'publication',
+                value: 'Unlisted chapter',
+                subject: 'Unlisted chapter',
+              },
             ],
           },
         }),
@@ -237,11 +289,15 @@ describe('conflicting and unverified evidence', () => {
     expect(author?.description).toMatch(/not lead|co-author/i);
     expect(author?.description).not.toMatch(NEUTRAL);
 
-    expect(rows.some((entry) => entry.severity === 'low' && rows[0].severity === 'high')).toBe(
-      true,
-    );
+    expect(
+      rows.some(
+        (entry) => entry.severity === 'low' && rows[0].severity === 'high',
+      ),
+    ).toBe(true);
     expect(rows[0]?.severity).toBe('high');
-    expect(rows.map((entry) => entry.description).join(' ')).not.toMatch(NEUTRAL);
+    expect(rows.map((entry) => entry.description).join(' ')).not.toMatch(
+      NEUTRAL,
+    );
   });
 
   it('records a lapsed license from the collected status', () => {
@@ -283,10 +339,12 @@ describe('DiscrepancyAnalyzer', () => {
     ];
 
     const result = analyzer.analyze(items);
-    expect(result.some((entry) => entry.id === 'publication-count-gap')).toBe(true);
-    expect(result.find((entry) => entry.id === 'publication-count-gap')?.label).toBe(
-      'partially_verified',
+    expect(result.some((entry) => entry.id === 'publication-count-gap')).toBe(
+      true,
     );
+    expect(
+      result.find((entry) => entry.id === 'publication-count-gap')?.label,
+    ).toBe('partially_verified');
   });
 
   it('does not invent a discrepancy when statements do not conflict', () => {

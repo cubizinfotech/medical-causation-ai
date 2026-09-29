@@ -5,7 +5,7 @@ import type { CrossExamQuestion } from '../research/cross-exam-question.generato
 export const MIN_GROUNDED_QUESTIONS = 100;
 
 /**
- * Leading questions that cite collected findings only.
+ * Aggressive leading questions that cite collected findings only.
  * One or more findings is enough to reach the minimum by varying the
  * examination angle. No findings means no questions are invented.
  */
@@ -20,7 +20,12 @@ export function buildGroundedCrossExamQuestions(input: {
   for (const discrepancy of input.discrepancies ?? []) {
     push(questions, {
       category: 'Inconsistencies',
-      question: `Doctor ${name}, the collected materials conflict: "${discrepancy.title}". You cannot reconcile that conflict from anything else in this file, can you?`,
+      question: `Doctor ${name}, you cannot reconcile the collected conflict "${discrepancy.title}" with any other document in this investigation file, can you?`,
+      evidenceBasis: discrepancy.description,
+    });
+    push(questions, {
+      category: 'Inconsistencies',
+      question: `The discrepancy labeled "${discrepancy.title}" remains unresolved on this record, correct?`,
       evidenceBasis: discrepancy.description,
     });
   }
@@ -65,13 +70,17 @@ function leadingAngles(name: string, item: ExpertEvidenceItem): string[] {
   const statusLine = `The collected status of "${title}" is: ${status}.`;
   return [
     `Doctor ${name}, the investigation file contains a record titled "${title}", correct? ${statusLine}`,
-    `The record titled "${title}" from ${source} is ${status}, isn't it?`,
+    `You will agree that "${title}" from ${source} is ${status}, won't you?`,
     `${link}. That is the citation in this file for "${title}", correct? ${statusLine}`,
-    `You cannot point to any fact in this file about "${title}" beyond what ${source} collected, can you? ${statusLine}`,
+    `You cannot point this jury to any fact in this file about "${title}" beyond what ${source} collected, can you? ${statusLine}`,
     `Nothing in this investigation independently verifies "${title}" beyond that ${status} record, does it?`,
     `If "${title}" were withdrawn, you would have no other collected source in this file for that point, would you? ${statusLine}`,
     `You are asking the jury to accept a record that is ${status}, titled "${title}", correct?`,
     `Counsel has not been given any additional document in this file that changes the ${status} status of "${title}", have they?`,
+    `You will concede that this file does not upgrade "${title}" beyond ${status}, correct?`,
+    `There is no collected primary document here that cures the ${status} status of "${title}", is there?`,
+    `Doctor ${name}, sitting here today, you cannot produce from this file a verified original that supersedes "${title}", can you?`,
+    `The jury should understand that "${title}" remains ${status} on this record, correct?`,
   ];
 }
 
@@ -85,7 +94,7 @@ function uncertainty(item: ExpertEvidenceItem): string {
   if (item.informationStatus === 'verified') {
     return 'marked verified by the collected source';
   }
-  return 'unverified, and this investigation could not verify it';
+  return 'not verified, and this investigation could not verify it';
 }
 
 function basis(item: ExpertEvidenceItem): string {

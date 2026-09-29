@@ -74,7 +74,10 @@ export function analyzeInconsistencies(
     if (row) rows.push(row);
   }
 
-  return rows.sort((left, right) => left.priority - right.priority || left.id.localeCompare(right.id));
+  return rows.sort(
+    (left, right) =>
+      left.priority - right.priority || left.id.localeCompare(right.id),
+  );
 }
 
 function compareGroup(
@@ -111,7 +114,9 @@ function compareGroup(
   }
 
   if (statedClaims.length === 0) return null;
-  if (records.some((record) => sameCollectedValue(field, record.value, value))) {
+  if (
+    records.some((record) => sameCollectedValue(field, record.value, value))
+  ) {
     return null;
   }
 
@@ -127,19 +132,19 @@ function conflictRow(
   const versions = claims
     .filter((claim) => claim.cvDate)
     .slice()
-    .sort((left, right) => (left.cvDate ?? '').localeCompare(right.cvDate ?? ''));
+    .sort((left, right) =>
+      (left.cvDate ?? '').localeCompare(right.cvDate ?? ''),
+    );
   const distinctVersions = collapseSameValues(field, versions);
   const chronological = distinctVersions.length >= 2;
   const earlier = chronological ? distinctVersions[0] : claims[0];
   const later = chronological
     ? distinctVersions[distinctVersions.length - 1]
-    : claims.find((claim) => !sameCollectedValue(field, claim.value, earlier.value)) ??
-      claims[claims.length - 1];
+    : (claims.find(
+        (claim) => !sameCollectedValue(field, claim.value, earlier.value),
+      ) ?? claims[claims.length - 1]);
   const support = claims.find(
-    (claim) =>
-      claim !== earlier &&
-      claim !== later &&
-      claim.role === 'record',
+    (claim) => claim !== earlier && claim !== later && claim.role === 'record',
   );
 
   const label: InconsistencyLabel = 'conflicting';
@@ -162,7 +167,9 @@ function conflictRow(
     previousValue: earlier.value,
     currentValue: later.value,
     cvDate: chronological ? later.cvDate : earlier.cvDate,
-    cvSource: chronological ? later.cvSource ?? later.sourceName : earlier.cvSource,
+    cvSource: chronological
+      ? (later.cvSource ?? later.sourceName)
+      : earlier.cvSource,
     supportingSource: support?.sourceName ?? earlier.sourceName,
     claims,
   });
@@ -239,7 +246,9 @@ function statusRow(
   });
 }
 
-function publicationCountGap(items: ExpertEvidenceItem[]): Inconsistency | null {
+function publicationCountGap(
+  items: ExpertEvidenceItem[],
+): Inconsistency | null {
   const item = items.find(
     (entry) =>
       entry.identityMatch !== 'uncertain' &&
@@ -251,7 +260,9 @@ function publicationCountGap(items: ExpertEvidenceItem[]): Inconsistency | null 
   const indexedCount = item.raw.indexedCount as number;
   if (cvCount === indexedCount) return null;
   const label: InconsistencyLabel =
-    indexedCount > 0 && indexedCount < cvCount ? 'partially_verified' : 'not_verified';
+    indexedCount > 0 && indexedCount < cvCount
+      ? 'partially_verified'
+      : 'not_verified';
   const severity = severityFor('publication', label);
   const sourceName = item.source?.name ?? item.sourceId;
   return {
@@ -265,7 +276,8 @@ function publicationCountGap(items: ExpertEvidenceItem[]): Inconsistency | null 
     field: 'publication',
     previousValue: String(indexedCount),
     currentValue: String(cvCount),
-    change: 'Publication counts differ. The difference is not proof that the remaining items are absent.',
+    change:
+      'Publication counts differ. The difference is not proof that the remaining items are absent.',
     cvDate: null,
     cvSource: null,
     supportingSource: sourceName,
@@ -303,7 +315,8 @@ function labelForUnconfirmed(
   );
   if (returned) return 'not_verified';
   const answeredEmpty = relevant.some(
-    (attempt) => attempt.status === 'no_result' || attempt.outcome === 'no_result',
+    (attempt) =>
+      attempt.status === 'no_result' || attempt.outcome === 'no_result',
   );
   if (answeredEmpty) return 'not_found';
   return 'unable_to_verify';
@@ -312,7 +325,11 @@ function labelForUnconfirmed(
 function distinctValues(claims: ExtractedClaim[]): string[] {
   const values: string[] = [];
   for (const claim of claims) {
-    if (values.some((value) => sameCollectedValue(claim.field, value, claim.value))) {
+    if (
+      values.some((value) =>
+        sameCollectedValue(claim.field, value, claim.value),
+      )
+    ) {
       continue;
     }
     values.push(claim.value);

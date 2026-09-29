@@ -5,4 +5,11 @@ Collected findings and source attempts. This is the only evidence you may use:
 
 {{findingsJson}}
 
-Write the JSON object described in your instructions. Cite findingKey or sourceRef values from this JSON. If a category has no record, say it could not be verified. Do not invent sources or qualifications.
+Write one JSON object matching the schema in your instructions.
+
+Requirements:
+- Summarize only from this packet (expert, credentials, CV versions, inconsistencies, legal matters, orders, motions, depositions, contradictory testimony, publications, authorship, grants/patents, licenses/certifications, memberships, websites, videos, social media, income/bias, university rules, missing/unverified information, and investigation findings).
+- Cite findingKey and/or source URLs / sourceRef values on every important claim.
+- Generate at least 100 leading questions from actual evidence. If evidence is weak, unavailable, restricted, or not verified, set uncertaintyNote accordingly.
+- Do not invent cases, dates, publications, credentials, quotes, court findings, income, social posts, testimony, or statistics.
+- If a category has no record, say it could not be verified / not found / unavailable / restricted as appropriate.

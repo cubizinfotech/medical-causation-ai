@@ -1,6 +1,10 @@
 import { stat } from 'fs/promises';
 import { basename } from 'path';
-import type { ExtractedDocumentMetadata, ProcessedPage } from '../types';
+import type {
+  ExtractedDocumentMetadata,
+  OcrStatus,
+  ProcessedPage,
+} from '../types';
 import type { ParserOutput } from '../interfaces';
 import {
   countWords,
@@ -19,10 +23,13 @@ export function buildExtractedMetadata(params: {
   modifiedAt: Date;
   parserOutput: ParserOutput;
   normalizedText: string;
+  ocrStatus?: OcrStatus;
+  checksum?: string;
 }): ExtractedDocumentMetadata {
   const { parserOutput, normalizedText } = params;
   const wordCount = countWords(normalizedText);
   const charCount = normalizedText.length;
+  const needsOcr = parserOutput.needsOcr ?? false;
 
   return {
     title: parserOutput.title ?? deriveTitle(params.filename),
@@ -36,7 +43,9 @@ export function buildExtractedMetadata(params: {
     createdAt: params.createdAt,
     modifiedAt: params.modifiedAt,
     author: parserOutput.author,
-    needsOcr: parserOutput.needsOcr ?? false,
+    needsOcr,
+    ocrStatus: params.ocrStatus ?? (needsOcr ? 'required' : 'not_required'),
+    checksum: params.checksum,
   };
 }
 
