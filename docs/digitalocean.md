@@ -66,6 +66,30 @@ Sign out and back in so the docker group applies. Check:
 docker compose version
 ```
 
+## IP-based first deploy (no domain yet)
+
+Use this when the droplet is reachable only by public IPv4 (example: `157.230.156.87`). HTTPS and a reverse proxy come later when you have a domain.
+
+1. On your laptop, fill AI keys in `.env.live` (gitignored), then copy it to the server as `.env`.
+2. On the server use both compose files:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.live.yml up -d --build
+```
+
+`docker-compose.live.yml` binds Postgres and Redis to `127.0.0.1` only, skips pgAdmin, and keeps web/API on ports 3000/3001 for IP access.
+
+| Service | Live URL (IP example) | Notes |
+|---------|------------------------|--------|
+| Web | `http://157.230.156.87:3000` | Public browser UI |
+| API | `http://157.230.156.87:3001` | Public API; `/health`, `/health/ready` |
+| Postgres | `127.0.0.1:5432` on the droplet only | Not a public URL. Do not open in the cloud firewall |
+| Redis | `127.0.0.1:6379` on the droplet only | Not a public URL |
+
+Set DigitalOcean firewall inbound: SSH `22`, web `3000`, API `3001`. Do not allow `5432`, `6379`, or `5050`.
+
+A 1 vCPU / 2 GB droplet is below the comfortable size in this guide. Add 2 GB swap before the first image build, or upgrade the droplet, if `docker compose build` runs out of memory.
+
 ## Docker Compose setup
 
 Clone the repository on the droplet. Copy `.env.example` to `.env` and set production values. Then:
