@@ -109,7 +109,7 @@ export const EWI_REPORT_SECTIONS: SectionSpec[] = [
     title: '18. University/Professional Rules',
     providers: ['university'],
   },
-  { id: 'discrepancies', title: '19. Findings and Discrepancies' },
+  { id: 'discrepancies', title: '19. Inconsistencies' },
   { id: 'sources', title: '20. Sources and Links' },
   { id: 'limitations', title: '21. Research Limitations' },
   { id: 'questions', title: '22. Cross-Examination Questions' },
@@ -260,23 +260,53 @@ function discrepancySection(input: {
   const items = input.discrepancies;
   if (items.length === 0 && (input.analysis?.conflicts.length ?? 0) === 0) {
     blocks.push({
-      text: 'No conflict between collected statements was identified. Absence of a conflict is not verification of a credential.',
+      text: 'No inconsistency was identified in the collected statements. Absence of a conflict is not verification of a credential.',
       style: 'note',
     });
   }
   for (const item of items) {
+    const label = item.label ? item.label.replaceAll('_', ' ') : item.severity;
     blocks.push({
-      text: `${item.title} (${item.severity})`,
+      text: `${item.title} (${label}, ${item.severity})`,
       style: 'subheading',
     });
+    if (item.field) {
+      blocks.push({ text: `Field: ${item.field.replaceAll('_', ' ')}` });
+    }
+    if (item.cvDate || item.cvSource) {
+      blocks.push({
+        text: `CV: ${[item.cvDate, item.cvSource].filter(Boolean).join(' — ')}`,
+      });
+    }
+    if (item.previousValue) {
+      blocks.push({ text: `Previous value: ${item.previousValue}` });
+    }
+    if (item.currentValue) {
+      blocks.push({ text: `Current value: ${item.currentValue}` });
+    }
+    if (item.change) {
+      blocks.push({ text: `Change: ${item.change}` });
+    }
+    if (item.supportingSource) {
+      blocks.push({ text: `Supporting source: ${item.supportingSource}` });
+    }
     blocks.push({ text: item.description });
+    for (const source of item.sources ?? []) {
+      const line = [source.sourceName, source.value].filter(Boolean).join(': ');
+      blocks.push({
+        text: source.url ? `${line} — ${source.url}` : line,
+        link: source.url,
+        style: 'citation',
+      });
+    }
     for (const url of item.relatedUrls) {
+      if ((item.sources ?? []).some((source) => source.url === url)) continue;
       blocks.push({ text: url, link: url, style: 'citation' });
     }
   }
   return {
     id: 'discrepancies',
-    title: '19. Findings and Discrepancies',
+    title: '19. Inconsistencies',
     blocks,
   };
 }

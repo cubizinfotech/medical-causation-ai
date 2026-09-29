@@ -214,7 +214,6 @@ function missingCategories(
 function cvGaps(
   packet: AnalysisPacket,
 ): EwiAnalysisDocument['cvDiscrepancies'] {
-  const analyzer = new DiscrepancyAnalyzer();
   const evidence = packet.findings.map((finding) => ({
     sourceId: finding.providerId,
     category: finding.category,
@@ -223,8 +222,16 @@ function cvGaps(
     url: finding.url,
     raw: finding.raw,
   }));
-  return analyzer
-    .analyze(evidence)
+  return new DiscrepancyAnalyzer()
+    .analyze(
+      evidence,
+      packet.sourceAttempts.map((attempt) => ({
+        providerId: attempt.providerId,
+        status: attempt.status,
+        access: attempt.access,
+        itemCount: attempt.itemCount,
+      })),
+    )
     .filter((item) => item.id !== 'review-recommended')
     .map((item) => ({
       findingKeys: packet.findings

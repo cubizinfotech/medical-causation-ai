@@ -420,7 +420,7 @@ EWI is a separate product from the medical causation demo. It does not use the k
 1. Open [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake).
 2. Enter an expert name, city, and medical specialty, or use **Load Example**, then click **Start Investigation**.
 3. The progress screen lists the investigation stages, the current stage, overall percent, and status. A failed run can be retried from that screen. Sources that are unavailable are recorded and the run continues.
-4. When the job completes, the history page shows the investigation summary, findings, discrepancies, sources, and cross-examination questions.
+4. When the job completes, the history page shows the investigation summary, findings, inconsistencies, sources, and cross-examination questions.
 5. **Download Word Report** saves the `.docx` file.
 
 Histories: [http://localhost:3000/ewi/histories](http://localhost:3000/ewi/histories).

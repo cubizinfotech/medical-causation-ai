@@ -346,7 +346,7 @@ npm run dev:web
 
 - Landing (product chooser): [http://localhost:3000](http://localhost:3000)
 - MCA: [http://localhost:3000/mca](http://localhost:3000/mca) · Case [http://localhost:3000/mca/case](http://localhost:3000/mca/case)
-- EWI: [http://localhost:3000/ewi](http://localhost:3000/ewi) · Intake [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake) · after Start Investigation, progress is at `/ewi/investigation` and the completed summary, findings, sources, questions, and Word download are at `/ewi/histories/:id`
+- EWI: [http://localhost:3000/ewi](http://localhost:3000/ewi) · Intake [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake) · after Start Investigation, progress is at `/ewi/investigation` and the completed summary, findings, inconsistencies, sources, questions, and Word download are at `/ewi/histories/:id`
 - Legacy MCA URLs (`/case`, `/analysis`, `/report`, `/histories`) redirect to `/mca/*`
 
 See [DEMO_GUIDE.md](./DEMO_GUIDE.md) for the full client demonstration script (step-by-step).

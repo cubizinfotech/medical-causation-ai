@@ -16,6 +16,16 @@ export interface EwiCrossExamQuestion {
   evidenceBasis: string;
 }
 
+export interface EwiInconsistencySource {
+  sourceId: string;
+  sourceName: string;
+  title: string;
+  url?: string;
+  retrievedAt?: string;
+  value: string;
+  cvDate?: string;
+}
+
 export interface EwiDiscrepancy {
   id: string;
   severity: "low" | "medium" | "high";
@@ -23,6 +33,16 @@ export interface EwiDiscrepancy {
   description: string;
   evidenceIds: string[];
   relatedUrls: string[];
+  label?: string;
+  field?: string;
+  previousValue?: string | null;
+  currentValue?: string | null;
+  change?: string | null;
+  cvDate?: string | null;
+  cvSource?: string | null;
+  supportingSource?: string | null;
+  priority?: number;
+  sources?: EwiInconsistencySource[];
 }
 
 export interface EwiEvidenceItem {

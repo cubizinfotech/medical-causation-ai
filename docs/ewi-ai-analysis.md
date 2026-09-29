@@ -28,6 +28,8 @@ Collected findings stay in `ewi.research_findings`. The interpretation is stored
 
 Assessments are computed from the collected packet. Model output cannot upgrade them.
 
+Inconsistency labels are a separate list, stored on `ewi.discrepancies`: Verified, Partially Verified, Conflicting, Not Verified, Not Found, and Unable to Verify. `DiscrepancyAnalyzer` assigns them by comparing collected statements, including more than one CV version when those versions are present. The model is not asked to choose these labels, and accepted model wording does not replace them. Original findings remain the authority for what each source said.
+
 ## Model wording
 
 Prompts:

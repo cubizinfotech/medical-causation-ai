@@ -172,7 +172,7 @@ MCA and EWI run in one monorepo. Local development uses Docker for PostgreSQL an
 - [x] Primary input is expert name, city, and medical specialty
 - [x] Extend `ewi` experts, profiles, sources, findings, and discrepancies for categorized evidence and source metadata
 - [x] Restricted sources, including LexisNexis, store metadata and links only. PDFs are not stored
-- [x] Research plan runs the provider catalog by stage, including mock fixtures and normalized outcomes
+- [x] Compare collected statements, including CV versions, and store inconsistencies with source evidence
 - [ ] Live research providers for the expanded evidence categories
 
 ## Phase 2 — Database & API Foundation

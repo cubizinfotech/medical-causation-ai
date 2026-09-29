@@ -26,9 +26,9 @@ Two products share one sign-in, one database, and one place to run background wo
 
 **Workflow.** The attorney starts one investigation. The application then works through profile, education, licenses, publications, legal mentions, public pages, and related checks. It does not stop for approval at every step. If a source is unavailable, the investigation continues and records that fact. It does not invent a degree, license, or case.
 
-**Output.** A finished investigation on screen and a Microsoft Word report. The report includes a summary, findings, discrepancies, source links, limitations, and at least 100 cross-examination questions when the collected evidence supports them. Unverified points stay unverified.
+**Output.** A finished investigation on screen and a Microsoft Word report. The report includes a summary, findings, inconsistencies, source links, limitations, and at least 100 cross-examination questions when the collected evidence supports them. Inconsistencies use evidence labels such as Conflicting or Not Verified. Unverified points stay unverified.
 
-**Major features.** Twenty-two research stages, live progress, source status, discrepancy notes, grounded questions, and a Word download.
+**Major features.** Research stages, live progress, source status, inconsistency comparison, grounded questions, and a Word download.
 
 ## Demo users and roles
 

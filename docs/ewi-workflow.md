@@ -31,14 +31,16 @@ Local research uses fixtures. See [research-providers.md](./research-providers.m
 17. Research university and professional rules
 18. Research reviews, payments, affiliations, and public records
 19. Cross-check information
-20. Identify discrepancies
+20. Identify inconsistencies
 21. Generate investigation summary
 22. Generate cross-examination questions
 23. Generate final report
 
 ## What the attorney sees
 
-The progress screen groups those stages into shorter labels. When the job completes, the history page shows the summary, findings, discrepancies, sources, cross-examination questions, and a Word download.
+The progress screen groups those stages into shorter labels. When the job completes, the history page shows the summary, findings, inconsistencies, sources, cross-examination questions, and a Word download.
+
+Inconsistency labels come from comparing collected statements, including more than one CV when those versions were collected. The labels are Verified, Partially Verified, Conflicting, Not Verified, Not Found, and Unable to Verify. A model may phrase the summary. It does not decide the label.
 
 Empty sections say the information could not be verified. They do not imply that a credential is absent.
 

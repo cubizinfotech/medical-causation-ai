@@ -30,12 +30,12 @@ The final Expert Witness Investigation output is a Microsoft Word document. MCA 
 16. Social Media
 17. News and Blogs
 18. University/Professional Rules
-19. Findings and Discrepancies
+19. Inconsistencies
 20. Sources and Links
 21. Research Limitations
 22. Cross-Examination Questions
 
-Source URLs are written as links. Restricted items keep the title and link. Their body text is not copied into the report.
+Source URLs are written as links. Restricted items keep the title and link. Their body text is not copied into the report. Section 19 lists inconsistencies in significance order. Each entry keeps the evidence label, the compared values, and the sources those values came from.
 
 ## Cross-examination questions
 

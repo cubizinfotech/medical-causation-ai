@@ -24,7 +24,7 @@ export const EWI_PROGRESS_STEPS = [
     label: "Research reviews, payments, affiliations, and public records",
   },
   { id: "cross-check", label: "Cross-check information" },
-  { id: "discrepancies", label: "Identify discrepancies" },
+  { id: "discrepancies", label: "Identify inconsistencies" },
   { id: "summary", label: "Generate investigation summary" },
   { id: "questions", label: "Generate cross-examination questions" },
   { id: "report", label: "Generate final report" },

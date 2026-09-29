@@ -19,7 +19,7 @@ export function buildGroundedCrossExamQuestions(input: {
 
   for (const discrepancy of input.discrepancies ?? []) {
     push(questions, {
-      category: 'Findings and Discrepancies',
+      category: 'Inconsistencies',
       question: `Doctor ${name}, the collected materials conflict: "${discrepancy.title}". You cannot reconcile that conflict from anything else in this file, can you?`,
       evidenceBasis: discrepancy.description,
     });

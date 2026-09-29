@@ -18,6 +18,8 @@ import {
   toStorableFinding,
   type InvestigationLifecycleStatus,
 } from '../domain/investigation-lifecycle';
+import type { InconsistencySource } from '../../research/inconsistency-analyzer';
+import type { VerificationField } from '../../research/verification-labels';
 
 const EWI_RESULT_DISCLAIMER =
   'Expert Witness Investigation output is for attorney research only. Restricted sources are stored as metadata and links only.';
@@ -26,7 +28,7 @@ const detailInclude = {
   expert: true,
   profile: true,
   findings: { include: { source: true } },
-  discrepancies: true,
+  discrepancies: { orderBy: { priority: 'asc' as const } },
   questions: { orderBy: { number: 'asc' as const } },
   report: true,
   analysis: true,
@@ -278,6 +280,23 @@ export class ExpertInvestigationRepository {
             title: item.title,
             description: item.description,
             relatedUrls: item.relatedUrls,
+            sourceName: item.supportingSource,
+            sourceUrl: item.relatedUrls[0] ?? null,
+            evidenceStatus: 'recorded' as const,
+            verificationStatus: storedVerificationStatus(item.label),
+            label: item.label,
+            field: item.field,
+            previousValue: item.previousValue,
+            currentValue: item.currentValue,
+            changeText: item.change,
+            cvDate: item.cvDate,
+            cvSource: item.cvSource,
+            supportingSource: item.supportingSource,
+            priority: item.priority,
+            evidence:
+              item.sources.length > 0
+                ? (item.sources as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
           })),
         });
       }
@@ -513,6 +532,16 @@ export class ExpertInvestigationRepository {
           description: item.description,
           evidenceIds: [],
           relatedUrls: item.relatedUrls,
+          label: item.label,
+          field: (item.field ?? 'cv') as VerificationField,
+          previousValue: item.previousValue,
+          currentValue: item.currentValue,
+          change: item.changeText,
+          cvDate: item.cvDate,
+          cvSource: item.cvSource,
+          supportingSource: item.supportingSource,
+          priority: item.priority,
+          sources: readInconsistencySources(item.evidence),
         })),
         questions: row.questions.map((item) => ({
           number: item.number,
@@ -561,4 +590,35 @@ function parsePublishedAt(value: unknown): Date | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function storedVerificationStatus(
+  label: string | undefined,
+): 'verified' | 'unverified' | 'disputed' {
+  if (label === 'verified') return 'verified';
+  if (label === 'conflicting') return 'disputed';
+  return 'unverified';
+}
+
+function readInconsistencySources(value: unknown): InconsistencySource[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const row = entry as Record<string, unknown>;
+    if (typeof row.sourceId !== 'string' || typeof row.sourceName !== 'string') {
+      return [];
+    }
+    return [
+      {
+        sourceId: row.sourceId,
+        sourceName: row.sourceName,
+        title: typeof row.title === 'string' ? row.title : row.sourceName,
+        url: typeof row.url === 'string' ? row.url : undefined,
+        retrievedAt:
+          typeof row.retrievedAt === 'string' ? row.retrievedAt : undefined,
+        value: typeof row.value === 'string' ? row.value : '',
+        cvDate: typeof row.cvDate === 'string' ? row.cvDate : undefined,
+      },
+    ];
+  });
 }

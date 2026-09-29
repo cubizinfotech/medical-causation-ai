@@ -169,7 +169,7 @@ export const EWI_WORKFLOW_STAGES: readonly InvestigationStageDefinition[] = [
   },
   {
     id: 'discrepancies',
-    label: 'Identify discrepancies',
+    label: 'Identify inconsistencies',
     kind: 'discrepancy',
     providers: [],
   },

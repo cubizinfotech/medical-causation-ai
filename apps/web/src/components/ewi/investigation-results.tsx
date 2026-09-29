@@ -34,7 +34,26 @@ function sourcesFromResult(
   return [...collected, ...gaps];
 }
 
-export function sourceStatusLabel(source: EwiSourceStatus): string {
+function labelText(label: string | undefined): string {
+  switch (label) {
+    case "verified":
+      return "Verified";
+    case "partially_verified":
+      return "Partially Verified";
+    case "conflicting":
+      return "Conflicting";
+    case "not_verified":
+      return "Not Verified";
+    case "not_found":
+      return "Not Found";
+    case "unable_to_verify":
+      return "Unable to Verify";
+    default:
+      return "Not Verified";
+  }
+}
+
+function sourceStatusLabel(source: EwiSourceStatus): string {
   if (source.status === "error") return "Error";
   if (source.status === "unavailable" || source.status === "skipped") {
     return "Unavailable";
@@ -96,20 +115,55 @@ export function InvestigationResults({
         )}
       </ResultSection>
 
-      <ResultSection title="Discrepancies">
+      <ResultSection title="Inconsistencies">
         {discrepancies.length === 0 ? (
           <EmptyCopy>
-            No conflict between collected statements was identified.
+            No inconsistency was identified in the collected statements.
           </EmptyCopy>
         ) : (
           <ul className="space-y-4">
             {discrepancies.map((item) => (
               <li key={item.id} className="text-sm">
-                <p className="font-medium capitalize">
+                <p className="font-medium">
                   [{item.severity}] {item.title}
                 </p>
+                <p className="mt-1 text-muted-foreground">
+                  {labelText(item.label)}
+                  {item.field ? ` · ${item.field.replaceAll("_", " ")}` : ""}
+                </p>
+                {item.cvDate || item.cvSource ? (
+                  <p className="mt-1">
+                    CV: {[item.cvDate, item.cvSource].filter(Boolean).join(" — ")}
+                  </p>
+                ) : null}
+                {item.previousValue ? (
+                  <p className="mt-1">Previous value: {item.previousValue}</p>
+                ) : null}
+                {item.currentValue ? (
+                  <p>Current value: {item.currentValue}</p>
+                ) : null}
+                {item.change ? <p>Change: {item.change}</p> : null}
+                {item.supportingSource ? (
+                  <p>Supporting source: {item.supportingSource}</p>
+                ) : null}
                 <p className="mt-1 text-muted-foreground">{item.description}</p>
-                {item.relatedUrls.length > 0 ? (
+                {item.sources && item.sources.length > 0 ? (
+                  <ul className="mt-2 space-y-1">
+                    {item.sources.map((source) => (
+                      <li key={`${source.sourceId}-${source.value}`}>
+                        {source.url ? (
+                          <ExternalLink href={source.url}>
+                            {source.sourceName}: {source.value}
+                          </ExternalLink>
+                        ) : (
+                          <span>
+                            {source.sourceName}: {source.value}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : item.relatedUrls.length > 0 ? (
                   <ul className="mt-2 space-y-1">
                     {item.relatedUrls.map((url) => (
                       <li key={url}>
@@ -227,7 +281,13 @@ function EmptyCopy({ children }: { children: ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
 }
 
-function ExternalLink({ href }: { href: string }) {
+function ExternalLink({
+  href,
+  children,
+}: {
+  href: string;
+  children?: ReactNode;
+}) {
   return (
     <a
       href={href}
@@ -235,7 +295,7 @@ function ExternalLink({ href }: { href: string }) {
       rel="noreferrer"
       className="break-all text-primary underline-offset-2 hover:underline"
     >
-      {href}
+      {children ?? href}
     </a>
   );
 }

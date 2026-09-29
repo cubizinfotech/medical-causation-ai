@@ -60,15 +60,17 @@ The history detail page shows the stage label and percent while the investigatio
 | `expert_profiles` | Identity snapshot for that investigation, including city |
 | `research_sources` | Provider, source type, source name, URL, publication date, retrieval date, evidence status, restricted flag, restriction note |
 | `research_findings` | Collected item: category, title, optional summary, source URL, source type, source name, retrieval date, relevant dates, evidence status, verification status, notes, permitted attributes |
-| `discrepancies` | Inconsistencies: severity, description, related URLs, and the same source metadata fields |
+| `discrepancies` | Inconsistencies: label, severity, field, previous value, current value, change, CV date and source, supporting source, related URLs, and the source statements in `evidence` |
 | `cross_exam_questions` | Numbered questions and evidence basis |
 | `investigation_reports` | Generated `.docx` file name, MIME type, local storage key, byte size, template id, template version |
 | `investigation_analyses` | Model or deterministic analysis JSON, stored apart from source findings |
 | `investigation_events` | Audit trail: event type, status, stage, message, timestamp |
 
-Collected categories on `research_findings.category` are identity/profile, location, specialty, CVs, education, universities, licenses, state licensing records, board certifications, certification organizations, memberships, publications, grants, patents, awards, military claims, legal cases, orders (`court_order`), motions, depositions, testimony, directories, websites, IME information, advertising, videos, presentations, PowerPoints, social media, news, university rules, income/bias, patient reviews, office/address, corporate affiliations, criminal records, malpractice, FOIA requests, university information requests, graduation requests, and a general research finding. Inconsistencies, questions, and the Word report stay on the tables that already held them.
+Collected categories on `research_findings.category` are identity/profile, location, specialty, CVs, education, universities, licenses, state licensing records, board certifications, certification organizations, memberships, publications, grants, patents, awards, military claims, legal cases, orders (`court_order`), motions, depositions, testimony, directories, websites, IME information, advertising, videos, presentations, PowerPoints, social media, news, university rules, income/bias, patient reviews, office/address, corporate affiliations, criminal records, malpractice, FOIA requests, university information requests, graduation requests, and a general research finding. Inconsistencies stay on `discrepancies`. Questions and the Word report stay on the tables that already held them.
 
-Indexes cover status, expert name, city, specialty, created time, provider, category, evidence status, verification status, and question order.
+`discrepancies.label` is one of Verified, Partially Verified, Conflicting, Not Verified, Not Found, or Unable to Verify. A row also stores the field, the previous and current values, the change, the CV date and source when two CV versions were compared, the supporting source, and the source statements in `evidence`. Significant rows are stored with a lower `priority` number so they sort first. An unavailable source or a source that returned nothing is not stored as proof that a claim is absent. Same-name records that did not match city or specialty are not compared.
+
+Indexes cover status, expert name, city, specialty, created time, provider, category, evidence status, verification status, inconsistency label, priority, and question order.
 
 `attributes` holds category-specific fields only when the source license allows storage. Restricted items store a title, source name, source type, URL, retrieval date, and a restriction note. Summary text and document bodies are cleared. LexisNexis PDFs are not stored.
 
@@ -82,7 +84,7 @@ Starting an investigation with expert name, city, and specialty queues a BullMQ 
 
 The web app collects the name, city, and specialty at `/ewi/intake`, then follows the job at `/ewi/investigation`. The screen groups the backend stages into the attorney-facing list (identifying the expert through the final report), and shows the current stage, completed stages, a failed stage when the job stops, overall progress, and status. Socket.IO updates the job, and TanStack Query refetches it while it is pending or running. A failed job can be retried from that screen.
 
-When the job completes, `/ewi/histories/:id` shows the summary, findings, discrepancies, source outcomes (including empty and unavailable sources), cross-examination questions, and the Word download. Raw findings stay on the investigation record. The download is `GET /ewi/histories/:id/report`.
+When the job completes, `/ewi/histories/:id` shows the summary, findings, inconsistencies, source outcomes (including empty and unavailable sources), cross-examination questions, and the Word download. Raw findings stay on the investigation record. The download is `GET /ewi/histories/:id/report`.
 
 Progress is also stored on the investigation, so a refresh can resume the same job.
 
@@ -107,7 +109,7 @@ Stages:
 17. Research university/professional rules
 18. Research reviews, payments, affiliations, and public records
 19. Cross-check information
-20. Identify discrepancies
+20. Identify inconsistencies
 21. Generate investigation summary
 22. Generate cross-examination questions
 23. Generate final report

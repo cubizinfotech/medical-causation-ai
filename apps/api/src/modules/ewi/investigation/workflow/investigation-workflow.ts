@@ -7,6 +7,7 @@ import {
   type ExpertResearchSourceResult,
 } from '@integrations/expert-research';
 import { DiscrepancyAnalyzer } from '../../research/discrepancy-analyzer';
+import type { VerificationAttempt } from '../../research/inconsistency-analyzer';
 import type { EwiWordReportService } from '../../report/ewi-word-report.service';
 import { buildGroundedCrossExamQuestions } from '../../report/ewi-report-questions';
 import {
@@ -228,8 +229,12 @@ export async function executeInvestigationWorkflow(
     }
 
     if (stage.kind === 'discrepancy') {
-      const discrepancies = analyzer.analyze(evidence);
-      const message = `${discrepancies.length} discrepancy note(s) from collected items.`;
+      const found = analyzer.analyze(evidence, verificationAttempts(sourceResults));
+      const significant = found.filter((item) => item.severity === 'high').length;
+      const message =
+        found.length === 0
+          ? 'No inconsistency was identified from the collected statements. Nothing was inferred.'
+          : `${found.length} inconsistency note(s) from source comparison, ${significant} significant.`;
       stageNotes.push({ label: stage.label, message });
       await report(dependencies, stage, progress, message);
       continue;
@@ -275,24 +280,10 @@ export async function executeInvestigationWorkflow(
       evidence,
       stageNotes,
     });
-  const discrepancies = [
-    ...analysis.document.conflicts.map((item, index) => ({
-      id: `conflict-${index + 1}`,
-      severity: 'high' as const,
-      title: 'Conflicting collected statements',
-      description: item.description,
-      evidenceIds: item.findingKeys,
-      relatedUrls: urlsForKeys(evidence, analysis.document, item.findingKeys),
-    })),
-    ...analysis.document.cvDiscrepancies.map((item, index) => ({
-      id: `cv-gap-${index + 1}`,
-      severity: 'medium' as const,
-      title: 'Collected statements disagree',
-      description: item.description,
-      evidenceIds: item.findingKeys,
-      relatedUrls: urlsForKeys(evidence, analysis.document, item.findingKeys),
-    })),
-  ];
+  const discrepancies = analyzer.analyze(
+    evidence,
+    verificationAttempts(sourceResults),
+  );
   const questions = buildGroundedCrossExamQuestions({
     expertName: request.expertName,
     evidence,
@@ -404,20 +395,16 @@ async function runResearchStage(
   );
 }
 
-function urlsForKeys(
-  evidence: ExpertEvidenceItem[],
-  document: EwiAnalysisRecord['document'],
-  findingKeys: string[],
-): string[] {
-  const keyToIndex = new Map(
-    document.assessments.map((assessment) => [
-      assessment.findingKey,
-      Number(assessment.findingKey.replace('f', '')) - 1,
-    ]),
-  );
-  return findingKeys
-    .map((key) => evidence[keyToIndex.get(key) ?? -1]?.url)
-    .filter((url): url is string => Boolean(url));
+function verificationAttempts(
+  results: ExpertResearchSourceResult[],
+): VerificationAttempt[] {
+  return results.map((result) => ({
+    providerId: result.sourceId,
+    status: result.status,
+    outcome: result.outcome,
+    access: result.access,
+    itemCount: result.items.length,
+  }));
 }
 
 function failedResult(

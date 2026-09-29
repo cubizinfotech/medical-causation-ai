@@ -156,6 +156,18 @@ enum VerificationStatus {
   @@schema("ewi")
 }
 
+/// Evidence label for an inconsistency. These names do not assert fraud.
+enum InconsistencyLabel {
+  verified
+  partially_verified
+  conflicting
+  not_verified
+  not_found
+  unable_to_verify
+
+  @@schema("ewi")
+}
+
 /// Whether a research item's content was stored.
 /// metadata_only means the license does not permit storing the body.
 enum EvidenceStatus {
@@ -355,6 +367,17 @@ model Discrepancy {
   relevantDates      DateTime[]          @default([]) @map("relevant_dates")
   evidenceStatus     EvidenceStatus      @default(recorded) @map("evidence_status")
   verificationStatus VerificationStatus  @default(unverified) @map("verification_status")
+  label              InconsistencyLabel  @default(not_verified)
+  field              String?
+  previousValue      String?             @map("previous_value") @db.Text
+  currentValue       String?             @map("current_value") @db.Text
+  changeText         String?             @map("change_text") @db.Text
+  cvDate             String?             @map("cv_date")
+  cvSource           String?             @map("cv_source")
+  supportingSource   String?             @map("supporting_source")
+  priority           Int                 @default(100)
+  /// Source statements compared for this inconsistency.
+  evidence           Json?
   restricted         Boolean             @default(false)
   notes              String?
   createdAt          DateTime            @default(now()) @map("created_at")
@@ -362,6 +385,8 @@ model Discrepancy {
   investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
 
   @@index([investigationId])
+  @@index([investigationId, priority])
+  @@index([label])
   @@index([evidenceStatus])
   @@map("discrepancies")
   @@schema("ewi")
