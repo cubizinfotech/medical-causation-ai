@@ -229,6 +229,22 @@ That command reads `KNOWLEDGE_BASE_PATH` (`./knowledge-base`), chunks the docume
 
 Indexing a large library takes a long time and uses the embedding API. Run it once after upload, and again after you add or replace documents.
 
+If `scp` stops with `Broken pipe` or `Connection reset`, the file it was sending is incomplete. Do not run `npm run reembed:kb:full` until the copy finishes. Delete that partial file on the server, then upload again with SSH keepalives so the connection stays open:
+
+```bash
+# on the server — example for the file that failed
+rm -f "/var/www/medical-causation-ai/knowledge-base/books/ama 6th book.pdf"
+df -h
+```
+
+`df -h` must show free space larger than the knowledge-base folder. From PowerShell, retry with keepalives:
+
+```powershell
+scp -o ServerAliveInterval=15 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes -r .\knowledge-base\books .\knowledge-base\articles .\knowledge-base\reports .\knowledge-base\templates deploy@157.230.156.87:/var/www/medical-causation-ai/knowledge-base/
+```
+
+That sends completed files again. To skip a file that is already the same size on the server, upload one folder at a time (`books`, then `articles`, then `reports`, then `templates`) after the partial PDF is deleted.
+
 ## 7. Optional full Docker stack
 
 On a larger droplet (about 4 GB RAM or more):
