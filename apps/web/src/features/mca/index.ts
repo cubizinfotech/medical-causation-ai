@@ -1,6 +1,6 @@
 /**
  * MCA frontend feature boundary.
- * Prefer these imports over legacy @/features/demo|medical-analysis|report paths.
+ * Prefer these imports over legacy @/features/demo and @/features/medical-analysis paths.
  */
 export * from "./medical-analysis";
 export * from "./demo/constants";

@@ -1,406 +1,101 @@
-# Medical Causation AI — Demonstration Guide
+# Demonstration guide
 
-The maintained guide is [docs/demo-guide.md](docs/demo-guide.md). Paid API credentials are not required for local development. A DigitalOcean server is not required.
+Use this file on a laptop. The DigitalOcean steps, pgAdmin server login, Redis, and knowledge-base upload are in [DEPLOYMENT.md](./DEPLOYMENT.md).
 
-This file keeps the longer click-by-click notes from earlier demos. Where it disagrees with `docs/demo-guide.md`, follow `docs/demo-guide.md`.
+Paid research accounts are not required. Expert Witness Investigation uses sample records. A Medical Causation Analysis that cites your books needs an embedding key and the files in `knowledge-base/`.
 
-## Project Overview
+## Install
 
-Medical Causation AI helps personal injury attorneys evaluate whether trauma or accidents medically contributed to a patient's injury or disease. The demonstration uses:
-
-- A **private knowledge base** (indexed medical textbooks and documents)
-- **Hybrid RAG retrieval** (pgvector + PostgreSQL full-text search)
-- **LLM-powered medical analysis** with citation validation
-- **Persistent case history** stored in PostgreSQL
-- **Background job processing** with live WebSocket progress
-- A **polished web UI** for case intake, analysis, reports, and history
-
-> This is legal research assistance — not medical diagnosis or treatment advice.
-
-## Prerequisites
-
-| Requirement | Version |
-|-------------|---------|
-| Node.js | 20.x or later |
-| npm | 10.x or later |
-| Docker | 24.x or later |
-| Docker Compose | v2 |
-
-You do not need a paid API account to install or to run Expert Witness Investigation. A live Medical Causation Analysis calls one chat provider. A free-tier key is enough for that optional step. Leave research credentials empty.
-
-## Installation
+Requirements: Node.js 20 or later, npm 10 or later, Docker with Compose v2.
 
 ```bash
-# 1. Clone and enter the project
 cd medical-causation-ai
-
-# 2. Install dependencies (monorepo workspaces)
 npm install
-
-# 3. Configure environment
 cp .env.example .env
-```
-
-> **Warning:** Do not run `npm audit fix --force` — it can downgrade Next.js/NestJS and break the dev server.
-
-## Environment Configuration
-
-Edit `.env` with these **critical** settings:
-
-```env
-# Database (Docker defaults work for local demo)
-DATABASE_URL=postgresql://mca_user:mca_password@localhost:5432/medical_causation_ai
-
-# AI — chat/reasoning (Groq free tier recommended)
-AI_PROVIDER=groq
-AI_CHAT_MODEL=llama-3.3-70b-versatile
-GROQ_API_KEY=your-groq-key
-
-# Embeddings (OpenRouter — batched, no daily cap)
-EMBEDDING_PROVIDER=openrouter
-AI_EMBEDDING_MODEL=openai/text-embedding-3-small
-EMBEDDING_DIMENSIONS=768
-OPENROUTER_API_KEY=your-openrouter-key
-
-# Frontend ↔ Backend
-FRONTEND_URL=http://localhost:3000
-NEXT_PUBLIC_API_URL=http://localhost:3001
-NEXT_PUBLIC_API_TIMEOUT_MS=180000
-
-# Knowledge base root
-KNOWLEDGE_BASE_PATH=./knowledge-base
-```
-
-See `.env.example` for the full variable reference.
-
-## Connecting to PostgreSQL
-
-Infrastructure must be running before you connect:
-
-```bash
 npm run docker:infra
-```
-
-### Database credentials (local demo defaults)
-
-| Setting | Value |
-|---------|-------|
-| **Port** | `5432` |
-| **Database** | `medical_causation_ai` |
-| **User** | `mca_user` |
-| **Password** | `mca_password` |
-| **Connection string** | `postgresql://mca_user:mca_password@localhost:5432/medical_causation_ai` |
-
-**Host depends on where you connect from:**
-
-| Field | pgAdmin (PSQL / Query Tool) | Your PC (terminal, API) |
-|-------|----------------------------|-------------------------|
-| **Server Name** | `localhost` (label only) | — |
-| **Host** | `postgres` | `localhost` |
-
-If you customized `.env`, use your `POSTGRES_*` values instead.
-
-### pgAdmin login
-
-Open [http://localhost:5050](http://localhost:5050):
-
-| Setting | Default value |
-|---------|---------------|
-| **Email** | `admin@medical-causation.ai` |
-| **Password** | `admin` |
-
-### pgAdmin — PSQL Workspace (quick connect)
-
-1. Log in to pgAdmin (credentials above)
-2. Open **Tools → PSQL Workspace**
-3. Fill in the form exactly as shown:
-
-   | Field | Value |
-   |-------|-------|
-   | **Server Name** | `localhost` |
-   | **Host name/address** | `postgres` |
-   | **Port** | `5432` |
-   | **Database** | `medical_causation_ai` |
-   | **User** | `mca_user` |
-   | **Password** | `mca_password` |
-
-4. **Connection Parameters** (defaults are fine):
-
-   | Name | Keyword | Value |
-   |------|---------|-------|
-   | SSL mode | `sslmode` | `prefer` |
-   | Connection timeout | `connect_timeout` | `10` |
-
-5. Click **Connect & Open PSQL**
-
-> **Server Name vs Host:** **Server Name** = `localhost` is just the tab label. **Host** = `postgres` is the actual Docker database address. Do not put `localhost` in the Host field.
-
-### pgAdmin — register server (browse tables)
-
-1. Click **Add New Server** (or right-click **Servers** → **Register → Server**)
-2. **General** tab — Name: `localhost`
-3. **Connection** tab:
-
-   | Field | Value |
-   |-------|-------|
-   | Host name/address | `postgres` |
-   | Port | `5432` |
-   | Maintenance database | `medical_causation_ai` |
-   | Username | `mca_user` |
-   | Password | `mca_password` |
-
-4. Click **Save**
-5. Browse: **Servers → localhost → Databases → medical_causation_ai → Schemas → documents / vectors**
-
-### pgAdmin — Query Tool (ad-hoc connect)
-
-Same values as PSQL Workspace: Server Name `localhost`, Host `postgres`, plus database/user/password above.
-
-### Command line
-
-```bash
-docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai
-```
-
-## Knowledge Base Setup
-
-Place licensed PDF textbooks under:
-
-```
-knowledge-base/
-├── books/        ← Medical textbooks (PDF)
-├── articles/     ← Research articles
-├── reports/      ← Internal reference reports
-└── uploads/      ← Staging for future uploads
-```
-
-**Example:** `knowledge-base/books/ama 6th book.pdf`
-
-### Index & embed documents
-
-```bash
-# 1. Start infrastructure
-npm run docker:infra
-
-# 2. Apply database migrations
+npm run docker:ps
 npm run prisma:migrate
-
-# 3. Index + embed knowledge base (first time or after adding docs)
-npm run reembed:kb:full
 ```
 
-Verify embeddings:
+`npm run docker:infra` starts PostgreSQL, Redis, and pgAdmin. It is the same as `docker compose up -d postgres redis pgadmin`. It does not start the website.
 
-```bash
-docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai -c \
-  "SELECT COUNT(*) AS chunks FROM documents.document_chunks; SELECT COUNT(*) AS embeddings FROM vectors.chunk_embeddings;"
-```
-
-Both counts should match (e.g. 1,486).
-
-## Starting the Application
-
-### Terminal 1 — Backend
+Start the apps in two terminals and leave them running:
 
 ```bash
 npm run dev:api
 ```
 
-API: [http://localhost:3001](http://localhost:3001)
-
-### Terminal 2 — Frontend
-
 ```bash
 npm run dev:web
 ```
 
-Web app: [http://localhost:3000](http://localhost:3000)
+| What | Address |
+|------|---------|
+| Website | http://localhost:3000 |
+| API | http://localhost:3001 |
+| API health | http://localhost:3001/health |
+| pgAdmin | http://localhost:5050 |
 
----
+If the website says port 3000 is in use, stop the other program. The API must stay on port 3001.
 
-## Client Demo — Step-by-Step Flow
+## Settings to leave as they are
 
-Use this script when presenting to a client. Total demo time: **5–10 minutes** per case.
+| Setting | Local value | Why |
+|---------|-------------|-----|
+| `RESEARCH_PROVIDER` | `mock` | No research vendor is called |
+| `EMAIL_PROVIDER` | `console` | Mail is logged, not sent |
+| `EMAIL_DELIVERY_ENABLED` | `false` | Same |
+| `AUTH_ENABLED` | `false` | Pages stay open for a tour |
+| `KNOWLEDGE_BASE_PATH` | `./knowledge-base` | Where MCA reads documents |
 
-### Step 1 — Landing Page
+## pgAdmin, PostgreSQL, and Redis
 
-**URL:** [http://localhost:3000](http://localhost:3000)
+Open http://localhost:5050.
 
-**Say:** *"This platform helps attorneys evaluate medical causation using your firm's private medical library plus AI reasoning."*
+Sign in with `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` from `.env`. The example file uses `admin@medical-causation.ai` and `admin`. Change those before any shared machine.
 
-**Show:**
-- Platform overview and capabilities
-- How-it-works workflow
-- Click **Start AI Demonstration**
+Add a server in pgAdmin:
 
----
+| Field | Value |
+|-------|--------|
+| Host | `postgres` |
+| Port | `5432` |
+| Database | `medical_causation_ai` |
+| Username | `mca_user` |
+| Password | `POSTGRES_PASSWORD` in `.env` (example file uses `mca_password`) |
 
-### Step 2 — Case Intake Form
+Redis is on `localhost:6379`. The example file sets no Redis password. Check with:
 
-**URL:** [http://localhost:3000/case](http://localhost:3000/case)
-
-**Say:** *"The attorney enters patient and accident details, then asks a specific medical causation question."*
-
-**Quick start:** Click **Load Example Case** to cycle through 4 pre-built scenarios (mTBI/stroke, cervical MVA, workplace fall).
-
-**Or fill manually:**
-
-| Section | Example |
-|---------|---------|
-| Patient | Robert Chen, 52, Male |
-| Accident | Motor vehicle collision, 2023-09-14 |
-| Diagnosis | Acute ischemic stroke; mild TBI |
-| Symptoms | Headache, confusion, right-sided weakness on day 18 |
-| Medical Question | *Did the mild TBI materially contribute to the ischemic stroke?* |
-
-**Important:** Check the **Terms of Use** acknowledgment box.
-
-Click **Run AI Analysis**.
-
----
-
-### Step 3 — Live Analysis Progress
-
-**URL:** [http://localhost:3000/analysis](http://localhost:3000/analysis)
-
-**Say:** *"Analysis runs in the background — one case at a time. Progress updates live via WebSocket."*
-
-**Show the processing steps:**
-
-1. Preparing Medical Case
-2. Searching Private Knowledge Base
-3. Searching Public Medical Literature
-4. Ranking Medical Sources
-5. Medical Reasoning
-6. Generating Statistical Summary
-7. Cross-Examination Questions
-8. Final Report
-
-**Typical duration:** 1–3 minutes (Groq) depending on model and rate limits.
-
-On success, click **View Report** (opens the case in Histories).
-
----
-
-### Step 4 — Case History
-
-**URL:** [http://localhost:3000/histories](http://localhost:3000/histories)
-
-**Say:** *"Every submitted case is saved permanently. Attorneys can return to any prior analysis."*
-
-**Show:**
-- List of all cases with status (Queued / Processing / Completed / Failed)
-- Progress percentage for in-flight cases
-- Click a row to open the full case detail
-
-**Delete (optional demo):** Click **Delete** on a row → confirm in the dialog. The case and report are permanently removed.
-
----
-
-### Step 5 — Full Report
-
-**URL:** [http://localhost:3000/histories/{case-id}](http://localhost:3000/histories)
-
-**Say:** *"The report is evidence-based, cites your private knowledge base, and is ready for attorney review."*
-
-**Walk through report sections:**
-
-| Section | What to highlight |
-|---------|-------------------|
-| Executive Summary | 2–4 sentence attorney overview |
-| Confidence Score | 0–100 evidence alignment (not a diagnosis) |
-| Causation Opinion | Evidence-based conclusion |
-| Supporting / Opposing Evidence | Classified excerpts with page references |
-| Medical Reasoning | Step-by-step causation logic |
-| Timeline & Risk Factors | Case chronology and competing etiologies |
-| Private Knowledge Base Sources | Human-readable citations from AMA guides / textbooks |
-| Cross-Examination Questions | 50+ questions by category |
-| Legal Disclaimer | No medical advice / limitations |
-
-**Export:**
-- **Export PDF** — downloads a styled multi-page PDF
-- **Print** — browser print with terms & policy on the last page
-
----
-
-### Step 6 — Wrap Up
-
-**Say:** *"The platform searches your indexed medical library, applies accepted causation methodology, and produces a citable report — without replacing a licensed medical expert."*
-
-Point to:
-- [Terms of Use](/terms) and [Privacy Policy](/privacy)
-- Knowledge base can be expanded by adding PDFs and re-running `npm run reembed:kb`
-
----
-
-## Expected AI Pipeline
-
-```
-Knowledge Base (PDFs in knowledge-base/)
-        ↓
-Document Processing (PDF/DOCX/TXT/MD parsing)
-        ↓
-Chunking (token-aware splits)
-        ↓
-Embeddings (OpenRouter text-embedding-3-small)
-        ↓
-Vector Indexing (PostgreSQL + pgvector)
-        ↓
-Hybrid Retrieval (vector + keyword + RRF fusion)
-        ↓
-Context Builder (dedup, token limits, citations)
-        ↓
-Medical Analysis (Groq LLM + citation validation)
-        ↓
-Report Enrichment (timeline, cross-exam, references)
-        ↓
-PostgreSQL case history + full report UI
+```bash
+docker exec mca-redis redis-cli ping
 ```
 
-## API Endpoints (Demo)
+## Product tour
 
-| Method | Route | Purpose |
-|--------|-------|---------|
-| `POST` | `/medical-analysis/jobs` | Submit case for background analysis |
-| `GET` | `/medical-analysis/jobs/:jobId` | Poll job status |
-| `GET` | `/medical-analysis/histories` | List case history |
-| `GET` | `/medical-analysis/histories/:id` | Case detail + report |
-| `DELETE` | `/medical-analysis/histories/:id` | Delete case (with confirmation in UI) |
-| WebSocket | `/medical-analysis` | Live job progress events |
+1. Open http://localhost:3000. The home page offers Medical Causation Analysis and Expert Witness Investigation.
+2. MCA: open `/mca`, start a case or load an example, and watch progress. History is under `/mca/histories`. A live analysis calls the chat provider in `.env`. Leave the key empty if you only want to click through the screens.
+3. EWI: open `/ewi`, then **New Investigation**. Enter a name, city, and specialty. Progress is at `/ewi/investigation`. When it finishes, `/ewi/histories/:id` shows the summary, findings, questions, and **Download Word Report**. Cancel mid-run if you want; retry starts a new job with the same intake.
 
-## Known Limitations
+Some EWI sources show as unavailable or restricted. That is the honest sample-data path.
 
-| Limitation | Notes |
-|------------|-------|
-| Authentication is off by default | Set `AUTH_ENABLED=true` and a local `JWT_SECRET`, then run `npm run seed:demo-users` |
-| Email is logged, not sent | `EMAIL_PROVIDER=console`. See [docs/email.md](docs/email.md) |
-| File upload is display-only | Uploaded files are not sent to the API |
-| Public literature is simulated | PubMed/NIH references are demo placeholders |
-| One analysis at a time | Queue processes cases sequentially |
-| Groq free tier limits | ~1,000 requests/day, 100K tokens/day on llama-3.3-70b |
-| Analysis latency | 1–5 minutes depending on model and rate limits |
+## Index your own medical documents (optional)
 
-## Troubleshooting
+Put PDFs in `knowledge-base/books` or `knowledge-base/articles`. Those folders are not in Git. Then:
 
-| Issue | Solution |
-|-------|----------|
-| `No retrieved evidence available` | Run `npm run reembed:kb:full` after embedding model changes |
-| Analysis fails at Medical Reasoning | Restart API; ensure Groq key is set; check JSON parse fix is deployed |
-| Gemini embedding quota (429) | Use OpenRouter for embeddings (`EMBEDDING_PROVIDER=openrouter`) |
-| Analysis stuck / canceled | Run `npm run docker:infra` (Redis required) |
-| CORS errors | Set `FRONTEND_URL=http://localhost:3000` |
-| Database connection failed | Run `npm run docker:infra`; PSQL Workspace: Server Name `localhost`, Host `postgres`, user `mca_user`, password `mca_password` |
-| pgAdmin *Connection refused* on localhost | **Host** must be `postgres` (Docker service). `localhost` is only for **Server Name** (tab label) |
+```bash
+npm run reembed:kb:full
+```
+
+You need a working embedding key (`OPENROUTER_API_KEY` when `EMBEDDING_PROVIDER=openrouter`). EWI does not read this folder.
 
 ## Demo accounts
 
-These accounts exist only for local demonstration. Do not use them in production, and do not put the password in environment files.
+Turn these on only when you want to show login.
 
-1. Set `AUTH_ENABLED=true` and a local `JWT_SECRET` in the root `.env` (any long random string is fine for local use).
-2. Restart the API.
-3. Run `npm run seed:demo-users`.
-
-The seed refuses to run when `NODE_ENV=production`. Each account uses the password `password`.
+1. Set `AUTH_ENABLED=true`.
+2. Set `JWT_SECRET` to a long random string.
+3. Restart the API.
+4. Run `npm run seed:demo-users`.
 
 | Role | Email |
 |------|--------|
@@ -409,29 +104,13 @@ The seed refuses to run when `NODE_ENV=production`. Each account uses the passwo
 | Attorney | attorney@example.com |
 | Paralegal | paralegal@example.com |
 | Medical Expert | medical-expert@example.com |
-| Normal User | normal-user@example.com |
+| User | normal-user@example.com |
 
-Sign in at [http://localhost:3000/login](http://localhost:3000/login). The header shows the role. Super Admin and Admin can list users at `GET /auth/users`. Other roles can use MCA and EWI. With `AUTH_ENABLED=false`, the product pages stay open and the API does not require a token.
+Each local account uses the password `password`. Do not use these accounts on the public droplet. The seed command refuses to run when `NODE_ENV=production`. Sign in at http://localhost:3000/login.
 
-## Expert Witness Investigation
-
-EWI is a separate product from the medical causation demo. It does not use the knowledge base. With `RESEARCH_PROVIDER=mock` (the local default), the investigation runs on development fixtures and does not call paid research APIs. Live vendor HTTP is not connected. Some sources will show as unavailable or restricted — that is expected, not a fake all-green path.
-
-1. Open [http://localhost:3000/ewi](http://localhost:3000/ewi) (dashboard), then **New Investigation**, or go directly to [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake).
-2. Enter an expert name, city, and medical specialty, or use **Load Example**, then click **Start Investigation**.
-3. Progress at `/ewi/investigation` shows a live stage timeline, percent, and status from the backend job. Cancel mid-run if needed. Retry starts a new job with the same intake values.
-4. When complete, `/ewi/histories/:id` shows the summary dashboard, tabbed findings (inconsistencies, legal, publications, credentials, presence, income/bias, questions, sources), and **Download Word Report**.
-5. Histories list: [http://localhost:3000/ewi/histories](http://localhost:3000/ewi/histories).
-
-Request/email prepare-approve-send is API-only (role-gated) and off by default. There is no request UI in the demo yet.
-
-## Related Documentation
+## Related
 
 - [README.md](./README.md)
-- [docs/demo-guide.md](./docs/demo-guide.md)
-- [docs/frontend-demo.md](./docs/frontend-demo.md)
-- [docs/ewi-architecture.md](./docs/ewi-architecture.md)
-- [docs/ewi-workflow.md](./docs/ewi-workflow.md)
-- [docs/medical-analysis.md](./docs/medical-analysis.md)
-- [docs/indexing.md](./docs/indexing.md)
+- [docs/how-it-works.md](./docs/how-it-works.md)
 - [DEPLOYMENT.md](./DEPLOYMENT.md)
+- [TODO.md](./TODO.md)

@@ -54,15 +54,9 @@ Temporary staging area for documents uploaded by users before ingestion.
 - Files here are processed and moved to the appropriate permanent location
 - Do not treat this folder as long-term storage
 
-## Future RAG Pipeline
+## Indexing
 
-In later phases, documents in this directory will be:
-
-1. **Parsed** — text extracted from PDFs and other formats
-2. **Chunked** — split into semantically meaningful segments
-3. **Embedded** — converted to vector representations via the configured AI provider
-4. **Indexed** — stored in PostgreSQL with pgvector for similarity search
-5. **Retrieved** — queried during medical causation analysis alongside PubMed, PMC, and other external sources
+Documents in this directory are parsed, chunked, embedded, and stored in PostgreSQL. They are not stored in Git. Copy them to a server with the steps in [DEPLOYMENT.md](../DEPLOYMENT.md), then run `npm run reembed:kb:full`. Expert Witness Investigation does not use this folder.
 
 ## Important Notes
 

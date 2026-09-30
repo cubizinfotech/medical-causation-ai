@@ -30,11 +30,7 @@ export default function CasePage() {
         <p className="mb-8 max-w-3xl text-sm leading-6 text-muted-foreground">
           Complete all required fields below, or use <strong>Load Example Case</strong>{" "}
           to pre-fill a realistic mild traumatic brain injury and stroke causation
-          scenario. A full copy-paste reference is in{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-            docs/demo-case-example.md
-          </code>{" "}
-          at the repository root.
+          scenario.
         </p>
 
         <CaseForm />

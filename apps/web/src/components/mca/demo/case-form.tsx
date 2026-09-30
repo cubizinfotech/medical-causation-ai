@@ -129,10 +129,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             <p className="mt-1 text-sm text-muted-foreground">
               Click <strong>Load Example Case</strong> to cycle through{" "}
               {demoCaseExamples.length} realistic scenarios (mTBI/stroke, cervical
-              MVA, workplace fall). Or copy from{" "}
-              <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                docs/demo-case-example.md
-              </code>
+              MVA, workplace fall).
             </p>
             {loadedExample ? (
               <p className="mt-2 text-sm text-primary">

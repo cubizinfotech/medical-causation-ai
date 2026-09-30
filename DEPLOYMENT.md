@@ -1,236 +1,248 @@
-# Medical Causation AI — Deployment Guide
+# Deployment — DigitalOcean
 
-The current production guide is [docs/digitalocean.md](docs/digitalocean.md). Container layout and health checks are in [docs/deployment.md](docs/deployment.md). Local setup does not use this server. See [docs/demo-guide.md](docs/demo-guide.md).
+Use this file to run the application on the droplet. Local demonstration steps are in [DEMO_GUIDE.md](./DEMO_GUIDE.md).
 
-Automated backups are not part of the approved deployment.
+The droplet already used in this project is `157.230.156.87`. Replace that address if the droplet IP changes.
 
-## Server Requirements
+Run every `npm` command below from the repository root on the server (`~/medical-causation-ai`) after `npm install`.
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| CPU | 2 vCPU | 4+ vCPU |
-| RAM | 4 GB | 8+ GB |
-| Disk | 20 GB SSD | 50+ GB SSD (grows with knowledge base) |
-| OS | Linux (Ubuntu 22.04+) | Linux |
+| Command | What it does |
+|---------|----------------|
+| `npm run docker:infra` | Starts PostgreSQL, Redis, and pgAdmin in Docker. This is the same as `docker compose up -d postgres redis pgadmin`. |
+| `npm run docker:ps` | Shows whether those containers are running |
+| `npm run prisma:migrate` | Creates the database tables |
+| `npm run dev:api` | Starts the API on port 3001. Leave this terminal open. |
+| `npm run dev:web` | Starts the website on port 3000. Leave this terminal open. |
+| `npm run reembed:kb:full` | Indexes the knowledge-base files into PostgreSQL. Run this only after the files are copied onto the server. |
 
-## Runtime Versions
+`npm run docker:infra` does not start the website. The website and API are the two `dev` commands.
 
-| Technology | Version |
-|------------|---------|
-| Node.js | 20.x LTS or later |
-| npm | 10.x or later |
-| PostgreSQL | 17 with **pgvector** extension |
-| Redis | 7.x |
-| Docker | 24.x+ (optional) |
-| Docker Compose | v2 |
+## What runs where
 
-## Architecture Overview
+| Service | How you open it | Public? |
+|---------|-----------------|---------|
+| Web | `http://157.230.156.87:3000` | Yes |
+| API | `http://157.230.156.87:3001` | Yes |
+| API health | `http://157.230.156.87:3001/health` | Yes |
+| pgAdmin | `http://157.230.156.87:5050` | Only if you open port 5050 |
+| PostgreSQL | Host `postgres`, port `5432`, inside Docker | No. Do not open 5432 on the internet |
+| Redis | Host `redis`, port `6379`, inside Docker | No. Do not open 6379 on the internet |
 
-```
-Internet
-    │
-    ▼
-┌─────────────┐     ┌─────────────┐
-│   Next.js   │────▶│   NestJS    │
-│   (web)     │     │   (api)     │
-│   :3000     │     │   :3001     │
-└─────────────┘     └──────┬──────┘
-                           │
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-        PostgreSQL      Redis    Knowledge Base
-        + pgvector     (cache)    (volume mount)
-```
+A 1 vCPU / 2 GB droplet can run Postgres, Redis, pgAdmin, and the Node apps. Building the full API and web Docker images on that size often runs out of memory. Use Docker for the database tools and Node for the website and API.
 
-## Environment Variables
+## 1. Server packages
 
-Copy `.env.example` to `.env` and configure for production.
-
-### Required
-
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `POSTGRES_*` | Database credentials (Docker) |
-| `AI_PROVIDER` | Active LLM provider (`openrouter`, `openai`, etc.) |
-| `AI_CHAT_MODEL` | Chat/completion model (not rerank) |
-| `EMBEDDING_PROVIDER` | Embedding provider |
-| `OPENROUTER_API_KEY` / provider keys | AI API credentials |
-| `KNOWLEDGE_BASE_PATH` | Path to document storage |
-| `FRONTEND_URL` | Public frontend URL (CORS) |
-| `NEXT_PUBLIC_API_URL` | Public API URL (frontend build) |
-| `NODE_ENV` | `production` |
-
-### Recommended Production
-
-| Variable | Description |
-|----------|-------------|
-| `REDIS_URL` | Redis connection for future caching/queues |
-| `NEXT_PUBLIC_API_TIMEOUT_MS` | `180000` for long analyses |
-| `AI_TEMPERATURE` | `0.2` for deterministic legal research |
-| `LOG_LEVEL` | `info` or `warn` |
-
-### Security
-
-- **Never** commit `.env` to version control
-- Store secrets in a vault (AWS Secrets Manager, Azure Key Vault, etc.)
-- Rotate API keys regularly
-- Use TLS termination at reverse proxy (nginx, Caddy, ALB)
-
-## Docker Deployment
-
-### Build and start
+SSH in, then install Docker if it is not already installed, and install Node.js 20:
 
 ```bash
-cp .env.example .env
-# Edit .env for production values
-
-docker compose config          # Validate
-docker compose up -d --build   # Start full stack
+sudo apt update
+sudo apt install -y ca-certificates curl git
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v
+npm -v
+docker compose version
 ```
 
-### Services
+Firewall inbound ports for this IP demo: `22`, `3000`, `3001`, and `5050` if you want pgAdmin in the browser. Leave `5432` and `6379` closed.
 
-| Service | Port | Image |
-|---------|------|-------|
-| `web` | 3000 | Built from `docker/web/Dockerfile` |
-| `api` | 3001 | Built from `docker/api/Dockerfile` |
-| `postgres` | 5432 | `pgvector/pgvector:pg17` |
-| `redis` | 6379 | `redis:7-alpine` |
-| `pgadmin` | 5050 | `dpage/pgadmin4` (dev/admin only) |
-
-### Volumes
-
-- `mca-postgres-data` — database persistence
-- `mca-redis-data` — Redis persistence
-- Mount `knowledge-base/` as read-only volume for the API container
-
-### Health checks
+## 2. Git
 
 ```bash
-docker compose ps
-docker exec mca-postgres pg_isready -U mca_user
-docker exec mca-redis redis-cli ping
+cd ~
+git clone <your-repository-url> medical-causation-ai
+cd medical-causation-ai
 ```
 
-## Manual Deployment
-
-### 1. Database
+Later updates:
 
 ```bash
-# Install PostgreSQL 17 + pgvector
-# Run init scripts from docker/postgres/init/
-
-cd apps/api
+cd ~/medical-causation-ai
+git pull
+npm install
 npm run prisma:migrate
 ```
 
-### 2. Build applications
+Then restart the API and web terminals.
+
+Do not commit `.env`, `.env.live`, or files inside `knowledge-base/books`, `articles`, `reports`, `templates`, or `uploads`. Those folders are gitignored because the documents are large.
+
+## 3. Environment file
+
+On the server, the file must be named `.env` in the repository root.
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+For the current IP demo, set at least:
+
+```env
+NODE_ENV=development
+FRONTEND_URL=http://157.230.156.87:3000
+NEXT_PUBLIC_API_URL=http://157.230.156.87:3001
+API_PUBLIC_URL=http://157.230.156.87:3001
+
+POSTGRES_USER=mca_user
+POSTGRES_PASSWORD=choose-a-long-password
+POSTGRES_DB=medical_causation_ai
+POSTGRES_HOST=127.0.0.1
+POSTGRES_PORT=5432
+DATABASE_URL=postgresql://mca_user:choose-a-long-password@127.0.0.1:5432/medical_causation_ai
+
+PGADMIN_DEFAULT_EMAIL=admin@medical-causation.ai
+PGADMIN_DEFAULT_PASSWORD=choose-a-pgadmin-password
+PGADMIN_PORT=5050
+
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_URL=redis://127.0.0.1:6379/0
+
+AI_PROVIDER=mistral
+EMBEDDING_PROVIDER=openrouter
+MISTRAL_API_KEY=paste-from-your-local-env
+OPENROUTER_API_KEY=paste-from-your-local-env
+
+KNOWLEDGE_BASE_PATH=./knowledge-base
+RESEARCH_PROVIDER=mock
+EMAIL_PROVIDER=console
+EMAIL_DELIVERY_ENABLED=false
+AUTH_ENABLED=false
+```
+
+`NODE_ENV=development` matches the demo-guide process (`npm run dev:api` and `npm run dev:web`). Use `production` only when you run the built Docker images.
+
+Paste the AI keys from your laptop `.env`. Medical Causation Analysis needs them. Expert Witness Investigation with `RESEARCH_PROVIDER=mock` does not call paid research sites.
+
+There is a laptop file named `.env.live` you can copy up instead:
+
+```powershell
+scp .env.live root@157.230.156.87:~/medical-causation-ai/.env
+```
+
+Do not commit that file.
+
+## 4. Database, Redis, and pgAdmin
+
+From `~/medical-causation-ai` on the server:
 
 ```bash
 npm install
-npm run build
+npm run docker:infra
+npm run docker:ps
+npm run prisma:migrate
 ```
 
-### 3. Start API
+`npm run docker:infra` starts three containers: `mca-postgres`, `mca-redis`, and `mca-pgadmin`. Wait until `npm run docker:ps` shows postgres as healthy before `npm run prisma:migrate`.
+
+The same Docker start, if you prefer the Compose line:
 
 ```bash
-cd apps/api
-NODE_ENV=production npm run start:prod
+docker compose up -d postgres redis pgadmin
+docker compose ps
 ```
 
-### 4. Start Web
+### pgAdmin
+
+Open `http://157.230.156.87:5050`.
+
+| Field | Value |
+|-------|--------|
+| Email | `PGADMIN_DEFAULT_EMAIL` from `.env` |
+| Password | `PGADMIN_DEFAULT_PASSWORD` from `.env` |
+
+Register the database server inside pgAdmin:
+
+| Field | Value |
+|-------|--------|
+| Host | `postgres` |
+| Port | `5432` |
+| Database | `POSTGRES_DB` (`medical_causation_ai`) |
+| Username | `POSTGRES_USER` (`mca_user`) |
+| Password | `POSTGRES_PASSWORD` from `.env` |
+
+Use host `postgres`, not `localhost`. pgAdmin runs in Docker, and `postgres` is the database container name.
+
+### Redis
+
+Redis has no password unless `REDIS_PASSWORD` is set. The API reaches it as host `redis` on port `6379` when both run in Docker. When the API runs on the host with `npm run dev:api`, `.env` should use `REDIS_HOST=127.0.0.1` because Compose publishes port 6379 on the droplet.
+
+Check it from the server:
 
 ```bash
-cd apps/web
-NODE_ENV=production npm run start
+docker exec mca-redis redis-cli ping
 ```
 
-### Reverse proxy (nginx example)
+A healthy reply is `PONG`.
 
-```nginx
-server {
-  listen 443 ssl;
-  server_name app.example.com;
+## 5. Start the website and API
 
-  location / {
-    proxy_pass http://127.0.0.1:3000;
-  }
-}
-
-server {
-  listen 443 ssl;
-  server_name api.example.com;
-
-  location / {
-    proxy_pass http://127.0.0.1:3001;
-    proxy_read_timeout 180s;
-  }
-}
-```
-
-Set `proxy_read_timeout` to at least **180 seconds** for medical analysis requests.
-
-## Build Commands
-
-| Command | Description |
-|---------|-------------|
-| `npm run build` | Build API + web |
-| `npm run build:api` | Build NestJS only |
-| `npm run build:web` | Build Next.js only |
-| `npm run test` | Run API unit tests |
-| `npm run lint` | Lint both apps |
-| `npm run typecheck` | TypeScript validation |
-
-## Production Recommendations
-
-### Application
-
-- Run API behind a process manager (PM2, systemd) or container orchestrator
-- Use Next.js `standalone` output (already configured)
-- Enable structured logging (Winston/Pino — planned Phase 2e)
-- Add `GET /health` endpoint before production traffic (planned)
-
-### Database
-
-- Enable automated backups for PostgreSQL
-- Use connection pooling (PgBouncer) under load
-- Monitor pgvector index size and query performance
-
-### AI
-
-- Set rate limits on analysis endpoint
-- Monitor token usage and costs per provider
-- Use dedicated chat models (not rerank models) for `AI_CHAT_MODEL`
-
-### Security
-
-- Enable HTTPS everywhere
-- Restrict CORS to production frontend domain
-- Do not expose PostgreSQL or Redis ports publicly
-- Remove pgAdmin from production stacks
-- Audit logs for PHI — not yet implemented
-
-### Scaling (future)
-
-- Horizontal API scaling behind load balancer
-- BullMQ job queue for async analysis
-- Redis caching for retrieval results
-- CDN for static frontend assets
-
-## CI/CD Checklist
+Use two terminals, both in `~/medical-causation-ai`:
 
 ```bash
-npm run lint
-npm run typecheck
-npm run test
-npm run build
-docker compose config
+npm run dev:api
 ```
 
-## Related Documentation
+```bash
+npm run dev:web
+```
 
-- [DEMO_GUIDE.md](./DEMO_GUIDE.md) — local demonstration setup
-- [docs/deployment.md](./docs/deployment.md) — detailed Docker architecture
-- [docs/architecture.md](./docs/architecture.md) — system design
-- [README.md](./README.md) — project overview
+If port 3000 is already taken, stop the other program. The website must stay on 3000 and the API on 3001.
+
+Confirm:
+
+```bash
+curl -fsS http://127.0.0.1:3001/health
+curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000
+```
+
+Then open `http://157.230.156.87:3000` in a browser.
+
+`npm run dev:web` reads `NEXT_PUBLIC_API_URL` from `.env`. If you change that URL, restart the web process.
+
+## 6. Upload the knowledge base
+
+Medical books and articles are not in Git. Copy them from your Windows project folder.
+
+PowerShell, from `D:\medical-causation-ai`:
+
+```powershell
+scp -r .\knowledge-base\books .\knowledge-base\articles .\knowledge-base\reports .\knowledge-base\templates root@157.230.156.87:~/medical-causation-ai/knowledge-base/
+```
+
+Create any missing folder on the server first:
+
+```bash
+mkdir -p ~/medical-causation-ai/knowledge-base/{books,articles,reports,templates,uploads}
+```
+
+After the copy finishes, index the documents. Postgres must be up, and `OPENROUTER_API_KEY` (or the embedding key for your `EMBEDDING_PROVIDER`) must be set in `.env`.
+
+```bash
+cd ~/medical-causation-ai
+npm run reembed:kb:full
+```
+
+That command reads `KNOWLEDGE_BASE_PATH` (`./knowledge-base`), chunks the documents, and stores embeddings in PostgreSQL. Expert Witness Investigation does not use this folder.
+
+Indexing a large library takes a long time and uses the embedding API. Run it once after upload, and again after you add or replace documents.
+
+## 7. Optional full Docker stack
+
+On a larger droplet (about 4 GB RAM or more):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.live.yml up -d --build
+```
+
+`NEXT_PUBLIC_API_URL` is baked into the web image at build time. Rebuild web after you change it. Skip this path on a 2 GB droplet.
+
+## 8. Leave these off until you decide
+
+- Do not run `npm run seed:demo-users` on a public server. The command refuses to run when `NODE_ENV=production`. Demo password is `password` and is for a laptop only.
+- Keep `RESEARCH_PROVIDER=mock` until a research vendor is approved.
+- Keep `EMAIL_DELIVERY_ENABLED=false` until a real sender is approved.
+- Set `AUTH_ENABLED=true` and a long `JWT_SECRET` before you share the site beyond a private demo.
+- Backups are not installed. Do not treat this droplet as backed up.

@@ -1,444 +1,49 @@
 # Medical Causation AI
 
-Enterprise SaaS platform that helps personal injury attorneys determine whether trauma or accidents medically contributed to a patient's injury or disease using scientific evidence, epidemiology, AI reasoning, and peer-reviewed medical literature.
+This application helps personal injury attorneys do two kinds of legal research.
 
-> **This is not a hospital system, EMR, or medical diagnosis tool.** It is a legal research and causation analysis platform for attorneys.
+**Medical Causation Analysis (MCA)** studies whether a trauma or accident medically contributed to an injury or disease. It searches the firm’s indexed medical documents and writes an on-screen report with citations. It does not diagnose patients and it is not a hospital record system.
 
-## Project Overview
+**Expert Witness Investigation (EWI)** researches an opposing expert from a name, city, and medical specialty, then downloads a Microsoft Word report with cross-examination questions. The local and server demo uses sample research records. Live paid research sites are not connected.
 
-Attorneys handling personal injury cases often need to answer causation questions such as:
+Both products share one website, one API, PostgreSQL, and Redis. Their screens and data stay separate.
 
-- Did a car accident contribute to a patient's stroke?
-- Did trauma worsen a spinal injury?
-- Did a workplace accident increase the risk of a disease?
+## Where to read next
 
-**Medical Causation AI (MCA)** automates the research and analysis process by searching medical databases, retrieving scientific evidence, applying accepted causation principles, and generating attorney-ready reports with citations.
+| File | Use it for |
+|------|------------|
+| [DEMO_GUIDE.md](./DEMO_GUIDE.md) | Run the demo on your computer |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Run it on the DigitalOcean droplet, including pgAdmin, Redis, and the knowledge-base upload |
+| [docs/how-it-works.md](./docs/how-it-works.md) | Purpose and the two user flows |
+| [docs/index.html](./docs/index.html) | The same overview in a browser |
+| [TODO.md](./TODO.md) | What is done and what is still pending |
 
-The same monorepo also hosts **Expert Witness Investigation (EWI)** — research an opposing expert (name, city, and specialty) and generate a Microsoft Word report with 100+ evidence-based cross-examination questions. MCA and EWI share infrastructure but keep separate modules, data, and UI routes so they can be split later with minimal changes.
+## Run it locally
 
-## Prerequisites
-
-- **Node.js** 20.x or later
-- **npm** 10.x or later
-- **Git**
-- **Docker** 24.x or later (for PostgreSQL, Redis, and containerized services)
-- **Docker Compose** v2
-
-## Folder Structure
-
-```
-medical-causation-ai/
-├── apps/
-│   ├── api/              # NestJS — platform/common + MCA + EWI
-│   └── web/              # Next.js — /mca + /ewi (+ product chooser)
-├── docker/
-├── packages/             # Shared packages (future)
-├── knowledge-base/       # MCA corpus (flat) + knowledge-base/ewi/
-├── docs/
-├── docker-compose.yml
-└── docker-compose.dev.yml
-```
-
-| Directory | Purpose |
-|-----------|---------|
-| `apps/api` | NestJS API — configuration, modules, AI, medical logic |
-| `apps/web` | Next.js frontend — UI, features, services |
-| `docker/postgres` | PostgreSQL init scripts — pgvector extension, schemas |
-| `docker/redis` | Redis config — caching, queues, session cache |
-| `knowledge-base` | Private medical documents for future RAG indexing |
-| `docs` | Architecture, development, and deployment documentation |
-
-See [docs/folder-structure.md](./docs/folder-structure.md) for the complete directory reference.
-
-## Technology Stack
-
-### Frontend
-- Next.js 16 (App Router)
-- TypeScript
-- Tailwind CSS 4
-- Shadcn-style UI components
-- TanStack Query
-- React Hook Form + Zod
-
-### Backend
-- NestJS 11
-- TypeScript
-- PostgreSQL 17 + pgvector
-- Redis 7
-
-### AI
-- Provider-agnostic AI architecture (`AiService` single entry point)
-- LLM providers: OpenRouter (default), OpenAI, Anthropic, Gemini, Groq
-- Embedding providers: OpenAI, Gemini, Voyage, Jina, Nomic, Ollama (future)
-- File-based prompt template management
-
-## Screenshots
-
-> Placeholder — add screenshots to `docs/images/` for demonstrations:
->
-> | Screenshot | Path |
-> |------------|------|
-> | Landing page | `docs/images/demo-landing.png` |
-> | Case intake form | `docs/images/demo-case-form.png` |
-> | AI processing screen | `docs/images/demo-analysis.png` |
-
-## Environment Variables
-
-Copy `.env.example` to `.env`. Key variables:
-
-| Variable | Purpose |
-|----------|---------|
-| `DATABASE_URL` | PostgreSQL connection |
-| `AI_PROVIDER` | LLM provider (`openrouter`, `openai`, `anthropic`, `gemini`, `groq`) |
-| `AI_CHAT_MODEL` | Chat model — **must be a chat model, not rerank** |
-| `EMBEDDING_PROVIDER` | Embedding provider for RAG |
-| `OPENROUTER_API_KEY` | OpenRouter API key (default provider) |
-| `KNOWLEDGE_BASE_PATH` | Path to `knowledge-base/` directory |
-| `FRONTEND_URL` | CORS origin for API (`http://localhost:3000`) |
-| `NEXT_PUBLIC_API_URL` | API URL for frontend (`http://localhost:3001`) |
-| `NEXT_PUBLIC_API_TIMEOUT_MS` | Analysis timeout (`180000` recommended) |
-
-See [docs/demo-guide.md](./docs/demo-guide.md) for the local demonstration. Paid API credentials are not required. A DigitalOcean server is not required.
-
-## Docker Setup
-
-### Quick Start — Infrastructure Only
-
-Start PostgreSQL (with pgvector), Redis, and pgAdmin:
-
-```bash
-cp .env.example .env
-npm run docker:infra
-```
-
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| PostgreSQL | `localhost:5432` | See [Connecting to PostgreSQL](#connecting-to-postgresql) below |
-| Redis | `localhost:6379` | No password (local dev) |
-| pgAdmin | [http://localhost:5050](http://localhost:5050) | See [Connecting to PostgreSQL](#connecting-to-postgresql) below |
-
-### Full Stack (Production-like)
-
-```bash
-docker compose up -d --build
-```
-
-### Development Stack (Hot Reload)
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
-```
-
-### Docker Commands
-
-```bash
-npm run docker:up        # Start all services
-npm run docker:down      # Stop all services
-npm run docker:infra     # Start postgres, redis, pgadmin only
-# Optional local services (not started by default):
-# docker compose --profile mail up -d mailpit
-# docker compose --profile local-ai up -d ollama
-npm run docker:build     # Build all images
-npm run docker:logs      # Tail service logs
-npm run docker:ps        # List running containers
-npm run docker:validate  # Validate compose configuration
-npm run docker:clean     # Stop and remove volumes
-```
-
-## Running Locally
-
-### Option A — Infrastructure in Docker, Apps on Host (Recommended)
-
-```bash
-# 1. Configure environment
-cp .env.example .env
-
-# 2. Start infrastructure
-npm run docker:infra
-
-# 3. Install dependencies (from project root)
-npm install
-
-# 4. Start backend (terminal 1)
-npm run dev:api
-
-# 5. Start frontend (terminal 2)
-npm run dev:web
-```
-
-- Frontend: [http://localhost:3000](http://localhost:3000)
-- Backend: [http://localhost:3001](http://localhost:3001)
-- pgAdmin: [http://localhost:5050](http://localhost:5050)
-
-### Option B — Without Docker
-
-Run apps directly without PostgreSQL or Redis (configuration modules still load defaults):
+Requirements: Node.js 20+, npm 10+, Docker.
 
 ```bash
 cp .env.example .env
 npm install
-npm run dev:api   # terminal 1
-npm run dev:web   # terminal 2
-```
-
-> PostgreSQL and Redis are required for full functionality in later phases.
-
-## Connecting to PostgreSQL
-
-Start infrastructure first (required before any connection):
-
-```bash
-cp .env.example .env   # if you have not already
 npm run docker:infra
+npm run prisma:migrate
 ```
 
-### Default credentials (local Docker)
+`npm run docker:infra` starts PostgreSQL, Redis, and pgAdmin. It is the same as `docker compose up -d postgres redis pgadmin`.
 
-These match `.env.example`. If you changed values in `.env`, use those instead.
-
-| Setting | Value |
-|---------|-------|
-| **Port** | `5432` |
-| **Database** | `medical_causation_ai` |
-| **User** | `mca_user` |
-| **Password** | `mca_password` |
-| **SSL mode** | `prefer` (or disable for local dev) |
-
-**Host depends on where you connect from:**
-
-| Field | pgAdmin (PSQL / Query Tool) | Your PC (terminal, DBeaver) |
-|-------|----------------------------|----------------------------|
-| **Server Name** | `localhost` (label only) | — |
-| **Host** | `postgres` | `localhost` |
-
-**Connection string (from your PC):**
-
-```
-postgresql://mca_user:mca_password@localhost:5432/medical_causation_ai
-```
-
-### pgAdmin login
-
-Open [http://localhost:5050](http://localhost:5050):
-
-| Setting | Value |
-|---------|-------|
-| **Email** | `admin@medical-causation.ai` |
-| **Password** | `admin` |
-
-### pgAdmin — PSQL Workspace (quick connect)
-
-Use **Tools → PSQL Workspace** for a browser-based `psql` session.
-
-1. Open [http://localhost:5050](http://localhost:5050) and log in (credentials above)
-2. Open **Tools → PSQL Workspace**
-3. Fill in the connection form exactly:
-
-   | Field | Value |
-   |-------|-------|
-   | **Server Name** | `localhost` |
-   | **Host name/address** | `postgres` |
-   | **Port** | `5432` |
-   | **Database** | `medical_causation_ai` |
-   | **User** | `mca_user` |
-   | **Password** | `mca_password` |
-
-4. Under **Connection Parameters**, confirm:
-
-   | Name | Keyword | Value |
-   |------|---------|-------|
-   | SSL mode | `sslmode` | `prefer` |
-   | Connection timeout | `connect_timeout` | `10` |
-
-5. Click **Connect & Open PSQL**
-
-> **Server Name vs Host:** **Server Name** (`localhost`) is only a label for the tab — it can be any name. **Host name/address** must be `postgres` (the Docker service name). Using `localhost` as the host causes *Connection refused* because pgAdmin runs inside Docker.
-
-### pgAdmin — Register server (browse tables in UI)
-
-1. Log in at [http://localhost:5050](http://localhost:5050)
-2. Click **Add New Server** (or right-click **Servers** → **Register → Server**)
-3. **General** tab — Name: `localhost` (or `Medical Causation AI`)
-4. **Connection** tab:
-
-   | Field | Value |
-   |-------|-------|
-   | Host name/address | `postgres` |
-   | Port | `5432` |
-   | Maintenance database | `medical_causation_ai` |
-   | Username | `mca_user` |
-   | Password | `mca_password` |
-
-5. Click **Save**
-6. Expand **Servers → localhost → Databases → medical_causation_ai → Schemas**
-7. Right-click a table → **View/Edit Data → All Rows**, or use **Tools → Query Tool**
-
-### pgAdmin — Query Tool (ad-hoc connect)
-
-If you use **Connect & Open Query Tool**, use the same values as PSQL Workspace above.
-
-### Command line (Docker)
+Then, in two terminals:
 
 ```bash
-docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai
-```
-
-### Verify pgvector
-
-```bash
-docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
-```
-
-## PostgreSQL
-
-- **Image:** `pgvector/pgvector:pg17` (PostgreSQL 17 with pgvector)
-- **Extensions enabled on init:** `vector`, `uuid-ossp`, `pg_trgm`
-- **Schemas prepared:** `app`, `documents`, `vectors`
-- **Init scripts:** `docker/postgres/init/`
-
-## Redis
-
-- **Image:** `redis:7-alpine`
-- **Config:** `docker/redis/redis.conf`
-- **Prepared for:** caching (`cache:*`), BullMQ queues (`bull:*`), AI tasks (`ai:task:*`), sessions (`session:*`)
-
-Verify Redis after starting:
-
-```bash
-docker exec -it mca-redis redis-cli ping
-```
-
-## Root Commands
-
-```bash
-npm run dev:infra     # Start Docker infrastructure
-npm run dev:api       # Start NestJS with hot reload
-npm run dev:web       # Start Next.js dev server
-npm run build         # Build both apps
-npm run lint          # Lint both apps
-npm run typecheck     # TypeScript check both apps
-npm run test          # Run API unit tests
-npm run format        # Format API source files
-```
-
-### Medical Analysis (manual test)
-
-Requires Docker PostgreSQL with indexed knowledge base and a valid `AI_CHAT_MODEL` (chat model, not rerank):
-
-```bash
-cd apps/api
-# Set a chat model — e.g. openai/gpt-4o-mini via OpenRouter
-npx ts-node -r tsconfig-paths/register scripts/run-medical-analysis.ts \
-  "Can mild traumatic brain injury increase the risk of stroke?"
-```
-
-See [docs/medical-analysis.md](./docs/medical-analysis.md) for workflow, schema, and safety rules.
-
-### Demonstration UI
-
-```bash
-# Terminal 1 — API (requires Docker + indexed knowledge base)
 npm run dev:api
-
-# Terminal 2 — Frontend
 npm run dev:web
 ```
 
-- Landing (product chooser): [http://localhost:3000](http://localhost:3000)
-- MCA: [http://localhost:3000/mca](http://localhost:3000/mca) · Case [http://localhost:3000/mca/case](http://localhost:3000/mca/case)
-- EWI: [http://localhost:3000/ewi](http://localhost:3000/ewi) (dashboard) · Intake [http://localhost:3000/ewi/intake](http://localhost:3000/ewi/intake) · Progress [http://localhost:3000/ewi/investigation](http://localhost:3000/ewi/investigation) · Results and Word download at `/ewi/histories/:id`
+| Service | URL |
+|---------|-----|
+| Website | http://localhost:3000 |
+| API | http://localhost:3001 |
+| pgAdmin | http://localhost:5050 |
 
-Local EWI demo uses `RESEARCH_PROVIDER=mock` (fixtures). Live vendor HTTP is not connected. The mock path is a full investigation through report download; unavailable/restricted sources are recorded honestly.
-- Legacy MCA URLs (`/case`, `/analysis`, `/report`, `/histories`) redirect to `/mca/*`
+pgAdmin email and password are `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` in `.env`. Inside pgAdmin, the database host is `postgres`, user `POSTGRES_USER`, password `POSTGRES_PASSWORD`. Redis answers on `localhost:6379` with no password unless `REDIS_PASSWORD` is set.
 
-See [DEMO_GUIDE.md](./DEMO_GUIDE.md) for the full client demonstration script (step-by-step).
-
-## Backend Commands
-
-```bash
-cd apps/api
-npm run start:dev    # Development with hot reload
-npm run build        # Compile TypeScript
-npm run start:prod   # Run production build
-npm run lint         # ESLint
-npm run typecheck    # TypeScript check
-npm run test         # Unit tests
-npm run test:e2e     # End-to-end tests
-```
-
-## Frontend Commands
-
-```bash
-cd apps/web
-npm run dev          # Development server
-npm run build        # Production build
-npm run start        # Production server
-npm run lint         # ESLint
-npm run typecheck    # TypeScript check
-```
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [Client overview](./docs/index.html) | Non-technical explanation of MCA and EWI |
-| [Client overview (Markdown)](./docs/client-overview.md) | Same overview in Markdown |
-| [Demonstration guide](./docs/demo-guide.md) | Local demo. Paid API keys are not required |
-| [Architecture](./docs/architecture.md) | System design and the documentation map |
-| [MCA + EWI Decisions](./docs/architecture-decisions-mca-ewi.md) | Locked dual-product decisions |
-| [Folder structure](./docs/folder-structure.md) | Directory layout |
-| [Development](./docs/development.md) | Local setup. No DigitalOcean server required |
-| [Docker](./docs/docker.md) | Compose services and what is optional |
-| [AI architecture](./docs/ai-architecture.md) | AI provider design |
-| [EWI architecture](./docs/ewi-architecture.md) | Expert Witness Investigation design |
-| [EWI workflow](./docs/ewi-workflow.md) | Investigation stages |
-| [Research providers](./docs/research-providers.md) | Research adapters. Mock locally |
-| [Email](./docs/email.md) | Email providers. Console locally |
-| [Authentication](./docs/authentication.md) | Login, roles, and demo accounts |
-| [Database](./docs/database.md) | PostgreSQL schemas and migrations |
-| [Deployment](./docs/deployment.md) | Container deployment shape |
-| [DigitalOcean](./docs/digitalocean.md) | Droplet deployment. Not used for local work |
-| [Security](./docs/security.md) | Security practices |
-| [Troubleshooting](./docs/troubleshooting.md) | Common failures |
-| [Knowledge base](./docs/knowledge-base.md) | Document discovery |
-| [Document processing](./docs/document-processing.md) | PDF/DOCX/TXT parsing |
-| [Indexing](./docs/indexing.md) | Chunking and pgvector storage |
-| [RAG workflow](./docs/rag-workflow.md) | Retrieval and citations |
-| [Medical analysis](./docs/medical-analysis.md) | MCA analysis engine |
-| [EWI report](./docs/ewi-report-workflow.md) | Word report |
-| [EWI AI analysis](./docs/ewi-ai-analysis.md) | Grounded analysis rules |
-| [EWI legal research](./docs/ewi-legal-research.md) | Cases, orders, depositions, Lexis rules |
-| [EWI online presence](./docs/ewi-online-presence.md) | Websites, social, videos, maps, reviews |
-| [EWI professional background](./docs/ewi-professional-background.md) | Grants, patents, awards, memberships, Open Payments |
-| [EWI request email workflow](./docs/ewi-request-email-workflow.md) | FOIA, university, follow-up, TrialSmith gates |
-| [Frontend demo](./docs/frontend-demo.md) | MCA demonstration UI |
-
-## Roadmap
-
-| Phase | Focus | Status |
-|-------|-------|--------|
-| **Phase 1a** | Project foundation, folder structure, documentation | ✅ Complete |
-| **Phase 1b** | Docker, PostgreSQL + pgvector, Redis, configuration | ✅ Complete |
-| **Phase 1c** | AI architecture — providers, AiService, prompts, embeddings | ✅ Complete |
-| **Phase 1d** | Knowledge base — document discovery, metadata, validation | ✅ Complete |
-| **Phase 2a** | Document processing — PDF/DOCX/TXT parsing, normalization | ✅ Complete |
-| **Phase 2b** | Knowledge indexing — chunking, embeddings, pgvector storage | ✅ Complete |
-| **Phase 2c** | RAG retrieval — hybrid search, context builder, citations | ✅ Complete |
-| **Phase 2d** | Medical analysis — RAG + LLM structured causation reasoning | ✅ Complete |
-| **Phase 2e** | Prisma schema, health checks, Swagger, KB/AI API endpoints | Health checks done; Swagger planned |
-| **Phase 3** | Demonstration UI — landing, case form, analysis workflow | ✅ Complete |
-| **Phase 4** | Case history, report viewer, PDF export | ✅ Complete |
-| **Phase 4b** | Dual-product architecture (MCA + EWI), EWI workflow, Word report | ✅ Mock path complete end-to-end. Live research HTTP not connected |
-| **Phase 4c** | Shared login and roles (off unless `AUTH_ENABLED=true`) | ✅ Foundation complete. Firm tenancy is not built |
-| **Phase 4d** | Email provider adapters (console locally; SMTP when confirmed) | ✅ Complete |
-| **Phase 4e** | EWI attorney UI (dashboard, timeline, findings, cancel/retry) | ✅ Complete for mock investigations |
-| **Phase 5** | Law-firm tenancy | Planned |
-| **Phase 6** | Live medical literature and research vendor calls | Catalog only. Live HTTP is not connected |
-| **Phase 6b** | EWI request/email web UI | API only; UI planned |
-| **Phase 7** | MCA PDF file export | On-screen MCA report exists. PDF file export is planned |
-| **Phase 8** | Admin panel, audit UI, notifications | Planned |
-| **Phase 9** | Subscription and billing | Planned |
-
-## License
-
-Proprietary — All rights reserved.
+Step-by-step clicks are in [DEMO_GUIDE.md](./DEMO_GUIDE.md).

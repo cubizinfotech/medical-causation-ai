@@ -190,13 +190,13 @@
         <li>Email is written to the application log. It is not sent to a university or an agency.</li>
         <li>A live medical-causation analysis is the optional step that needs a chat model. A free tier is enough.</li>
       </ul>
-      <p>Step-by-step setup is in <a href="./demo-guide.md">the demonstration guide</a>.</p>
+      <p>The written flow is in <a href="./how-it-works.md">how-it-works.md</a>. Laptop steps are in <a href="../DEMO_GUIDE.md">DEMO_GUIDE.md</a>.</p>
     </section>
 
     <section>
       <h2>Production architecture overview</h2>
-      <p>When the client is ready, the same application can run on one DigitalOcean server. The website, the API, the database, and the job queue run in containers. A reverse proxy provides HTTPS for the domain. Research vendors and outbound email stay off until the client confirms them. Backups are a later decision. They are not installed as part of the current plan.</p>
-      <p>The server guide is <a href="./digitalocean.md">digitalocean.md</a>.</p>
+      <p>The same application can run on one DigitalOcean droplet. For the current IP demo, PostgreSQL, Redis, and pgAdmin run in Docker. The website and API run with Node so a small droplet does not have to build both images. Research vendors and outbound email stay off until you confirm them. Backups are not installed.</p>
+      <p>Server steps, including how to copy the knowledge-base files over SSH, are in <a href="../DEPLOYMENT.md">DEPLOYMENT.md</a>.</p>
     </section>
 
     <section>
@@ -225,30 +225,12 @@
     </section>
 
     <section>
-      <h2>Technical documentation</h2>
-      <ul class="doc-list">
-        <li><a href="./client-overview.md">Client overview</a></li>
-        <li><a href="./demo-guide.md">Demonstration guide</a></li>
-        <li><a href="./architecture.md">Architecture</a></li>
-        <li><a href="./folder-structure.md">Folder structure</a></li>
-        <li><a href="./development.md">Development</a></li>
-        <li><a href="./docker.md">Docker</a></li>
-        <li><a href="./ai-architecture.md">AI architecture</a></li>
-        <li><a href="./ewi-architecture.md">EWI architecture</a></li>
-        <li><a href="./ewi-workflow.md">EWI workflow</a></li>
-        <li><a href="./research-providers.md">Research providers</a></li>
-        <li><a href="./ewi-legal-research.md">EWI legal research</a></li>
-        <li><a href="./ewi-online-presence.md">EWI online presence</a></li>
-        <li><a href="./ewi-professional-background.md">EWI professional background</a></li>
-        <li><a href="./ewi-request-email-workflow.md">EWI request email workflow</a></li>
-        <li><a href="./email.md">Email</a></li>
-        <li><a href="./email.md">Email</a></li>
-        <li><a href="./authentication.md">Authentication</a></li>
-        <li><a href="./database.md">Database</a></li>
-        <li><a href="./deployment.md">Deployment</a></li>
-        <li><a href="./digitalocean.md">DigitalOcean</a></li>
-        <li><a href="./security.md">Security</a></li>
-        <li><a href="./troubleshooting.md">Troubleshooting</a></li>
+      <h2>Guides</h2>
+      <ul>
+        <li><a href="./how-it-works.md">Purpose and flows</a></li>
+        <li><a href="../DEMO_GUIDE.md">Laptop demonstration</a></li>
+        <li><a href="../DEPLOYMENT.md">DigitalOcean server</a></li>
+        <li><a href="../TODO.md">Done and pending</a></li>
       </ul>
     </section>
   </main>

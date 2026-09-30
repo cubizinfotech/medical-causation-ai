@@ -5,6 +5,6 @@
 | `features/common` | Shared API helpers |
 | `features/mca` | MCA — medical-analysis, demo intake, report export |
 | `features/ewi` | EWI — investigation client, schemas, job hook |
-| `features/knowledge-base`, `rag`, `indexing`, `document-processing` | Shared stubs (future admin) |
+| `features/auth` | Login session |
 
-Legacy paths `features/demo`, `features/medical-analysis`, `features/report` re-export MCA modules for compatibility.
+`features/demo` and `features/medical-analysis` re-export the MCA modules. Pages may import either path.

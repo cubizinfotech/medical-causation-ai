@@ -52,7 +52,16 @@ next-env.d.ts
 # Prisma (Phase 2+)
 # prisma/migrations/**/migration_lock.toml
 
-# Uploads and large binaries (optional — uncomment in production)
-# knowledge-base/uploads/*
-# knowledge-base/**/*.pdf
+# Knowledge-base documents are large and stay off Git.
+# Copy them to the server with scp. See DEPLOYMENT.md.
+knowledge-base/**/*.pdf
+knowledge-base/**/*.docx
+knowledge-base/**/*.doc
+knowledge-base/**/*.ppt
+knowledge-base/**/*.pptx
+knowledge-base/**/*.xls
+knowledge-base/**/*.xlsx
+knowledge-base/**/*.zip
+knowledge-base/uploads/*
 knowledge-base/ewi/reports/investigations/
+!knowledge-base/**/README.md
