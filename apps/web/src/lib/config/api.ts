@@ -1,17 +1,17 @@
-import { getEnv } from "./env";
+import { API_BASE_URL } from "./api-url";
 
 /**
  * API endpoint configuration.
- * NEXT_PUBLIC_API_URL is inlined at build time by Next.js.
+ * The address comes from lib/config/api-url.ts.
  */
 export const apiConfig = {
-  baseUrl: getEnv("NEXT_PUBLIC_API_URL", "http://localhost:3001"),
-  timeoutMs: Number(getEnv("NEXT_PUBLIC_API_TIMEOUT_MS", "30000")),
+  baseUrl: API_BASE_URL,
+  timeoutMs: Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? "180000"),
 } as const;
 
 /**
  * Builds a full API URL from a path segment.
- * Example: apiUrl('/cases') → 'http://localhost:3001/cases'
+ * Example: apiUrl('/cases') → 'http://157.230.156.87:3001/cases'
  */
 export function apiUrl(path: string): string {
   const base = apiConfig.baseUrl.replace(/\/$/, "");
