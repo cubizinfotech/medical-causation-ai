@@ -1,5 +1,15 @@
-# Medical Causation AI — Production Docker Compose
-# Usage: docker compose up -d
+# Medical Causation AI — infrastructure Compose
+# Production on the droplet and local Node development both use this file.
+# It starts PostgreSQL and Redis only. The API and web run on the host
+# (PM2 in production, npm run dev:* locally).
+#
+#   docker compose up -d postgres redis
+#
+# pgAdmin is optional and listens on localhost. Start it by name:
+#   docker compose up -d pgadmin
+#
+# Development Docker Compose is for local development only:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 name: medical-causation-ai
 
@@ -16,7 +26,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -35,7 +45,7 @@ services:
       - redis_data:/data
       - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -48,6 +58,7 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: mca-pgadmin
+    profiles: ["tools"]
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
@@ -57,84 +68,10 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     ports:
-      - "${PGADMIN_PORT:-5050}:80"
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - mca-network
-
-  api:
-    build:
-      context: .
-      dockerfile: docker/api/Dockerfile
-    container_name: mca-api
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      APP_NAME: ${APP_NAME}
-      PORT: ${API_PORT:-3001}
-      FRONTEND_URL: ${FRONTEND_URL}
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_URL: redis://redis:6379
-      KNOWLEDGE_BASE_PATH: /knowledge-base
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-    volumes:
-      - ./knowledge-base:/knowledge-base:ro
-    ports:
-      - "${API_PORT:-3001}:3001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mca-network
-
-  web:
-    build:
-      context: .
-      dockerfile: docker/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    container_name: mca-web
-    restart: unless-stopped
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    ports:
-      - "${WEB_PORT:-3000}:3000"
-    depends_on:
-      api:
-        condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://localhost:3000').then(()=>process.exit(0)).catch(()=>process.exit(1))",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     networks:
       - mca-network
 
@@ -145,8 +82,8 @@ services:
     profiles: ["mail"]
     restart: unless-stopped
     ports:
-      - "${MAILPIT_UI_PORT:-8025}:8025"
-      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
     networks:
       - mca-network
 
@@ -157,7 +94,7 @@ services:
     profiles: ["local-ai"]
     restart: unless-stopped
     ports:
-      - "${OLLAMA_PORT:-11434}:11434"
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
     networks:

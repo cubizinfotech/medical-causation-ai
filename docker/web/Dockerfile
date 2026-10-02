@@ -1,4 +1,6 @@
-# Medical Causation AI — Next.js Web (production)
+# Medical Causation AI — Next.js web image
+# The DigitalOcean server does not run this image. Production uses PM2 and
+# the host Node.js 22 install. This file remains for optional local builds.
 # Build context is the repository root (npm workspaces).
 FROM node:20-alpine AS base
 WORKDIR /app
@@ -11,6 +13,7 @@ COPY apps/web/package.json apps/web/package.json
 RUN npm ci
 COPY apps/web apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_STANDALONE=1
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 RUN npm run build --workspace=web

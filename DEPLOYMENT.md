@@ -1,85 +1,80 @@
 # Deployment — DigitalOcean
 
-Use this file to run the application on the droplet. Local demonstration steps are in [DEMO_GUIDE.md](./DEMO_GUIDE.md).
+Production runs the website and API with **PM2** on the host. Docker runs **PostgreSQL** and **Redis** only. Do not start `mca-api` or `mca-web` containers on this server.
 
-The droplet already used in this project is `157.230.156.87`. Replace that address if the droplet IP changes.
+Local laptop steps stay in [DEMO_GUIDE.md](./DEMO_GUIDE.md). Development Docker Compose (`docker-compose.dev.yml`) is for local development only.
 
-Run every `npm` command below from the repository root on the server (`~/medical-causation-ai`) after `npm install`.
+The droplet already used for this project is `157.230.156.87`. Replace that address if the IP changes. Do not hardcode it in application source. Put the public URL in the server `.env` before the web build.
 
-| Command | What it does |
-|---------|----------------|
-| `npm run docker:infra` | Starts PostgreSQL, Redis, and pgAdmin in Docker. This is the same as `docker compose up -d postgres redis pgadmin`. |
-| `npm run docker:ps` | Shows whether those containers are running |
-| `npm run prisma:migrate` | Creates the database tables |
-| `npm run dev:api` | Starts the API on port 3001. Leave this terminal open. |
-| `npm run dev:web` | Starts the website on port 3000. Leave this terminal open. |
-| `npm run reembed:kb:full` | Indexes the knowledge-base files into PostgreSQL. Run this only after the files are copied onto the server. |
+Preferred checkout path: `/var/www/medical-causation-ai`. The deploy script also accepts `~/medical-causation-ai` if that is the only clone. Set `MCA_ROOT` when the path is different.
 
-`npm run docker:infra` does not start the website. The website and API are the two `dev` commands.
+## Architecture
 
-## What runs where
+| Process | How it runs | Address |
+|---------|-------------|---------|
+| `mca-web` | PM2, `npm run start:web` | `0.0.0.0:3000` |
+| `mca-api` | PM2, `npm run start:api` | `0.0.0.0:3001` |
+| `mca-postgres` | Docker, volume `mca-postgres-data` | `127.0.0.1:5432` |
+| `mca-redis` | Docker, volume `mca-redis-data` | `127.0.0.1:6379` |
+| `mca-pgadmin` | Docker, optional profile `tools` | `127.0.0.1:5050` |
 
-| Service | How you open it | Public? |
-|---------|-----------------|---------|
-| Web | `http://157.230.156.87:3000` | Yes |
-| API | `http://157.230.156.87:3001` | Yes |
-| API health | `http://157.230.156.87:3001/health` | Yes |
-| pgAdmin | `http://157.230.156.87:5050` | Only if you open port 5050 |
-| PostgreSQL | Host `postgres`, port `5432`, inside Docker | No. Do not open 5432 on the internet |
-| Redis | Host `redis`, port `6379`, inside Docker | No. Do not open 6379 on the internet |
+Public firewall ports for the current IP demo: `22`, `3000`, `3001`. Leave `5432`, `6379`, and `5050` closed. pgAdmin is reached through an SSH tunnel, not the public internet.
 
-A 1 vCPU / 2 GB droplet can run Postgres, Redis, pgAdmin, and the Node apps. Building the full API and web Docker images on that size often runs out of memory. Use Docker for the database tools and Node for the website and API.
+PM2 keeps the API and web running after you log out of SSH. `pm2 startup` plus `pm2 save` starts them again after a reboot. Docker `restart: unless-stopped` does the same for Postgres and Redis.
 
-## 1. Server packages
+## 1. Server requirements
 
-SSH in, then install Docker if it is not already installed, and install Node.js 20:
+- Ubuntu on the droplet
+- 50 GB disk. Do not fill it with unused API/web images after this change
+- Node.js **22 LTS** (the app requires Node.js `>= 20.9` and npm `>= 10`)
+- Docker Engine with Compose v2
+- Git
+- PM2 installed globally for the deploy user
+
+A 1 vCPU / 2 GB droplet can run Postgres, Redis, and the Node processes. Do not build the API and web Docker images on that size.
+
+## 2. Node.js 22
 
 ```bash
 sudo apt update
 sudo apt install -y ca-certificates curl git
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 node -v
 npm -v
-docker compose version
 ```
 
-Firewall inbound ports for this IP demo: `22`, `3000`, `3001`, and `5050` if you want pgAdmin in the browser. Leave `5432` and `6379` closed.
+`node -v` should report a 22.x release. The host Node installation is what PM2 uses. The Dockerfiles under `docker/` are not the production runtime.
 
-## 2. Git
+## 3. Docker
+
+Install Docker Engine and the Compose plugin from Docker’s Ubuntu instructions if `docker compose version` fails. The deploy user must be allowed to run Docker (`sudo usermod -aG docker "$USER"`, then log in again). Do not run the deploy script with sudo.
+
+## 4. Repository
 
 ```bash
-cd ~
-git clone <your-repository-url> medical-causation-ai
-cd medical-causation-ai
+sudo mkdir -p /var/www
+sudo chown "$USER":"$USER" /var/www
+git clone <your-repository-url> /var/www/medical-causation-ai
+cd /var/www/medical-causation-ai
 ```
 
-Later updates:
+Do not commit `.env`, `.env.live`, or files inside `knowledge-base/books`, `articles`, `reports`, `templates`, or `uploads`.
+
+## 5. Environment
 
 ```bash
-cd ~/medical-causation-ai
-git pull
-npm install
-npm run prisma:migrate
-```
-
-Then restart the API and web terminals.
-
-Do not commit `.env`, `.env.live`, or files inside `knowledge-base/books`, `articles`, `reports`, `templates`, or `uploads`. Those folders are gitignored because the documents are large.
-
-## 3. Environment file
-
-On the server, the file must be named `.env` in the repository root.
-
-```bash
+cd /var/www/medical-causation-ai
 cp .env.example .env
 nano .env
 ```
 
-For the current IP demo, set at least:
+The file must be named `.env` in the repository root. The API loads it from that path. Next.js loads it from the same file when `npm run build:web` runs (`apps/web/next.config.ts`).
+
+Production values that differ from a laptop:
 
 ```env
-NODE_ENV=development
+NODE_ENV=production
 FRONTEND_URL=http://157.230.156.87:3000
 NEXT_PUBLIC_API_URL=http://157.230.156.87:3001
 API_PUBLIC_URL=http://157.230.156.87:3001
@@ -91,85 +86,59 @@ POSTGRES_HOST=127.0.0.1
 POSTGRES_PORT=5432
 DATABASE_URL=postgresql://mca_user:choose-a-long-password@127.0.0.1:5432/medical_causation_ai
 
-PGADMIN_DEFAULT_EMAIL=admin@medical-causation.ai
-PGADMIN_DEFAULT_PASSWORD=choose-a-pgadmin-password
-PGADMIN_PORT=5050
-
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
 REDIS_PASSWORD=
 REDIS_URL=redis://127.0.0.1:6379/0
 
-AI_PROVIDER=mistral
-EMBEDDING_PROVIDER=openrouter
-MISTRAL_API_KEY=paste-from-your-local-env
-OPENROUTER_API_KEY=paste-from-your-local-env
-
 KNOWLEDGE_BASE_PATH=./knowledge-base
-RESEARCH_PROVIDER=mock
-EMAIL_PROVIDER=console
-EMAIL_DELIVERY_ENABLED=false
-AUTH_ENABLED=false
 ```
 
-`NODE_ENV=development` matches the demo-guide process (`npm run dev:api` and `npm run dev:web`). Use `production` only when you run the built Docker images.
+`NEXT_PUBLIC_API_URL` is copied into the browser bundle at **build** time. Set it before `npm run build:web`. Changing it later requires that build again, then `pm2 restart mca-web`. A restart alone does not update it.
 
-Paste the AI keys from your laptop `.env`. Medical Causation Analysis needs them. Expert Witness Investigation with `RESEARCH_PROVIDER=mock` does not call paid research sites.
+Use `127.0.0.1` for Postgres and Redis. The names `postgres` and `redis` work only inside containers on the Compose network (`docker-compose.dev.yml`). BullMQ reads `REDIS_HOST` and `REDIS_PORT`. The Redis client reads `REDIS_URL`. Keep those on `127.0.0.1`.
 
-There is a laptop file named `.env.live` you can copy up instead:
+`KNOWLEDGE_BASE_PATH=./knowledge-base` is the repository folder. PM2’s API working directory is `apps/api`, and the API resolves that relative path against the repository root. Do not set `/knowledge-base` unless you are running the local development containers.
+
+Paste AI keys into the server `.env` only. Do not commit them and do not put them in GitHub.
+
+A laptop file named `.env.live` can be copied up instead. Rename it to `.env` on the server and change `DATABASE_URL`, `REDIS_URL`, and `REDIS_HOST` to `127.0.0.1` if they still use a Docker hostname. Set `NODE_ENV=production`.
 
 ```powershell
-scp .env.live root@157.230.156.87:~/medical-causation-ai/.env
+scp .env.live deploy@157.230.156.87:/var/www/medical-causation-ai/.env
 ```
 
-Do not commit that file.
+## 6. PostgreSQL
 
-## 4. Database, Redis, and pgAdmin
-
-From `~/medical-causation-ai` on the server:
+From the repository root:
 
 ```bash
-npm install
-npm run docker:infra
-npm run docker:ps
-npm run prisma:migrate
+docker compose up -d postgres redis
+docker ps
+docker inspect --format '{{.State.Health.Status}}' mca-postgres
 ```
 
-`npm run docker:infra` starts three containers: `mca-postgres`, `mca-redis`, and `mca-pgadmin`. Wait until `npm run docker:ps` shows postgres as healthy before `npm run prisma:migrate`.
+Wait until the status is `healthy`. The data directory is the named volume `mca-postgres-data`. Do not delete that volume.
 
-The same Docker start, if you prefer the Compose line:
+The image is `pgvector/pgvector:pg17`. The first boot runs `docker/postgres/init/01-extensions.sql` (`vector`, `uuid-ossp`, `pg_trgm`) and `02-schemas.sql`. Those scripts run only when the data directory is empty. An existing volume is left as it is.
+
+Open a shell in the database:
 
 ```bash
-docker compose up -d postgres redis pgadmin
-docker compose ps
+docker exec -it mca-postgres psql -U mca_user -d medical_causation_ai
 ```
 
-### pgAdmin
+Inside `psql`:
 
-Open `http://157.230.156.87:5050`.
+```sql
+SELECT extname FROM pg_extension WHERE extname = 'vector';
+```
 
-| Field | Value |
-|-------|--------|
-| Email | `PGADMIN_DEFAULT_EMAIL` from `.env` |
-| Password | `PGADMIN_DEFAULT_PASSWORD` from `.env` |
+The published port is `127.0.0.1:5432`. It is not reachable from the public internet.
 
-Register the database server inside pgAdmin:
+## 7. Redis
 
-| Field | Value |
-|-------|--------|
-| Host | `postgres` |
-| Port | `5432` |
-| Database | `POSTGRES_DB` (`medical_causation_ai`) |
-| Username | `POSTGRES_USER` (`mca_user`) |
-| Password | `POSTGRES_PASSWORD` from `.env` |
-
-Use host `postgres`, not `localhost`. pgAdmin runs in Docker, and `postgres` is the database container name.
-
-### Redis
-
-Redis has no password unless `REDIS_PASSWORD` is set. The API reaches it as host `redis` on port `6379` when both run in Docker. When the API runs on the host with `npm run dev:api`, `.env` should use `REDIS_HOST=127.0.0.1` because Compose publishes port 6379 on the droplet.
-
-Check it from the server:
+Redis is `mca-redis` (`redis:7-alpine`) with append-only persistence on the volume `mca-redis-data`. The API uses it for BullMQ (medical analysis and expert-witness jobs) and for cached job state. Keep a single `mca-api` process so those workers are not duplicated.
 
 ```bash
 docker exec mca-redis redis-cli ping
@@ -177,88 +146,309 @@ docker exec mca-redis redis-cli ping
 
 A healthy reply is `PONG`.
 
-## 5. Start the website and API
+The container listens on all of its own interfaces so Docker can forward the port. Compose publishes that port on `127.0.0.1:6379` only. Do not publish `6379` on `0.0.0.0`.
 
-Use two terminals, both in `~/medical-causation-ai`:
+## 8. pgAdmin (optional)
 
-```bash
-npm run dev:api
-```
+pgAdmin is not required. It is behind the Compose profile `tools` and is bound to localhost.
 
 ```bash
-npm run dev:web
+docker compose up -d pgadmin
 ```
 
-If port 3000 is already taken, stop the other program. The website must stay on 3000 and the API on 3001.
+From your laptop:
 
-Confirm:
+```bash
+ssh -L 5050:127.0.0.1:5050 deploy@157.230.156.87
+```
+
+Then open `http://127.0.0.1:5050`. Sign in with `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD`.
+
+Register the server inside pgAdmin with host `postgres` (the container name), port `5432`, and the `POSTGRES_*` values from `.env`. pgAdmin runs on the Compose network, so it uses `postgres`, not `127.0.0.1`.
+
+Do not open port 5050 in the firewall.
+
+## 9. PM2
+
+```bash
+sudo npm install -g pm2
+pm2 startup
+```
+
+`pm2 startup` prints one `sudo` command. Run that command. It installs a systemd unit for your user so PM2 comes back after a reboot. You only do this once.
+
+The process file is `ecosystem.config.js`:
+
+| App | Working directory | Command |
+|-----|-------------------|---------|
+| `mca-api` | `apps/api` | `node dist/src/main.js` (`npm run start:api`) |
+| `mca-web` | `apps/web` | `next start --hostname 0.0.0.0 --port 3000` (`npm run start:web`) |
+
+Both use `NODE_ENV=production`, restart after a crash, and write logs under `logs/`. `instances` is `1`.
+
+## 10. Build and migrate
+
+Run these from `/var/www/medical-causation-ai` after `.env` is in place and Postgres is healthy.
+
+```bash
+npm ci
+npm run prisma:generate
+npm run build:api
+npm run build:web
+npm run prisma:migrate
+```
+
+| Script | What it runs |
+|--------|----------------|
+| `npm run prisma:generate` | `prisma generate` (client for the build; does not change data) |
+| `npm run build:api` | `nest build` in `apps/api` |
+| `npm run build:web` | `next build` in `apps/web` |
+
+Do not set `NEXT_STANDALONE=1` on the server. That flag is only for the optional Docker web image. PM2 serves the normal `next start` build.
+| `npm run prisma:migrate` | `prisma migrate deploy` |
+
+`prisma migrate deploy` applies pending migrations only. It does not drop the database. Do not use `prisma migrate dev` or `npm run docker:clean` on this server. `docker:clean` runs `docker compose down -v`, which deletes volumes.
+
+`npm ci` reinstalls `node_modules` from the lockfile. That is the deploy install. Do not delete `node_modules` by hand while the site is up.
+
+## 11. Start PM2
+
+```bash
+mkdir -p logs
+npm run pm2:start
+npm run pm2:save
+npm run pm2:status
+```
+
+Those scripts are:
+
+```bash
+pm2 startOrReload ecosystem.config.js --update-env
+pm2 save
+pm2 status
+```
+
+`startOrReload` starts the apps the first time and reloads them on later deploys. `pm2 save` stores the process list. After `pm2 startup`, a reboot runs that saved list.
+
+You can close SSH. The processes keep running. Confirm from a new session with `pm2 status`.
+
+## 12. One-command deploy
+
+On the server:
+
+```bash
+bash scripts/deploy-production.sh
+```
+
+The script stops on errors. It pulls `main` (fast-forward only), refuses to run if tracked files are dirty, starts Postgres and Redis, removes leftover `mca-api` and `mca-web` containers if they still exist, installs, builds, migrates, reloads PM2, and checks health. It does not delete `mca-postgres`, `mca-redis`, or their volumes.
+
+## 13. GitHub automatic deployment
+
+Workflow: `.github/workflows/deploy-production.yml`.
+
+A push to `main` SSHes into the droplet and runs `scripts/deploy-production.sh`. It does not build Docker images for the API or web.
+
+Repository secrets:
+
+| Secret | Value |
+|--------|--------|
+| `DEPLOY_HOST` | Droplet IP or hostname |
+| `DEPLOY_USER` | SSH user that owns the checkout and PM2 |
+| `DEPLOY_SSH_KEY` | Private key, including line breaks |
+
+The production `.env` stays on the server. Do not put it in GitHub.
+
+The server checkout must already exist, and that user must be able to `git fetch` and run Docker and PM2.
+
+## 14. Health checks
 
 ```bash
 curl -fsS http://127.0.0.1:3001/health
+curl -fsS http://127.0.0.1:3001/health/ready
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000
 ```
 
-Then open `http://157.230.156.87:3000` in a browser.
+`/health` is liveness (the same path the old API container used). `/health/ready` checks Postgres and Redis and returns 503 when either is down. The web command should print `200`.
 
-`npm run dev:web` reads `NEXT_PUBLIC_API_URL` from `.env`. If you change that URL, restart the web process.
+From a browser: `http://157.230.156.87:3000`. The site calls `NEXT_PUBLIC_API_URL`.
 
-## 6. Upload the knowledge base
+## 15. Logs
 
-Medical books and articles are not in Git. Copy them from your Windows project folder.
+```bash
+pm2 status
+pm2 logs
+pm2 logs mca-api
+pm2 logs mca-web
+```
 
-PowerShell, from `D:\medical-causation-ai`:
+Log files:
+
+- `logs/mca-api-out.log` and `logs/mca-api-error.log`
+- `logs/mca-web-out.log` and `logs/mca-web-error.log`
+
+`pm2 flush` clears PM2’s logs. Use it only when you mean to discard them.
+
+Rotate logs once on the server:
+
+```bash
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 7
+pm2 set pm2-logrotate:compress true
+```
+
+## 16. Knowledge base
+
+Medical books and articles are not in Git. They stay in the local `knowledge-base/` folder. From the repository root on Windows, upload books and articles that are missing or a different size on the server:
 
 ```powershell
-scp -r .\knowledge-base\books .\knowledge-base\articles .\knowledge-base\reports .\knowledge-base\templates root@157.230.156.87:~/medical-causation-ai/knowledge-base/
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\upload-knowledge-base.ps1
 ```
 
-Create any missing folder on the server first:
+The script finds `knowledge-base` from its own location. Set `MCA_SSH_TARGET` when the server is not `deploy@157.230.156.87`. Run it again if the connection drops. Files that already match are skipped. See [knowledge-base/README.md](./knowledge-base/README.md).
 
-```bash
-mkdir -p ~/medical-causation-ai/knowledge-base/{books,articles,reports,templates,uploads}
-```
-
-After the copy finishes, index the documents. Postgres must be up, and `OPENROUTER_API_KEY` (or the embedding key for your `EMBEDDING_PROVIDER`) must be set in `.env`.
-
-```bash
-cd ~/medical-causation-ai
-npm run reembed:kb:full
-```
-
-That command reads `KNOWLEDGE_BASE_PATH` (`./knowledge-base`), chunks the documents, and stores embeddings in PostgreSQL. Expert Witness Investigation does not use this folder.
-
-Indexing a large library takes a long time and uses the embedding API. Run it once after upload, and again after you add or replace documents.
-
-If `scp` stops with `Broken pipe` or `Connection reset`, the file it was sending is incomplete. Do not run `npm run reembed:kb:full` until the copy finishes. Delete that partial file on the server, then upload again with SSH keepalives so the connection stays open:
-
-```bash
-# on the server — example for the file that failed
-rm -f "/var/www/medical-causation-ai/knowledge-base/books/ama 6th book.pdf"
-df -h
-```
-
-`df -h` must show free space larger than the knowledge-base folder. From PowerShell, retry with keepalives:
+A one-time copy of every folder, including reports and templates:
 
 ```powershell
 scp -o ServerAliveInterval=15 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes -r .\knowledge-base\books .\knowledge-base\articles .\knowledge-base\reports .\knowledge-base\templates deploy@157.230.156.87:/var/www/medical-causation-ai/knowledge-base/
 ```
 
-That sends completed files again. To skip a file that is already the same size on the server, upload one folder at a time (`books`, then `articles`, then `reports`, then `templates`) after the partial PDF is deleted.
-
-## 7. Optional full Docker stack
-
-On a larger droplet (about 4 GB RAM or more):
+On the server, before the copy:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.live.yml up -d --build
+mkdir -p /var/www/medical-causation-ai/knowledge-base/{books,articles,reports,templates,uploads}
+df -h
 ```
 
-`NEXT_PUBLIC_API_URL` is baked into the web image at build time. Rebuild web after you change it. Skip this path on a 2 GB droplet.
+`df -h` must show free space larger than the folder you are copying. After the copy finishes:
 
-## 8. Leave these off until you decide
+```bash
+cd /var/www/medical-causation-ai
+npm run reembed:kb:full
+```
 
-- Do not run `npm run seed:demo-users` on a public server. The command refuses to run when `NODE_ENV=production`. Demo password is `password` and is for a laptop only.
-- Keep `RESEARCH_PROVIDER=mock` until a research vendor is approved.
-- Keep `EMAIL_DELIVERY_ENABLED=false` until a real sender is approved.
-- Set `AUTH_ENABLED=true` and a long `JWT_SECRET` before you share the site beyond a private demo.
-- Backups are not installed. Do not treat this droplet as backed up.
+That reads `KNOWLEDGE_BASE_PATH` and stores embeddings in PostgreSQL. Do not start it while an upload is incomplete.
+
+## 17. Disk and Docker cleanup
+
+Inspect before deleting anything:
+
+```bash
+df -h
+docker system df
+docker ps -a
+docker images
+du -sh ~/.npm
+du -sh /var/www/medical-causation-ai/node_modules
+du -sh /var/www/medical-causation-ai/logs
+```
+
+After PM2 is serving traffic, the old application containers and images are unused. Confirm the names first.
+
+Safe to remove once `pm2 status` shows `mca-api` and `mca-web` online:
+
+```bash
+docker rm -f mca-api mca-web
+docker image rm medical-causation-ai-api medical-causation-ai-web
+docker image prune
+docker builder prune
+```
+
+`docker image prune` removes dangling images. `docker builder prune` removes build cache. Neither removes named volumes.
+
+`docker container prune` removes stopped containers. Do not run it while a container you still need is stopped. `mca-postgres` and `mca-redis` should be running, so a prune of stopped containers leaves them.
+
+Do **not** run `docker system prune -a --volumes` on this server. That can delete unused volumes, including database data if a container is not using the volume at that moment.
+
+Do **not** delete these:
+
+- containers `mca-postgres` and `mca-redis`
+- volumes `mca-postgres-data` and `mca-redis-data`
+- `knowledge-base/`
+
+npm cache, only when `npm ci` is failing because the cache is corrupt:
+
+```bash
+npm cache verify
+npm cache clean --force
+```
+
+Prefer `npm cache verify` first. Do not delete `node_modules` as routine cleanup. The next deploy runs `npm ci`.
+
+## 18. Rollback
+
+Roll the application code back. Leave the database volume in place.
+
+```bash
+cd /var/www/medical-causation-ai
+git log --oneline -20
+git checkout <known-good-commit>
+npm ci
+npm run prisma:generate
+npm run build:api
+npm run build:web
+pm2 restart ecosystem.config.js --update-env
+pm2 save
+curl -fsS http://127.0.0.1:3001/health
+```
+
+`prisma migrate deploy` does not reverse migrations. If the bad deploy already applied a migration, the old code must still work with that schema, or you restore a database backup. This server does not have backups installed. Do not drop `medical_causation_ai` to “undo” a deploy.
+
+Return to `main` when you are ready to deploy forward again: `git checkout main`.
+
+## 19. Port troubleshooting
+
+`EADDRINUSE` means something is already listening. Identify it before you stop it.
+
+```bash
+sudo lsof -i :3000
+sudo lsof -i :3001
+ss -ltnp | grep :3000
+ss -ltnp | grep :3001
+pm2 status
+docker ps -a --filter name=mca-
+```
+
+An old PM2 app:
+
+```bash
+pm2 status
+pm2 describe mca-api
+pm2 delete mca-api
+pm2 delete mca-web
+```
+
+Then start once from the repository root:
+
+```bash
+npm run pm2:start
+npm run pm2:save
+```
+
+An old application container holding the port:
+
+```bash
+docker stop mca-api mca-web
+docker rm mca-api mca-web
+```
+
+Do not stop `mca-postgres` or `mca-redis` to free ports 3000 or 3001.
+
+## 20. What stays local
+
+On a laptop, keep using:
+
+```bash
+npm run docker:infra
+npm run dev:api
+npm run dev:web
+```
+
+`docker-compose.dev.yml` can still run the API and web in containers for local development. Do not use that file on the droplet.
+
+Leave these off on the public server until you decide otherwise:
+
+- `npm run seed:demo-users` refuses to run when `NODE_ENV=production`
+- `RESEARCH_PROVIDER=mock` until a research vendor is approved
+- `EMAIL_DELIVERY_ENABLED=false` until a real sender is approved
+- `AUTH_ENABLED=true` and a long `JWT_SECRET` before the site is shared beyond a private demo

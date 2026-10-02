@@ -13,14 +13,15 @@ Both products share one website, one API, PostgreSQL, and Redis. Their screens a
 | File | Use it for |
 |------|------------|
 | [DEMO_GUIDE.md](./DEMO_GUIDE.md) | Run the demo on your computer |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Run it on the DigitalOcean droplet, including pgAdmin, Redis, and the knowledge-base upload |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Production on the droplet: PM2 for the website and API, Docker for PostgreSQL and Redis |
+| [docs/digitalocean.md](./docs/digitalocean.md) | Short command list for that server |
 | [docs/how-it-works.md](./docs/how-it-works.md) | Purpose and the two user flows |
 | [docs/index.html](./docs/index.html) | The same overview in a browser |
 | [TODO.md](./TODO.md) | What is done and what is still pending |
 
 ## Run it locally
 
-Requirements: Node.js 20+, npm 10+, Docker.
+Requirements: Node.js 20.9 or newer (production server: Node.js 22 LTS), npm 10+, Docker.
 
 ```bash
 cp .env.example .env
@@ -44,6 +45,10 @@ npm run dev:web
 | API | http://localhost:3001 |
 | pgAdmin | http://localhost:5050 |
 
-pgAdmin email and password are `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` in `.env`. Inside pgAdmin, the database host is `postgres`, user `POSTGRES_USER`, password `POSTGRES_PASSWORD`. Redis answers on `localhost:6379` with no password unless `REDIS_PASSWORD` is set.
+pgAdmin email and password are `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` in `.env`. Inside pgAdmin, the database host is `postgres`, user `POSTGRES_USER`, password `POSTGRES_PASSWORD`. The API on the host uses `127.0.0.1` for Postgres and Redis. Redis has no password unless `REDIS_PASSWORD` is set.
+
+Production on the droplet does not use `npm run dev:api` or the API/web containers. See [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 Step-by-step clicks are in [DEMO_GUIDE.md](./DEMO_GUIDE.md).
+
+Medical books and articles live in `knowledge-base/` on your computer and are not in Git. To copy them to the server, run `scripts/upload-knowledge-base.ps1`. The steps are in [knowledge-base/README.md](./knowledge-base/README.md).

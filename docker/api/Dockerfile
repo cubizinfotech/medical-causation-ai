@@ -1,4 +1,6 @@
-# Medical Causation AI — NestJS API (production)
+# Medical Causation AI — NestJS API image
+# The DigitalOcean server does not run this image. Production uses PM2 and
+# the host Node.js 22 install. This file remains for optional local builds.
 # Build context is the repository root (npm workspaces).
 FROM node:20-alpine AS base
 WORKDIR /app

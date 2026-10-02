@@ -1,12 +1,12 @@
 # Demonstration guide
 
-Use this file on a laptop. The DigitalOcean steps, pgAdmin server login, Redis, and knowledge-base upload are in [DEPLOYMENT.md](./DEPLOYMENT.md).
+Use this file on a laptop. The DigitalOcean server runs the built API and website under PM2. Those steps are in [DEPLOYMENT.md](./DEPLOYMENT.md). Development Docker Compose is for local development only.
 
 Paid research accounts are not required. Expert Witness Investigation uses sample records. A Medical Causation Analysis that cites your books needs an embedding key and the files in `knowledge-base/`.
 
 ## Install
 
-Requirements: Node.js 20 or later, npm 10 or later, Docker with Compose v2.
+Requirements: Node.js 20.9 or later, npm 10 or later, Docker with Compose v2. Production servers use Node.js 22 LTS.
 
 ```bash
 cd medical-causation-ai
