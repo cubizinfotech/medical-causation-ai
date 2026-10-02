@@ -9,6 +9,7 @@ const repoRoot = path.join(__dirname, "../..");
 loadEnvConfig(repoRoot);
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["http://localhost:3000", "157.230.156.87"],
   // Standalone output is only for the optional local Docker image.
   // Production PM2 uses `next start`, which Next.js does not support
   // together with output: "standalone".
