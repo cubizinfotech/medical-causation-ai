@@ -12,7 +12,7 @@ export function mapCaseDtoToAnalysisRequest(
 
   return {
     medicalQuestion: dto.medicalQuestion.trim(),
-    patientInformation: `Name: ${dto.patientName}, Age: ${dto.patientAge}, Gender: ${dto.patientGender}`,
+    patientInformation: `Age: ${dto.patientAge}, Gender: ${dto.patientGender}`,
     injury: `${dto.accidentType}: ${dto.accidentDescription}`,
     diagnosis: dto.diagnosis,
     symptoms: dto.symptoms,

@@ -109,6 +109,7 @@ enum AnalysisCaseStatus {
 model AnalysisCase {
   id                  String             @id @default(uuid()) @db.Uuid
   jobId               String             @unique @map("job_id")
+  /// Kept for rows created before names were removed. New cases store an empty string. Not returned by the API.
   patientName         String             @map("patient_name")
   patientAge          String             @map("patient_age")
   patientGender       String             @map("patient_gender")

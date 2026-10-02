@@ -33,6 +33,13 @@ const PUBLICATION_CATEGORIES = new Set([
   "journal",
 ]);
 
+const SOURCE_LABELS: Record<string, string> = {
+  criminal_records: "Criminal background",
+  constitutional_sheriff: "Constitutional Sheriff movement",
+  post_records: "Peace Officer Standards and Training",
+  oath_keepers: "Oath Keepers",
+};
+
 function sourcesFromResult(
   result: EwiInvestigationResult | null,
 ): EwiSourceStatus[] {
@@ -586,7 +593,7 @@ export function InvestigationResults({
                       className="border-b border-border/60"
                     >
                       <td className="py-2 pr-3 font-medium">
-                        {source.sourceId}
+                        {SOURCE_LABELS[source.sourceId] ?? source.sourceId}
                       </td>
                       <td className="py-2 pr-3">
                         {sourceStatusLabel(source)}

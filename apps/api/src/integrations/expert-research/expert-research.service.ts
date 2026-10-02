@@ -10,6 +10,7 @@ import type {
 import { CatalogExpertResearchProvider } from './providers/catalog-expert-research.provider';
 import { EXPERT_RESEARCH_CATALOG } from './providers/provider-catalog';
 import { applyIdentityMatch } from './providers/identity-match';
+import { applyPublicEvidenceGate } from './providers/public-affiliation';
 import { markConflicts } from './providers/information-status';
 import { researchOutcomeFor } from './providers/research-outcome';
 import {
@@ -122,10 +123,12 @@ export class ExpertResearchService {
       }),
     );
 
-    const identified = results.map((result) => ({
-      ...result,
-      items: applyIdentityMatch(validated.value, result.items),
-    }));
+    const identified = results.map((result) =>
+      applyPublicEvidenceGate(validated.value, {
+        ...result,
+        items: applyIdentityMatch(validated.value, result.items),
+      }),
+    );
     const marked = markConflicts(identified.flatMap((result) => result.items));
     let offset = 0;
     return identified.map((result) => {

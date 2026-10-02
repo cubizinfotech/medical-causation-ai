@@ -1,6 +1,11 @@
-import type { CaseFormValues } from "../schemas/case-form.schema";
+import {
+  caseFormDefaults,
+  type CaseFormValues,
+} from "../schemas/case-form.schema";
 import type { MedicalAnalysisResult } from "@/features/mca/medical-analysis/types";
 import { isBrowser } from "@/lib/config/env";
+
+const CASE_FIELDS = Object.keys(caseFormDefaults) as (keyof CaseFormValues)[];
 
 export const STORAGE_KEYS = {
   case: "mca:case-form",
@@ -14,9 +19,31 @@ export interface ActiveAnalysisSession {
   jobId: string;
 }
 
-export function saveCaseForm(values: CaseFormValues): void {
+/** Keeps only intake fields. Drops legacy keys such as patientName. */
+export function normalizeCaseForm(
+  values: Partial<CaseFormValues> | null | undefined,
+): CaseFormValues {
+  const next = { ...caseFormDefaults };
+  if (!values) return next;
+  for (const key of CASE_FIELDS) {
+    const value = values[key];
+    if (typeof value === "string") {
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
+export function saveCaseForm(values: Partial<CaseFormValues>): void {
   if (!isBrowser()) return;
-  sessionStorage.setItem(STORAGE_KEYS.case, JSON.stringify(values));
+  const next = { ...(loadCaseForm() ?? caseFormDefaults) };
+  for (const key of CASE_FIELDS) {
+    const value = values[key];
+    if (typeof value === "string") {
+      next[key] = value;
+    }
+  }
+  sessionStorage.setItem(STORAGE_KEYS.case, JSON.stringify(next));
 }
 
 export function loadCaseForm(): CaseFormValues | null {
@@ -24,7 +51,9 @@ export function loadCaseForm(): CaseFormValues | null {
   const raw = sessionStorage.getItem(STORAGE_KEYS.case);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as CaseFormValues;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return normalizeCaseForm(parsed as Partial<CaseFormValues>);
   } catch {
     return null;
   }

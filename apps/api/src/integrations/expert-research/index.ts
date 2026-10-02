@@ -6,4 +6,5 @@ export * from './providers/provider-runtime';
 export * from './providers/catalog-expert-research.provider';
 export * from './providers/information-status';
 export * from './providers/identity-match';
+export * from './providers/public-affiliation';
 export * from './providers/research-outcome';

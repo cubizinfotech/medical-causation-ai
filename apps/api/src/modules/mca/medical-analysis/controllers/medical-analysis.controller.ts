@@ -113,7 +113,7 @@ export class MedicalAnalysisController {
       error instanceof Error ? error.stack : undefined,
     );
     throw new InternalServerErrorException(
-      'Medical analysis failed. Please try again.',
+      message || 'Medical analysis failed. Please try again.',
     );
   }
 }

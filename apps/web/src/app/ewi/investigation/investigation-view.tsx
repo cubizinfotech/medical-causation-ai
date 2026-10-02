@@ -45,7 +45,7 @@ export default function EwiInvestigationView() {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [stayOnPage, setStayOnPage] = useState(false);
   const [expert, setExpert] = useState<ExpertInvestigationFormValues | null>(
-    () => (typeof window === "undefined" ? null : loadExpertForm()),
+    null,
   );
   const [bootstrapped, setBootstrapped] = useState(false);
 
@@ -60,6 +60,7 @@ export default function EwiInvestigationView() {
 
     const saved = loadExpertForm();
     const existing = loadActiveEwiJob();
+    if (saved) setExpert(saved);
 
     if (!saved && !existing?.jobId) {
       router.replace("/ewi/intake");

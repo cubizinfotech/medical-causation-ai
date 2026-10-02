@@ -43,7 +43,8 @@ function stepIndexFromJobStep(stepId: string | undefined): number {
 export default function AnalysisView() {
   const router = useRouter();
   const hasStarted = useRef(false);
-  const [caseData] = useState<CaseFormValues | null>(() => loadCaseForm());
+  const [caseData, setCaseData] = useState<CaseFormValues | null>(null);
+  const [storageReady, setStorageReady] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const {
@@ -51,7 +52,6 @@ export default function AnalysisView() {
     error,
     submit,
     resume,
-    reset,
     isSubmitting,
     isRunning,
     isCompleted,
@@ -59,15 +59,19 @@ export default function AnalysisView() {
   } = useMedicalAnalysisJob();
 
   useEffect(() => {
-    if (!caseData) {
-      router.replace("/mca/case");
-    }
-  }, [caseData, router]);
+    const saved = loadCaseForm();
+    setCaseData(saved);
+    setStorageReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady || caseData) return;
+    router.replace("/mca/case");
+  }, [storageReady, caseData, router]);
 
   const buildRequest = useCallback(() => {
     if (!caseData) return null;
     return {
-      patientName: caseData.patientName,
       patientAge: caseData.patientAge,
       patientGender: caseData.patientGender,
       accidentDate: caseData.accidentDate,
@@ -84,14 +88,17 @@ export default function AnalysisView() {
 
   const runAnalysis = useCallback(() => {
     const request = buildRequest();
-    if (!request) return;
-    reset();
+    if (!request || isSubmitting) return;
     setStartedAt(Date.now());
     setElapsedMs(0);
-    void submit(request).then((created) => {
-      saveActiveAnalysis({ caseId: created.caseId, jobId: created.jobId });
-    });
-  }, [buildRequest, reset, submit]);
+    void submit(request)
+      .then((created) => {
+        saveActiveAnalysis({ caseId: created.caseId, jobId: created.jobId });
+      })
+      .catch(() => {
+        // The hook stores the failure so the page can show it.
+      });
+  }, [buildRequest, isSubmitting, submit]);
 
   useEffect(() => {
     if (!caseData || hasStarted.current) return;
@@ -140,6 +147,9 @@ export default function AnalysisView() {
     if (isFailed) {
       return error?.message ?? job?.error ?? "The analysis could not be completed.";
     }
+    if (error) {
+      return error.message;
+    }
     if (isRunning) {
       return (
         job?.message ??
@@ -147,7 +157,7 @@ export default function AnalysisView() {
       );
     }
     return undefined;
-  }, [error?.message, isCompleted, isFailed, isRunning, job?.error, job?.message]);
+  }, [error, isCompleted, isFailed, isRunning, job?.error, job?.message]);
 
   const openReport = useCallback(() => {
     if (job?.result) {
@@ -162,7 +172,7 @@ export default function AnalysisView() {
     }
   }, [job?.result, router]);
 
-  if (!caseData) {
+  if (!storageReady || !caseData) {
     return (
       <PageContainer className="py-20 text-center text-muted-foreground">
         Loading case…

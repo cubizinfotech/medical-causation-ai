@@ -86,16 +86,34 @@ export class MedicalAnalysisJobService
 
     await this.saveRecord(record);
 
-    await this.queue.add(
-      'run',
-      { jobId, request },
-      {
-        jobId,
-        removeOnComplete: 100,
-        removeOnFail: 50,
-        attempts: 1,
-      },
-    );
+    try {
+      await this.queue.add(
+        'run',
+        { jobId, request },
+        {
+          jobId,
+          removeOnComplete: 100,
+          removeOnFail: 50,
+          attempts: 1,
+        },
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to queue analysis';
+      this.logger.error(
+        `Failed to queue medical analysis job ${jobId}: ${message}`,
+      );
+      try {
+        await this.markFailed(jobId, message);
+      } catch (markError) {
+        const markMessage =
+          markError instanceof Error ? markError.message : String(markError);
+        this.logger.error(
+          `Unable to record queue failure for job ${jobId}: ${markMessage}`,
+        );
+      }
+      throw error;
+    }
 
     this.emit(record);
     this.logger.log(
@@ -179,9 +197,28 @@ export class MedicalAnalysisJobService
   async markFailed(jobId: string, error: string): Promise<void> {
     const now = new Date().toISOString();
     const existing = await this.loadRecord(jobId);
+    if (!existing) {
+      const record: MedicalAnalysisJobRecord = {
+        jobId,
+        status: ANALYSIS_JOB_STATUS.FAILED,
+        step: ANALYSIS_JOB_STEPS.INTAKE,
+        stepLabel: ANALYSIS_JOB_STEP_LABELS[ANALYSIS_JOB_STEPS.INTAKE],
+        progress: 0,
+        message: error,
+        error,
+        createdAt: now,
+        updatedAt: now,
+        completedAt: now,
+      };
+      await this.saveRecord(record);
+      void this.historyService.syncFromJobRecord(record);
+      this.emit(record);
+      return;
+    }
+
     await this.patch(jobId, {
       status: ANALYSIS_JOB_STATUS.FAILED,
-      progress: existing?.progress ?? 0,
+      progress: existing.progress ?? 0,
       error,
       message: error,
       completedAt: now,
@@ -193,7 +230,12 @@ export class MedicalAnalysisJobService
     partial: Partial<MedicalAnalysisJobRecord>,
   ): Promise<void> {
     const existing = await this.loadRecord(jobId);
-    if (!existing) return;
+    if (!existing) {
+      this.logger.warn(
+        `No analysis job record for ${jobId}; status update was not saved`,
+      );
+      return;
+    }
 
     const updated: MedicalAnalysisJobRecord = {
       ...existing,

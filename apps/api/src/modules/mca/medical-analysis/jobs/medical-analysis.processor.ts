@@ -48,9 +48,8 @@ export class MedicalAnalysisProcessor implements OnModuleInit, OnModuleDestroy {
   private async process(payload: MedicalAnalysisJobPayload): Promise<void> {
     const { jobId, request } = payload;
 
-    await this.jobService.markRunning(jobId);
-
     try {
+      await this.jobService.markRunning(jobId);
       const result = await this.analysisService.analyze(request, {
         onProgress: (update) => this.jobService.reportProgress(jobId, update),
       });
@@ -59,7 +58,16 @@ export class MedicalAnalysisProcessor implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unknown analysis error';
-      await this.jobService.markFailed(jobId, message);
+      this.logger.error(`Medical analysis job ${jobId} failed: ${message}`);
+      try {
+        await this.jobService.markFailed(jobId, message);
+      } catch (markError) {
+        const markMessage =
+          markError instanceof Error ? markError.message : String(markError);
+        this.logger.error(
+          `Unable to record failure for job ${jobId}: ${markMessage}`,
+        );
+      }
       throw error;
     }
   }

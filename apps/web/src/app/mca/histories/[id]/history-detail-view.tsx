@@ -254,7 +254,7 @@ export default function HistoryDetailView({ id }: { id: string }) {
                 : "Case Detail"}
         </Badge>
         <h1 className="text-3xl font-semibold tracking-tight">
-          {history.patientName}
+          Medical Causation Case
         </h1>
         <p className="mt-2 max-w-3xl text-muted-foreground">
           {history.medicalQuestion}
@@ -391,7 +391,7 @@ export default function HistoryDetailView({ id }: { id: string }) {
       <ConfirmDialog
         open={showDeleteConfirm}
         title="Delete case history?"
-        description={`This permanently removes the case for ${history.patientName} and its analysis report. This action cannot be undone.`}
+        description="This permanently removes this case and its analysis report. This action cannot be undone."
         confirmLabel="Delete Case"
         destructive
         loading={deleting}

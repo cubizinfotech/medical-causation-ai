@@ -11,10 +11,9 @@ export interface DemoCaseExample {
 export const demoCaseExamples: DemoCaseExample[] = [
   {
     id: "anderson-mtbi-stroke",
-    title: "John Anderson — mTBI → Stroke (5 months)",
+    title: "mTBI → Stroke (5 months)",
     summary: "Rear-end MVA with brief LOC; ischemic stroke five months later.",
     values: {
-      patientName: "John Anderson",
       patientAge: "47",
       patientGender: "male",
       accidentDate: "2024-08-14",
@@ -37,10 +36,9 @@ export const demoCaseExamples: DemoCaseExample[] = [
   },
   {
     id: "chen-mtbi-stroke",
-    title: "Robert Chen — mTBI → Stroke (18 days)",
+    title: "mTBI → Stroke (18 days)",
     summary: "Pickup rear-end collision; stroke diagnosed 18 days post-impact.",
     values: {
-      patientName: "Robert Chen",
       patientAge: "52",
       patientGender: "male",
       accidentDate: "2023-09-14",
@@ -63,10 +61,9 @@ export const demoCaseExamples: DemoCaseExample[] = [
   },
   {
     id: "martinez-cervical-mva",
-    title: "Elena Martinez — Cervical Strain (MVA)",
+    title: "Cervical Strain (MVA)",
     summary: "T-bone collision with delayed cervical radiculopathy presentation.",
     values: {
-      patientName: "Elena Martinez",
       patientAge: "38",
       patientGender: "female",
       accidentDate: "2024-03-22",
@@ -88,10 +85,9 @@ export const demoCaseExamples: DemoCaseExample[] = [
   },
   {
     id: "walsh-workplace-fall",
-    title: "David Walsh — Lumbar Disc (Workplace Fall)",
+    title: "Lumbar Disc (Workplace Fall)",
     summary: "Warehouse ladder fall with delayed lumbar herniation diagnosis.",
     values: {
-      patientName: "David Walsh",
       patientAge: "44",
       patientGender: "male",
       accidentDate: "2023-11-03",

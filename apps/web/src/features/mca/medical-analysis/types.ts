@@ -140,7 +140,6 @@ export interface MedicalAnalysisResult {
 }
 
 export type AnalyzeCaseRequest = {
-  patientName: string;
   patientAge: string;
   patientGender: string;
   accidentDate: string;

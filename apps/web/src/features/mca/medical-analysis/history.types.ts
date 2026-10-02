@@ -4,7 +4,6 @@ import type { AnalysisJobStatus } from "./job.types";
 export interface AnalysisHistoryListItem {
   id: string;
   jobId: string;
-  patientName: string;
   medicalQuestion: string;
   status: AnalysisJobStatus;
   progress: number;

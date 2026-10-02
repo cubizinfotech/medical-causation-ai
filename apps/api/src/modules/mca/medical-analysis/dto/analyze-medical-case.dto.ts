@@ -9,12 +9,6 @@ import {
 export class AnalyzeMedicalCaseDto {
   @IsString()
   @IsNotEmpty()
-  @MinLength(2)
-  @MaxLength(120)
-  patientName!: string;
-
-  @IsString()
-  @IsNotEmpty()
   @MaxLength(10)
   patientAge!: string;
 

@@ -61,6 +61,9 @@ export type ExpertResearchProviderId =
   | 'open_payments'
   | 'corporate_affiliations'
   | 'criminal_records'
+  | 'constitutional_sheriff'
+  | 'post_records'
+  | 'oath_keepers'
   | 'malpractice_records';
 
 /** How the source may be accessed. Restricted sources are never scraped. */

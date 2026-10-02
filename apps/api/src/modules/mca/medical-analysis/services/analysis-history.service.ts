@@ -14,7 +14,6 @@ import { MedicalAnalysisJobService } from '../jobs/medical-analysis-job.service'
 export interface AnalysisHistoryListItem {
   id: string;
   jobId: string;
-  patientName: string;
   medicalQuestion: string;
   status: string;
   progress: number;
@@ -145,7 +144,6 @@ export class AnalysisHistoryService {
     return {
       id: row.id,
       jobId: row.jobId,
-      patientName: row.patientName,
       medicalQuestion: row.medicalQuestion,
       status: row.status,
       progress: row.progress,

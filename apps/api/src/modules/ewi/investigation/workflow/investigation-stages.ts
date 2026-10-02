@@ -167,13 +167,17 @@ export const EWI_WORKFLOW_STAGES: readonly InvestigationStageDefinition[] = [
   },
   {
     id: 'public-records',
-    label: 'Research reviews, payments, affiliations, and public records',
+    label:
+      'Research reviews, payments, criminal background, and public affiliations',
     kind: 'research',
     providers: [
       'patient_reviews',
       'open_payments',
       'corporate_affiliations',
       'criminal_records',
+      'constitutional_sheriff',
+      'post_records',
+      'oath_keepers',
       'malpractice_records',
     ],
   },

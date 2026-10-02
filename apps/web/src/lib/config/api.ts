@@ -1,13 +1,15 @@
-import { API_BASE_URL } from "./api-url";
+import { getApiBaseUrl } from "./api-url";
 
 /**
  * API endpoint configuration.
  * The address comes from lib/config/api-url.ts.
  */
 export const apiConfig = {
-  baseUrl: API_BASE_URL,
+  get baseUrl() {
+    return getApiBaseUrl();
+  },
   timeoutMs: Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? "180000"),
-} as const;
+};
 
 /**
  * Builds a full API URL from a path segment.

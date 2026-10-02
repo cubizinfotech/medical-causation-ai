@@ -151,8 +151,7 @@ export default function HistoriesView() {
 
         <div className="overflow-hidden rounded-lg border border-border">
           <div className="hidden grid-cols-12 gap-4 border-b border-border bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid">
-            <div className="col-span-3">Patient</div>
-            <div className="col-span-4">Medical Question</div>
+            <div className="col-span-7">Medical Question</div>
             <div className="col-span-2">Status</div>
             <div className="col-span-2">Submitted</div>
             <div className="col-span-1 text-right">Actions</div>
@@ -167,15 +166,12 @@ export default function HistoriesView() {
                 href={`/mca/histories/${row.id}`}
                 className="contents transition-colors hover:bg-muted/30"
               >
-                <div className="sm:col-span-3">
-                  <p className="font-medium text-foreground">{row.patientName}</p>
+                <div className="sm:col-span-7">
+                  <p className="line-clamp-2 text-sm font-medium text-foreground">
+                    {row.medicalQuestion}
+                  </p>
                   <p className="text-xs text-muted-foreground sm:hidden">
                     {formatDate(row.createdAt)}
-                  </p>
-                </div>
-                <div className="sm:col-span-4">
-                  <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {row.medicalQuestion}
                   </p>
                 </div>
                 <div className="sm:col-span-2">
@@ -226,7 +222,7 @@ export default function HistoriesView() {
         title="Delete case history?"
         description={
           pendingDelete
-            ? `This permanently removes the case for ${pendingDelete.patientName} and its analysis report. This action cannot be undone.`
+            ? "This permanently removes this case and its analysis report. This action cannot be undone."
             : ""
         }
         confirmLabel="Delete Case"

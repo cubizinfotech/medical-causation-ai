@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
+import { frontendOrigins } from '@config/frontend-origins';
 import type { AppSettings } from '@config/config.types';
 
 async function bootstrap(): Promise<void> {
@@ -28,8 +29,13 @@ async function bootstrap(): Promise<void> {
 
   app.useWebSocketAdapter(new IoAdapter(app));
 
+  const origins = frontendOrigins(
+    appConfig.frontendUrl,
+    appConfig.apiPublicUrl,
+  );
+
   app.enableCors({
-    origin: appConfig.frontendUrl,
+    origin: origins.length > 0 ? origins : appConfig.frontendUrl,
     credentials: true,
   });
 

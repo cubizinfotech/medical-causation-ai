@@ -534,13 +534,40 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
   }),
   source({
     id: 'criminal_records',
-    name: 'Criminal records',
+    name: 'Criminal background',
     category: 'criminal_record',
     accessClass: 'restricted',
     requirement: 'subscription',
     credentialEnv: 'CRIMINAL_RECORDS_API_KEY',
     summary:
-      'Authorized access only. No scraping, and no criminal record is invented.',
+      'Authorized access only. Public criminal sources are not scraped, and no criminal record is invented. An empty check is not proof that no record exists.',
+  }),
+  source({
+    id: 'constitutional_sheriff',
+    name: 'Constitutional Sheriff movement',
+    category: 'membership',
+    accessClass: 'public',
+    requirement: 'manual',
+    summary:
+      'Public organization pages only. A name, event, article, law-enforcement job, or political opinion is not membership. No page is scraped.',
+  }),
+  source({
+    id: 'post_records',
+    name: 'Peace Officer Standards and Training',
+    category: 'certification_organization',
+    accessClass: 'public',
+    requirement: 'manual',
+    summary:
+      'State POST sites differ. No state agency is chosen from the city alone, and no POST website is scraped.',
+  }),
+  source({
+    id: 'oath_keepers',
+    name: 'Oath Keepers',
+    category: 'membership',
+    accessClass: 'public',
+    requirement: 'manual',
+    summary:
+      'Public pages only. Membership is recorded only when a public source states it and the identity matches. Restricted sources are not used.',
   }),
   source({
     id: 'malpractice_records',

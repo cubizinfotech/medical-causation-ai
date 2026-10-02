@@ -18,6 +18,9 @@ export const PROFESSIONAL_BACKGROUND_PROVIDER_IDS = [
   'military_claims',
   'memberships',
   'professional_organizations',
+  'constitutional_sheriff',
+  'post_records',
+  'oath_keepers',
   'corporate_affiliations',
   'open_payments',
 ] as const satisfies readonly ExpertResearchProviderId[];

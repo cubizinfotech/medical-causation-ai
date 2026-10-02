@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,20 +16,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ewiClient } from "@/features/ewi/ewi.service";
 import {
   expertInvestigationSchema,
   type ExpertInvestigationFormValues,
 } from "@/features/ewi/schemas/expert-form.schema";
-import { saveExpertForm } from "@/features/ewi/storage/ewi-storage";
+import {
+  clearActiveEwiJob,
+  saveActiveEwiJob,
+  saveExpertForm,
+} from "@/features/ewi/storage/ewi-storage";
+import { toUserFacingError } from "@/features/ewi/utils/user-facing-error";
 import { EWI_SPECIALTY_EXAMPLES } from "@/features/ewi/constants";
 
 export function ExpertIntakeForm() {
   const router = useRouter();
+  const [starting, setStarting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
-    setValue,
-    formState: { errors, isSubmitting },
+    reset,
+    formState: { errors },
   } = useForm<ExpertInvestigationFormValues>({
     resolver: zodResolver(expertInvestigationSchema),
     mode: "onBlur",
@@ -39,9 +48,21 @@ export function ExpertIntakeForm() {
     },
   });
 
-  const onSubmit = handleSubmit((values) => {
+  const onSubmit = handleSubmit(async (values) => {
+    setStarting(true);
+    setSubmitError(null);
     saveExpertForm(values);
-    router.push("/ewi/investigation");
+    clearActiveEwiJob();
+    try {
+      const created = await ewiClient.submitJob(values);
+      saveActiveEwiJob(created);
+      router.push("/ewi/investigation");
+    } catch (error) {
+      setSubmitError(
+        toUserFacingError(error, "Unable to start the investigation."),
+      );
+      setStarting(false);
+    }
   });
 
   return (
@@ -130,24 +151,31 @@ export function ExpertIntakeForm() {
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Specialty claimed for this matter (suggestions available).
+                Choose a suggestion or type any other specialty.
               </p>
             )}
           </div>
         </CardContent>
         <CardFooter className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Starting…" : "Start Investigation"}
+          {submitError ? (
+            <p className="w-full text-sm text-destructive" role="alert">
+              {submitError}
+            </p>
+          ) : null}
+          <Button type="submit" disabled={starting}>
+            {starting ? "Starting…" : "Start Investigation"}
           </Button>
           <Button
             type="button"
             variant="outline"
+            disabled={starting}
             onClick={() => {
-              setValue("expertName", "Jane A. Smith, MD", {
-                shouldValidate: true,
+              setSubmitError(null);
+              reset({
+                expertName: "Jane A. Smith, MD",
+                city: "Boston",
+                specialty: "Neurology",
               });
-              setValue("city", "Boston", { shouldValidate: true });
-              setValue("specialty", "Neurology", { shouldValidate: true });
             }}
           >
             Load Example

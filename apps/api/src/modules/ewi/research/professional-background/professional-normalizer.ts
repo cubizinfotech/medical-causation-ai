@@ -14,6 +14,9 @@ const PROFESSIONAL_PROVIDERS = new Set([
   'military_claims',
   'memberships',
   'professional_organizations',
+  'constitutional_sheriff',
+  'post_records',
+  'oath_keepers',
   'corporate_affiliations',
   'open_payments',
 ]);
@@ -150,7 +153,11 @@ function resolveKind(
     case 'memberships':
       return 'membership';
     case 'professional_organizations':
+    case 'post_records':
       return 'professional_organization';
+    case 'constitutional_sheriff':
+    case 'oath_keepers':
+      return 'membership';
     case 'corporate_affiliations':
       return 'corporate_affiliation';
     case 'open_payments':

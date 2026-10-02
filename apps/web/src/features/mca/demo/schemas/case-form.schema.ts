@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const caseFormSchema = z.object({
-  patientName: z.string().min(2, "Patient name is required"),
   patientAge: z
     .string()
     .min(1, "Age is required")
@@ -29,7 +28,6 @@ export const caseFormSchema = z.object({
 export type CaseFormValues = z.infer<typeof caseFormSchema>;
 
 export const caseFormDefaults: CaseFormValues = {
-  patientName: "",
   patientAge: "",
   patientGender: "",
   accidentDate: "",

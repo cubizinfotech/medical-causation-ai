@@ -25,7 +25,8 @@ export const EWI_PROGRESS_STEPS = [
   { id: "university-rules", label: "Research university/professional rules" },
   {
     id: "public-records",
-    label: "Research reviews, payments, affiliations, and public records",
+    label:
+      "Research reviews, payments, criminal background, and public affiliations",
   },
   { id: "cross-check", label: "Cross-check information" },
   { id: "discrepancies", label: "Identify inconsistencies" },
@@ -37,10 +38,35 @@ export const EWI_PROGRESS_STEPS = [
   { id: "report", label: "Generate final report" },
 ] as const;
 
+/** Suggestions only. The field still accepts any other specialty the user types. */
 export const EWI_SPECIALTY_EXAMPLES = [
+  "Allergy",
+  "Anesthesiology",
+  "Cardiology",
+  "Dermatology",
+  "Emergency Medicine",
+  "Family Practice",
+  "General Practice",
+  "General Surgery",
+  "Internal Medicine",
   "Neurology",
+  "Neuroradiology",
+  "Neuropsychology",
+  "Neurosurgery",
+  "Obstetrics",
+  "Occupational Medicine",
+  "Ophthalmology",
   "Orthopedic Surgery",
-  "Psychiatry",
-  "Radiology",
+  "Otolaryngology",
   "Pain Management",
+  "Pathology",
+  "Pediatrics",
+  "Plastic Surgery",
+  "Psychiatry",
+  "Psychology",
+  "Pulmonology",
+  "Radiology",
+  "Thoracic Surgery",
+  "Toxicology",
+  "Vascular Surgery",
 ] as const;

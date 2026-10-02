@@ -827,28 +827,7 @@ export function developmentFixtures(
         },
       },
     ],
-    criminal_records: [
-      {
-        category: 'criminal_record',
-        title: 'Development fixture: criminal record metadata',
-        summary: 'Restricted criminal content that must not be stored.',
-        url: 'https://example.local/criminal/meta',
-        access: 'restricted',
-        informationStatus: 'unverified',
-        raw: matchedIdentity(query, {
-          documentType: 'criminal_record',
-          caseName: 'Public criminal docket reference',
-          caseNumber: 'CR-100',
-          court: 'State court',
-          jurisdiction: 'State',
-          documentDate: '2010-01-01',
-          relevance: 'Authorized metadata reference only.',
-          evidenceReference: 'Criminal docket metadata',
-          metadataOnly: true,
-          fullText: 'must not store',
-        }),
-      },
-    ],
+    criminal_records: [],
     malpractice_records: [
       {
         category: 'malpractice',

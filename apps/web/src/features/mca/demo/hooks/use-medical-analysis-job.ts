@@ -10,6 +10,7 @@ import { getAccessToken } from "@/lib/config";
 import { medicalAnalysisSocketUrl } from "@/lib/config/socket";
 import type { AnalyzeCaseRequest } from "@/features/mca/medical-analysis/types";
 import type {
+  CreateMedicalAnalysisJobResponse,
   MedicalAnalysisJobRecord,
   MedicalAnalysisJobUpdate,
 } from "@/features/mca/medical-analysis/job.types";
@@ -22,6 +23,9 @@ export type AnalysisJobPhase =
   | "failed";
 
 const POLL_INTERVAL_MS = 4000;
+const POLL_FAILURES_BEFORE_ERROR = 3;
+
+let inFlightSubmit: Promise<CreateMedicalAnalysisJobResponse> | null = null;
 
 function isTerminal(status: MedicalAnalysisJobRecord["status"]): boolean {
   return status === "completed" || status === "failed";
@@ -77,6 +81,7 @@ export function useMedicalAnalysisJob() {
       setError(new Error(update.error ?? "Analysis failed"));
     } else if (update.status === "running" || update.status === "queued") {
       setPhase("running");
+      setError(null);
     }
   }, []);
 
@@ -113,18 +118,26 @@ export function useMedicalAnalysisJob() {
           setError(new Error(message));
         });
 
+      let pollFailures = 0;
       pollRef.current = setInterval(() => {
         void medicalAnalysisClient
           .getJob(jobId)
           .then((record) => {
+            pollFailures = 0;
             applyUpdate(record);
             if (isTerminal(record.status) && pollRef.current) {
               clearInterval(pollRef.current);
               pollRef.current = null;
             }
           })
-          .catch(() => {
-            // Polling is a fallback; socket may still deliver updates.
+          .catch((pollError: unknown) => {
+            pollFailures += 1;
+            if (pollFailures < POLL_FAILURES_BEFORE_ERROR) return;
+            const message =
+              pollError instanceof Error
+                ? pollError.message
+                : "Unable to refresh analysis status";
+            setError(new Error(message));
           });
       }, POLL_INTERVAL_MS);
     },
@@ -133,24 +146,34 @@ export function useMedicalAnalysisJob() {
 
   const submit = useCallback(
     async (request: AnalyzeCaseRequest) => {
+      if (inFlightSubmit) return inFlightSubmit;
+
       setError(null);
       setJob(null);
       setPhase("submitting");
 
-      try {
-        const created = await medicalAnalysisClient.submitJob(request);
-        setPhase("running");
-        startTracking(created.jobId);
-        return created;
-      } catch (submitError) {
-        const apiError =
-          submitError instanceof Error
-            ? submitError
-            : new Error("Failed to start analysis");
-        setError(apiError);
-        setPhase("failed");
-        throw apiError;
-      }
+      const pending = (async () => {
+        try {
+          const created = await medicalAnalysisClient.submitJob(request);
+          setPhase("running");
+          startTracking(created.jobId);
+          return created;
+        } catch (submitError) {
+          const apiError =
+            submitError instanceof Error
+              ? submitError
+              : new Error("Failed to start analysis");
+          setError(apiError);
+          setPhase("failed");
+          throw apiError;
+        }
+      })();
+
+      inFlightSubmit = pending;
+      void pending.finally(() => {
+        if (inFlightSubmit === pending) inFlightSubmit = null;
+      });
+      return pending;
     },
     [startTracking],
   );

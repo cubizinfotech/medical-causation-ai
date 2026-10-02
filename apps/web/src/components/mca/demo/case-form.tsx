@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { FieldErrors } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
@@ -36,6 +37,7 @@ import {
 } from "@/features/mca/demo/schemas/case-form.schema";
 import { TERMS_ACKNOWLEDGMENT } from "@/features/mca/medical-analysis/types";
 import {
+  loadCaseForm,
   saveCaseForm,
   saveUploadedFileNames,
   clearAnalysisResult,
@@ -90,11 +92,32 @@ export function CaseForm({ initialValues }: CaseFormProps) {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<CaseFormValues>({
     resolver: zodResolver(caseFormSchema),
     defaultValues: { ...caseFormDefaults, ...initialValues },
   });
+  const [draftReady, setDraftReady] = useState(false);
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+    if (!initialValues) {
+      const saved = loadCaseForm();
+      if (saved) reset(saved);
+    }
+    setDraftReady(true);
+  }, [initialValues, reset]);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    const subscription = watch((values) => {
+      saveCaseForm(values);
+    });
+    return () => subscription.unsubscribe();
+  }, [draftReady, watch]);
 
   const loadExampleCase = () => {
     setSubmitError(null);
@@ -104,7 +127,22 @@ export function CaseForm({ initialValues }: CaseFormProps) {
     setExampleIndex((current) => current + 1);
   };
 
+  const onInvalid = (formErrors: FieldErrors<CaseFormValues>) => {
+    const first = Object.values(formErrors).find(
+      (error) => typeof error?.message === "string",
+    );
+    setSubmitError(
+      typeof first?.message === "string"
+        ? first.message
+        : "Some required fields need attention.",
+    );
+  };
+
   const onSubmit = (values: CaseFormValues) => {
+    if (!termsAccepted) {
+      setSubmitError("Accept the terms of use before running analysis.");
+      return;
+    }
     setSubmitError(null);
     try {
       clearAnalysisResult();
@@ -117,8 +155,16 @@ export function CaseForm({ initialValues }: CaseFormProps) {
     }
   };
 
+  if (!draftReady) {
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground">
+        Loading saved case…
+      </p>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
       <div className="flex flex-col gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
@@ -153,19 +199,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
         title="Patient Information"
         description="Basic demographics for the injured party."
       >
-        <div className="grid gap-6 sm:grid-cols-3">
-          <FormField
-            id="patientName"
-            label="Full Name"
-            required
-            error={errors.patientName?.message}
-          >
-            <Input
-              id="patientName"
-              placeholder="Robert Chen"
-              {...register("patientName")}
-            />
-          </FormField>
+        <div className="grid gap-6 sm:grid-cols-2">
           <FormField
             id="patientAge"
             label="Age"
@@ -372,6 +406,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
         </CardContent>
       </Card>
 
+      <div aria-hidden className="h-8" />
       <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -382,8 +417,8 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             <Button type="button" variant="outline" onClick={() => router.push("/")}>
               Cancel
             </Button>
-            <Button type="submit" size="lg" disabled={isSubmitting || !termsAccepted}>
-              {isSubmitting ? "Submitting…" : "Run AI Analysis"}
+            <Button type="submit" size="lg" disabled={isSubmitting}>
+              {isSubmitting ? "Starting analysis…" : "Run AI Analysis"}
             </Button>
           </div>
         </div>

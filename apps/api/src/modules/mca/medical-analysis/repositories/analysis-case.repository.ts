@@ -18,7 +18,7 @@ export class AnalysisCaseRepository {
     return this.prisma.analysisCase.create({
       data: {
         jobId,
-        patientName: dto.patientName,
+        patientName: '',
         patientAge: dto.patientAge,
         patientGender: dto.patientGender,
         accidentDate: dto.accidentDate,

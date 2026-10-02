@@ -4,7 +4,6 @@ import type { AnalyzeMedicalCaseDto } from '../dto/analyze-medical-case.dto';
 describe('mapCaseDtoToAnalysisRequest', () => {
   it('should map case form fields to analysis request', () => {
     const dto: AnalyzeMedicalCaseDto = {
-      patientName: 'Jane Doe',
       patientAge: '45',
       patientGender: 'female',
       accidentDate: '2024-01-15',
@@ -21,7 +20,8 @@ describe('mapCaseDtoToAnalysisRequest', () => {
     const result = mapCaseDtoToAnalysisRequest(dto);
 
     expect(result.medicalQuestion).toBe('Can mild TBI increase stroke risk?');
-    expect(result.patientInformation).toContain('Jane Doe');
+    expect(result.patientInformation).toBe('Age: 45, Gender: female');
+    expect(result.patientInformation).not.toMatch(/name/i);
     expect(result.injury).toContain('Motor Vehicle Collision');
     expect(result.medicalHistory).toContain('Hypertension');
   });
