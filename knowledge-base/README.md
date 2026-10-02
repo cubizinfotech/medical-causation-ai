@@ -54,9 +54,26 @@ Temporary staging area for documents uploaded by users before ingestion.
 - Files here are processed and moved to the appropriate permanent location
 - Do not treat this folder as long-term storage
 
+## Copy this folder to the server
+
+The PDFs stay on your computer. They are not in Git. From the repository root on Windows, upload books and articles that are missing or incomplete on the server:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\upload-knowledge-base.ps1
+```
+
+The script reads `knowledge-base` next to the repository, not a fixed drive letter. For a different server, set `MCA_SSH_TARGET` (for example `deploy@YOUR_SERVER`) before you run it. When the upload finishes, index the files on the server:
+
+```bash
+cd /var/www/medical-causation-ai
+npm run reembed:kb:full
+```
+
+More server detail is in [DEPLOYMENT.md](../DEPLOYMENT.md). Expert Witness Investigation does not use this folder.
+
 ## Indexing
 
-Documents in this directory are parsed, chunked, embedded, and stored in PostgreSQL. They are not stored in Git. Copy them to a server with the steps in [DEPLOYMENT.md](../DEPLOYMENT.md), then run `npm run reembed:kb:full`. Expert Witness Investigation does not use this folder.
+Documents in this directory are parsed, chunked, embedded, and stored in PostgreSQL. They are not stored in Git.
 
 ## Important Notes
 
