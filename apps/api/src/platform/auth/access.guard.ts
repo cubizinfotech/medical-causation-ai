@@ -5,9 +5,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
-import type { AuthSettings } from '@config/config.types';
 import type { Request } from 'express';
 import type { PlatformRole } from '../users/user.types';
 import { IS_PUBLIC_KEY, ROLES_KEY } from './auth.decorators';
@@ -18,7 +16,6 @@ import type { AuthUserRef } from './auth.types';
 export class AccessGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly config: ConfigService,
     private readonly auth: AuthService,
   ) {}
 
@@ -36,9 +33,6 @@ export class AccessGuard implements CanActivate {
         context.getHandler(),
         context.getClass(),
       ]) ?? [];
-    const authEnabled = this.config.get<AuthSettings>('auth')?.enabled === true;
-    if (!authEnabled && requiredRoles.length === 0) return true;
-
     const request = context
       .switchToHttp()
       .getRequest<Request & { user?: AuthUserRef }>();

@@ -26,6 +26,9 @@ export class AuthService implements IAuthService, OnModuleInit {
 
   onModuleInit(): void {
     const auth = this.settings();
+    if (process.env.NODE_ENV === 'production' && !auth.jwtSecret) {
+      throw new Error('JWT_SECRET is required.');
+    }
     if (auth.enabled && !auth.jwtSecret) {
       throw new Error('JWT_SECRET is required when AUTH_ENABLED is true.');
     }
@@ -76,9 +79,8 @@ export class AuthService implements IAuthService, OnModuleInit {
     }
   }
 
-  /** When auth is off, sockets stay open. When it is on, a valid token is required. */
+  /** Job updates require the same signed-in user as the HTTP APIs. */
   async allowSocket(client: Socket): Promise<boolean> {
-    if (!this.settings().enabled) return true;
     const token = readSocketToken(client);
     if (!token) return false;
     const user = await this.validateAccessToken(token);

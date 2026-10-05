@@ -67,10 +67,15 @@ export class EwiInvestigationJobService
 
   async enqueue(
     dto: CreateExpertInvestigationDto,
+    ownerUserId: string,
   ): Promise<CreateEwiInvestigationJobResponse> {
     const jobId = randomUUID();
     const now = new Date().toISOString();
-    const investigation = await this.historyService.create(jobId, dto);
+    const investigation = await this.historyService.create(
+      jobId,
+      dto,
+      ownerUserId,
+    );
 
     const record: EwiInvestigationJobRecord = {
       jobId,

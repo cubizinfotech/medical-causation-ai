@@ -78,7 +78,11 @@ export interface InvestigationView {
 export class ExpertInvestigationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(jobId: string, dto: CreateExpertInvestigationDto) {
+  async create(
+    jobId: string,
+    dto: CreateExpertInvestigationDto,
+    ownerUserId: string,
+  ) {
     const name = dto.expertName.trim();
     const city = dto.city.trim();
     const specialty = dto.specialty.trim();
@@ -98,6 +102,7 @@ export class ExpertInvestigationRepository {
           currentStage: EWI_STAGE_IDENTIFY,
           stageLabel: EWI_JOB_STEP_LABELS[EWI_STAGE_IDENTIFY],
           progress: 0,
+          ownerUserId,
           profile: {
             create: { displayName: name, city, specialty },
           },
@@ -125,6 +130,17 @@ export class ExpertInvestigationRepository {
     return row ? this.toDetail(row) : null;
   }
 
+  async findOwned(
+    id: string,
+    ownerUserId: string,
+  ): Promise<InvestigationView | null> {
+    const row = await this.prisma.investigation.findFirst({
+      where: { id, ownerUserId },
+      include: detailInclude,
+    });
+    return row ? this.toDetail(row) : null;
+  }
+
   findByJobId(jobId: string) {
     return this.prisma.investigation.findUnique({
       where: { jobId },
@@ -132,13 +148,25 @@ export class ExpertInvestigationRepository {
     });
   }
 
-  async list(limit = 50): Promise<InvestigationView[]> {
+  async listForOwner(
+    ownerUserId: string,
+    limit = 50,
+  ): Promise<InvestigationView[]> {
     const rows = await this.prisma.investigation.findMany({
+      where: { ownerUserId },
       orderBy: { createdAt: 'desc' },
       take: limit,
       include: { expert: true, report: true },
     });
     return rows.map((row) => this.toListItem(row));
+  }
+
+  async ownsJob(jobId: string, ownerUserId: string): Promise<boolean> {
+    const row = await this.prisma.investigation.findFirst({
+      where: { jobId, ownerUserId },
+      select: { id: true },
+    });
+    return row !== null;
   }
 
   async updateProgress(

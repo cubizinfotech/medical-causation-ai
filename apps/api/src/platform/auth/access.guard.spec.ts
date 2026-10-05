@@ -13,7 +13,6 @@ describe('AccessGuard', () => {
   };
 
   function setup(options: {
-    enabled: boolean;
     publicRoute?: boolean;
     roles?: string[];
     authorization?: string;
@@ -30,13 +29,6 @@ describe('AccessGuard', () => {
         return undefined;
       }),
     };
-    const config = {
-      get: jest.fn(() => ({
-        enabled: options.enabled,
-        jwtSecret: 'secret',
-        jwtExpiresIn: '1h',
-      })),
-    };
     const auth = {
       validateAccessToken: jest.fn(() =>
         Promise.resolve(
@@ -44,11 +36,7 @@ describe('AccessGuard', () => {
         ),
       ),
     };
-    const guard = new AccessGuard(
-      reflector as never,
-      config as never,
-      auth as never,
-    );
+    const guard = new AccessGuard(reflector as never, auth as never);
     const context = {
       getType: () => 'http',
       getHandler: () => 'handler',
@@ -59,18 +47,20 @@ describe('AccessGuard', () => {
   }
 
   it('allows a public route without a token', async () => {
-    const { guard, context } = setup({ enabled: true, publicRoute: true });
+    const { guard, context } = setup({ publicRoute: true });
     await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
-  it('leaves product routes open when authentication is disabled', async () => {
-    const { guard, context, auth } = setup({ enabled: false });
-    await expect(guard.canActivate(context)).resolves.toBe(true);
+  it('rejects a missing token on a private route', async () => {
+    const { guard, context, auth } = setup({});
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
     expect(auth.validateAccessToken).not.toHaveBeenCalled();
   });
 
-  it('rejects a missing token when authentication is enabled', async () => {
-    const { guard, context } = setup({ enabled: true });
+  it('rejects a missing token when a role is required', async () => {
+    const { guard, context } = setup({ roles: ['attorney'] });
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
@@ -78,7 +68,6 @@ describe('AccessGuard', () => {
 
   it('rejects an invalid token', async () => {
     const { guard, context } = setup({
-      enabled: true,
       authorization: 'Bearer bad',
       tokenUser: null,
     });
@@ -89,7 +78,6 @@ describe('AccessGuard', () => {
 
   it('allows a signed-in user on a product route', async () => {
     const { guard, context, request } = setup({
-      enabled: true,
       authorization: 'Bearer good',
     });
     await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -98,7 +86,6 @@ describe('AccessGuard', () => {
 
   it('rejects a role that is not allowed', async () => {
     const { guard, context } = setup({
-      enabled: true,
       authorization: 'Bearer good',
       roles: ['admin'],
     });
@@ -107,9 +94,8 @@ describe('AccessGuard', () => {
     );
   });
 
-  it('allows a matching role and still checks the token when auth is off', async () => {
+  it('allows a matching role', async () => {
     const { guard, context } = setup({
-      enabled: false,
       authorization: 'Bearer good',
       roles: ['attorney'],
     });

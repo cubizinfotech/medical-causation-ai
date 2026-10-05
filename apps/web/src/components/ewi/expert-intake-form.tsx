@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -163,7 +164,10 @@ export function ExpertIntakeForm() {
             </p>
           ) : null}
           <Button type="submit" disabled={starting}>
-            {starting ? "Starting…" : "Start Investigation"}
+            {starting ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : null}
+            {starting ? "Starting investigation…" : "Start investigation"}
           </Button>
           <Button
             type="button"

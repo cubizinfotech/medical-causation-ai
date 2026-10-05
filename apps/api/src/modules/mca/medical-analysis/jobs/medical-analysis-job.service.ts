@@ -66,12 +66,17 @@ export class MedicalAnalysisJobService
 
   async enqueue(
     dto: AnalyzeMedicalCaseDto,
+    ownerUserId: string,
   ): Promise<CreateMedicalAnalysisJobResponse> {
     const request = mapCaseDtoToAnalysisRequest(dto);
     const jobId = randomUUID();
     const now = new Date().toISOString();
 
-    const analysisCase = await this.historyService.createCase(jobId, dto);
+    const analysisCase = await this.historyService.createCase(
+      jobId,
+      dto,
+      ownerUserId,
+    );
 
     const record: MedicalAnalysisJobRecord = {
       jobId,

@@ -4,14 +4,17 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Post,
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { PrismaService } from '@database/prisma.service';
 import { Roles } from '@platform/auth/auth.decorators';
 import type { AuthUserRef } from '@platform/auth/auth.types';
+import { requireRequestUser } from '@platform/auth/request-user';
 import {
   ApproveEwiRequestDto,
   ManualReviewEwiRequestDto,
@@ -38,32 +41,53 @@ const EWI_REQUEST_OPS_ROLES = ['super_admin', 'admin'] as const;
 @Controller('ewi/requests')
 @Roles(...EWI_REQUEST_ROLES)
 export class EwiRequestController {
-  constructor(private readonly workflow: EwiRequestWorkflowService) {}
+  constructor(
+    private readonly workflow: EwiRequestWorkflowService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get('investigations/:investigationId')
-  listForInvestigation(
+  async listForInvestigation(
     @Param('investigationId', ParseUUIDPipe) investigationId: string,
+    @Req() request: Request & { user?: AuthUserRef },
   ) {
+    await this.assertInvestigationOwner(
+      investigationId,
+      requireRequestUser(request).id,
+    );
     return this.workflow.listForInvestigation(investigationId);
   }
 
   @Get(':id')
-  getRequest(@Param('id', ParseUUIDPipe) id: string) {
+  async getRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user?: AuthUserRef },
+  ) {
+    await this.assertRequestOwner(id, requireRequestUser(request).id);
     return this.workflow.getRequest(id);
   }
 
   @Post('prepare')
   @HttpCode(HttpStatus.CREATED)
-  prepare(@Body() body: PrepareEwiRequestDto) {
+  async prepare(
+    @Body() body: PrepareEwiRequestDto,
+    @Req() request: Request & { user?: AuthUserRef },
+  ) {
+    await this.assertInvestigationOwner(
+      body.investigationId,
+      requireRequestUser(request).id,
+    );
     return this.workflow.prepare(body);
   }
 
   @Post(':id/approve')
-  approve(
+  async approve(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: ApproveEwiRequestDto,
     @Req() request: Request & { user?: AuthUserRef },
   ) {
+    const user = requireRequestUser(request);
+    await this.assertRequestOwner(id, user.id);
     const approvedBy =
       body.approvedBy?.trim() ||
       request.user?.email ||
@@ -73,16 +97,22 @@ export class EwiRequestController {
   }
 
   @Post(':id/send')
-  send(@Param('id', ParseUUIDPipe) id: string) {
+  async send(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user?: AuthUserRef },
+  ) {
+    await this.assertRequestOwner(id, requireRequestUser(request).id);
     return this.workflow.sendIfEligible(id);
   }
 
   @Post(':id/manual-review')
-  completeManualReview(
+  async completeManualReview(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: ManualReviewEwiRequestDto,
     @Req() request: Request & { user?: AuthUserRef },
   ) {
+    const user = requireRequestUser(request);
+    await this.assertRequestOwner(id, user.id);
     return this.workflow.completeManualReview({
       requestId: id,
       recipientEmail: body.recipientEmail,
@@ -96,8 +126,38 @@ export class EwiRequestController {
   }
 
   @Post(':id/follow-up')
-  createFollowUp(@Param('id', ParseUUIDPipe) id: string) {
+  async createFollowUp(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user?: AuthUserRef },
+  ) {
+    await this.assertRequestOwner(id, requireRequestUser(request).id);
     return this.workflow.createFollowUp(id);
+  }
+
+  private async assertInvestigationOwner(
+    investigationId: string,
+    ownerUserId: string,
+  ): Promise<void> {
+    const row = await this.prisma.investigation.findFirst({
+      where: { id: investigationId, ownerUserId },
+      select: { id: true },
+    });
+    if (!row) {
+      throw new NotFoundException('Investigation not found');
+    }
+  }
+
+  private async assertRequestOwner(
+    requestId: string,
+    ownerUserId: string,
+  ): Promise<void> {
+    const row = await this.prisma.investigationRequest.findFirst({
+      where: { id: requestId, investigation: { ownerUserId } },
+      select: { id: true },
+    });
+    if (!row) {
+      throw new NotFoundException('Investigation request not found');
+    }
   }
 
   @Post('follow-ups/process-due')

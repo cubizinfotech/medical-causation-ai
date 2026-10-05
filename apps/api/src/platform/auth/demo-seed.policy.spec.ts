@@ -9,4 +9,8 @@ describe('demo seed policy', () => {
     expect(() => assertDemoSeedAllowed('development')).not.toThrow();
     expect(() => assertDemoSeedAllowed(undefined)).not.toThrow();
   });
+
+  it('allows production only when the override is set', () => {
+    expect(() => assertDemoSeedAllowed('production', 'true')).not.toThrow();
+  });
 });

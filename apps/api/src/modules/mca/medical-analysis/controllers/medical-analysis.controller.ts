@@ -10,7 +10,11 @@ import {
   Logger,
   Param,
   Post,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import type { AuthUserRef } from '@platform/auth/auth.types';
+import { requireRequestUser } from '@platform/auth/request-user';
 import { AiException } from '@ai/exceptions';
 import { MedicalAnalysisService } from '../services';
 import { MedicalAnalysisJobService } from '../jobs/medical-analysis-job.service';
@@ -38,28 +42,38 @@ export class MedicalAnalysisController {
   ) {}
 
   @Get('histories')
-  listHistories() {
-    return this.historyService.listHistories();
+  listHistories(@Req() request: Request & { user?: AuthUserRef }) {
+    return this.historyService.listHistories(requireRequestUser(request).id);
   }
 
   @Get('histories/:id')
-  getHistory(@Param('id') id: string) {
-    return this.historyService.getHistory(id);
+  getHistory(
+    @Param('id') id: string,
+    @Req() request: Request & { user?: AuthUserRef },
+  ) {
+    return this.historyService.getHistory(id, requireRequestUser(request).id);
   }
 
   @Delete('histories/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteHistory(@Param('id') id: string): Promise<void> {
-    await this.historyService.deleteHistory(id);
+  async deleteHistory(
+    @Param('id') id: string,
+    @Req() request: Request & { user?: AuthUserRef },
+  ): Promise<void> {
+    await this.historyService.deleteHistory(id, requireRequestUser(request).id);
   }
 
   @Post('jobs')
   @HttpCode(HttpStatus.ACCEPTED)
   async createJob(
     @Body() body: AnalyzeMedicalCaseDto,
+    @Req() request: Request & { user?: AuthUserRef },
   ): Promise<CreateMedicalAnalysisJobResponse> {
     try {
-      return await this.jobService.enqueue(body);
+      return await this.jobService.enqueue(
+        body,
+        requireRequestUser(request).id,
+      );
     } catch (error) {
       return this.handleError(error);
     }
@@ -68,7 +82,12 @@ export class MedicalAnalysisController {
   @Get('jobs/:jobId')
   async getJob(
     @Param('jobId') jobId: string,
+    @Req() request: Request & { user?: AuthUserRef },
   ): Promise<MedicalAnalysisJobRecord> {
+    await this.historyService.assertJobOwner(
+      jobId,
+      requireRequestUser(request).id,
+    );
     return this.jobService.getJob(jobId);
   }
 

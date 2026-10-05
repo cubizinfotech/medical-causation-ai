@@ -42,7 +42,7 @@ export default function McaLandingPage() {
             <div className="mt-10 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg" className="h-12 px-8 text-base">
                 <Link href="/mca/case">
-                  Start Demo
+                  New analysis
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -125,12 +125,11 @@ export default function McaLandingPage() {
             Ready to evaluate medical causation?
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-            Run the interactive demonstration with sample cases or your own
-            intake data. {appMetadata.name} searches private and public sources
-            to produce evidence-based reports.
+            Start a case with your intake data. {appMetadata.name} searches
+            private and public sources and keeps the result on your account.
           </p>
           <Button asChild size="lg" className="mt-8 h-12 px-8">
-            <Link href="/mca/case">Start Demo</Link>
+            <Link href="/mca/case">New analysis</Link>
           </Button>
         </div>
       </PageContainer>

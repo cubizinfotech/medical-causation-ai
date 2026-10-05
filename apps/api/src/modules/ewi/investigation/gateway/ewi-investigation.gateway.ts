@@ -9,7 +9,9 @@ import {
 import { Logger } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
 import { AuthService } from '@platform/auth/auth.service';
+import type { AuthUserRef } from '@platform/auth/auth.types';
 import type { EwiInvestigationJobRecord } from '../jobs/ewi-investigation-job.types';
+import { ExpertInvestigationRepository } from '../repositories/expert-investigation.repository';
 
 @WebSocketGateway({
   namespace: '/ewi',
@@ -21,7 +23,10 @@ export class EwiInvestigationGateway implements OnGatewayConnection {
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly investigations: ExpertInvestigationRepository,
+  ) {}
 
   async handleConnection(client: Socket): Promise<void> {
     const allowed = await this.auth.allowSocket(client);
@@ -29,12 +34,17 @@ export class EwiInvestigationGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('subscribe')
-  handleSubscribe(
+  async handleSubscribe(
     @MessageBody() body: { jobId?: string },
     @ConnectedSocket() client: Socket,
-  ): void {
+  ): Promise<void> {
     const jobId = body?.jobId;
     if (!jobId) return;
+    const user = (client.data as { user?: AuthUserRef }).user;
+    if (!user || !(await this.investigations.ownsJob(jobId, user.id))) {
+      client.emit('job:error', { message: 'Investigation not found' });
+      return;
+    }
     void client.join(this.room(jobId));
     this.logger.debug(`Client subscribed to EWI job ${jobId}`);
   }

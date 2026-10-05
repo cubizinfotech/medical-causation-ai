@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import {
   Car,
   FileText,
+  Loader2,
   HelpCircle,
   Sparkles,
   Stethoscope,
@@ -414,10 +415,18 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             <span>Fields marked with * must be completed before analysis.</span>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button type="button" variant="outline" onClick={() => router.push("/")}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => router.push("/")}
+            >
               Cancel
             </Button>
             <Button type="submit" size="lg" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : null}
               {isSubmitting ? "Starting analysis…" : "Run AI Analysis"}
             </Button>
           </div>

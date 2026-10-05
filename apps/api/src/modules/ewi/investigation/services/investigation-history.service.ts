@@ -19,28 +19,40 @@ export class InvestigationHistoryService {
     private readonly requestWorkflow: EwiRequestWorkflowService,
   ) {}
 
-  create(jobId: string, dto: CreateExpertInvestigationDto) {
-    return this.repo.create(jobId, dto);
+  create(
+    jobId: string,
+    dto: CreateExpertInvestigationDto,
+    ownerUserId: string,
+  ) {
+    return this.repo.create(jobId, dto, ownerUserId);
   }
 
-  listHistories() {
-    return this.repo.list();
+  listHistories(ownerUserId: string) {
+    return this.repo.listForOwner(ownerUserId);
   }
 
-  async getHistory(id: string) {
-    const row = await this.repo.findById(id);
+  async getHistory(id: string, ownerUserId: string) {
+    const row = await this.repo.findOwned(id, ownerUserId);
     if (!row) {
       throw new NotFoundException(`Investigation "${id}" not found`);
     }
     return row;
   }
 
-  async deleteHistory(id: string): Promise<void> {
-    await this.getHistory(id);
+  async assertJobOwner(jobId: string, ownerUserId: string): Promise<void> {
+    const owned = await this.repo.ownsJob(jobId, ownerUserId);
+    if (!owned) {
+      throw new NotFoundException(`Investigation job "${jobId}" not found`);
+    }
+  }
+
+  async deleteHistory(id: string, ownerUserId: string): Promise<void> {
+    await this.getHistory(id, ownerUserId);
     await this.repo.delete(id);
   }
 
-  cancel(id: string) {
+  async cancel(id: string, ownerUserId: string) {
+    await this.getHistory(id, ownerUserId);
     return this.repo.cancel(id);
   }
 
@@ -53,12 +65,15 @@ export class InvestigationHistoryService {
     return row?.status === 'cancelled';
   }
 
-  async getReport(id: string): Promise<{
+  async getReport(
+    id: string,
+    ownerUserId: string,
+  ): Promise<{
     fileName: string;
     mimeType: string;
     buffer: Buffer;
   }> {
-    const row = await this.getHistory(id);
+    const row = await this.getHistory(id, ownerUserId);
     if (!row.reportStorageKey || !row.reportFileName || !row.reportMimeType) {
       throw new NotFoundException(`Report for investigation "${id}" not found`);
     }

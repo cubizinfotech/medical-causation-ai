@@ -6,10 +6,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useState,
   type ReactNode,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { apiFetch, getAccessToken, setAccessToken } from "@/lib/config";
 
 export interface AuthSessionUser {
@@ -36,6 +38,7 @@ interface AuthContextValue {
   enabled: boolean;
   user: AuthSessionUser | null;
   ready: boolean;
+  signingOut: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
@@ -91,9 +94,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [queryClient],
   );
 
+  const [signingOut, setSigningOut] = useState(false);
   const logout = useCallback(() => {
+    setSigningOut(true);
     setAccessToken(null);
     queryClient.setQueryData(["auth", "me"], null);
+    setSigningOut(false);
   }, [queryClient]);
 
   const value = useMemo(
@@ -101,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       enabled: status.data?.enabled === true,
       user: me.data ?? null,
       ready: !status.isPending && !me.isPending,
+      signingOut,
       login,
       logout,
     }),
@@ -109,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status.isPending,
       me.data,
       me.isPending,
+      signingOut,
       login,
       logout,
     ],
@@ -125,21 +133,49 @@ export function useAuth(): AuthContextValue {
   return value;
 }
 
+const PRIVATE_PREFIXES = [
+  "/mca",
+  "/ewi",
+  "/case",
+  "/analysis",
+  "/histories",
+  "/report",
+];
+
+function isPrivatePath(pathname: string): boolean {
+  return PRIVATE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { enabled, user, ready } = useAuth();
+  const { user, ready } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const protectedPath =
-    pathname.startsWith("/mca") || pathname.startsWith("/ewi");
+  const requiresAuth = isPrivatePath(pathname);
 
   useEffect(() => {
-    if (!ready || !enabled || !protectedPath || user) return;
-    const next = encodeURIComponent(pathname);
+    if (!ready || !requiresAuth || user) return;
+    const next = encodeURIComponent(pathname || "/");
     router.replace(`/login?next=${next}`);
-  }, [enabled, pathname, protectedPath, ready, router, user]);
+  }, [pathname, ready, requiresAuth, router, user]);
 
-  if (ready && enabled && protectedPath && !user) {
-    return null;
+  if (requiresAuth && !ready) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+        Checking your session…
+      </div>
+    );
+  }
+
+  if (requiresAuth && !user) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+        Redirecting to sign in…
+      </div>
+    );
   }
 
   return children;

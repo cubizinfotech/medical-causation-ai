@@ -11,9 +11,9 @@ export default function ProductChooserPage() {
           Legal Research AI Platform
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-          Choose a product. Medical Causation Analysis (MCA) and Expert Witness
-          Investigation (EWI) share infrastructure but keep separate workflows,
-          data, and reports.
+          Medical Causation Analysis and Expert Witness Investigation keep
+          separate workflows, data, and reports. Sign in to open a product.
+          Each account can see only its own cases and investigations.
         </p>
       </div>
 

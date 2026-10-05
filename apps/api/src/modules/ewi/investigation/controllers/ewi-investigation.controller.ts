@@ -9,10 +9,13 @@ import {
   Logger,
   Param,
   Post,
+  Req,
   Res,
   StreamableFile,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
+import type { AuthUserRef } from '@platform/auth/auth.types';
+import { requireRequestUser } from '@platform/auth/request-user';
 import { ExpertInvestigationService } from '../services/expert-investigation.service';
 import { EwiInvestigationJobService } from '../jobs/ewi-investigation-job.service';
 import { InvestigationHistoryService } from '../services/investigation-history.service';
@@ -32,18 +35,27 @@ export class EwiInvestigationController {
   ) {}
 
   @Get('histories')
-  listHistories() {
-    return this.historyService.listHistories();
+  listHistories(@Req() request: Request & { user?: AuthUserRef }) {
+    return this.historyService.listHistories(requireRequestUser(request).id);
   }
 
   @Get('histories/:id')
-  getHistory(@Param('id') id: string) {
-    return this.historyService.getHistory(id);
+  getHistory(
+    @Param('id') id: string,
+    @Req() request: Request & { user?: AuthUserRef },
+  ) {
+    return this.historyService.getHistory(id, requireRequestUser(request).id);
   }
 
   @Post('histories/:id/cancel')
-  async cancelHistory(@Param('id') id: string) {
-    const view = await this.historyService.cancel(id);
+  async cancelHistory(
+    @Param('id') id: string,
+    @Req() request: Request & { user?: AuthUserRef },
+  ) {
+    const view = await this.historyService.cancel(
+      id,
+      requireRequestUser(request).id,
+    );
     if (view.jobId) {
       await this.jobService.markCancelled(view.jobId);
     }
@@ -52,16 +64,23 @@ export class EwiInvestigationController {
 
   @Delete('histories/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteHistory(@Param('id') id: string): Promise<void> {
-    await this.historyService.deleteHistory(id);
+  async deleteHistory(
+    @Param('id') id: string,
+    @Req() request: Request & { user?: AuthUserRef },
+  ): Promise<void> {
+    await this.historyService.deleteHistory(id, requireRequestUser(request).id);
   }
 
   @Get('histories/:id/report')
   async downloadReport(
     @Param('id') id: string,
+    @Req() request: Request & { user?: AuthUserRef },
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const report = await this.historyService.getReport(id);
+    const report = await this.historyService.getReport(
+      id,
+      requireRequestUser(request).id,
+    );
     res.set({
       'Content-Type': report.mimeType,
       'Content-Disposition': `attachment; filename="${report.fileName}"`,
@@ -73,9 +92,13 @@ export class EwiInvestigationController {
   @HttpCode(HttpStatus.ACCEPTED)
   async createJob(
     @Body() body: CreateExpertInvestigationDto,
+    @Req() request: Request & { user?: AuthUserRef },
   ): Promise<CreateEwiInvestigationJobResponse> {
     try {
-      return await this.jobService.enqueue(body);
+      return await this.jobService.enqueue(
+        body,
+        requireRequestUser(request).id,
+      );
     } catch (error) {
       this.handleError(error);
     }
@@ -84,7 +107,12 @@ export class EwiInvestigationController {
   @Get('jobs/:jobId')
   async getJob(
     @Param('jobId') jobId: string,
+    @Req() request: Request & { user?: AuthUserRef },
   ): Promise<EwiInvestigationJobRecord> {
+    await this.historyService.assertJobOwner(
+      jobId,
+      requireRequestUser(request).id,
+    );
     return this.jobService.getJob(jobId);
   }
 

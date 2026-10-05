@@ -6,6 +6,7 @@ import type { AnalyzeMedicalCaseDto } from '../dto/analyze-medical-case.dto';
 export interface CreateAnalysisCaseInput {
   jobId: string;
   dto: AnalyzeMedicalCaseDto;
+  ownerUserId: string;
 }
 
 @Injectable()
@@ -30,6 +31,7 @@ export class AnalysisCaseRepository {
         medications: dto.medications ?? null,
         timeline: dto.timeline ?? null,
         medicalQuestion: dto.medicalQuestion,
+        ownerUserId: input.ownerUserId,
         status: 'queued',
         progress: 5,
         message: 'Analysis queued — starting shortly…',
@@ -43,6 +45,27 @@ export class AnalysisCaseRepository {
 
   findByJobId(jobId: string): Promise<AnalysisCase | null> {
     return this.prisma.analysisCase.findUnique({ where: { jobId } });
+  }
+
+  findOwned(id: string, ownerUserId: string): Promise<AnalysisCase | null> {
+    return this.prisma.analysisCase.findFirst({ where: { id, ownerUserId } });
+  }
+
+  findOwnedByJobId(
+    jobId: string,
+    ownerUserId: string,
+  ): Promise<AnalysisCase | null> {
+    return this.prisma.analysisCase.findFirst({
+      where: { jobId, ownerUserId },
+    });
+  }
+
+  listOwned(ownerUserId: string, limit = 50): Promise<AnalysisCase[]> {
+    return this.prisma.analysisCase.findMany({
+      where: { ownerUserId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
   }
 
   listRecent(limit = 50): Promise<AnalysisCase[]> {

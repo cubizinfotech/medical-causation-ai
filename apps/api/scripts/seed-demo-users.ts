@@ -1,6 +1,6 @@
 /**
- * Local demo accounts. Refuses to run when NODE_ENV=production.
- * Passwords are hashed before they are stored.
+ * Idempotent accounts. Passwords are hashed before they are stored.
+ * Refuses NODE_ENV=production unless ALLOW_DEMO_SEED=true.
  */
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
@@ -40,6 +40,16 @@ const DEMO_USERS: Array<{
     email: 'normal-user@example.com',
     displayName: 'Normal User',
     role: 'user',
+  },
+  {
+    email: 'gopalhingu123@gmail.com',
+    displayName: 'gopalhingu123@gmail.com',
+    role: 'attorney',
+  },
+  {
+    email: 'dcs@dorothyclaysims.com',
+    displayName: 'dcs@dorothyclaysims.com',
+    role: 'attorney',
   },
 ];
 

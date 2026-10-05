@@ -57,11 +57,15 @@ describe('MedicalAnalysisJobService', () => {
   it('creates a case, stores a queued job, and dispatches the worker', async () => {
     const { service, store, history, queue } = createHarness();
 
-    const created = await service.enqueue(validDto);
+    const created = await service.enqueue(validDto, 'user-1');
 
     expect(created.caseId).toBe('case-1');
     expect(created.status).toBe('queued');
-    expect(history.createCase).toHaveBeenCalledWith(created.jobId, validDto);
+    expect(history.createCase).toHaveBeenCalledWith(
+      created.jobId,
+      validDto,
+      'user-1',
+    );
     expect(queue.add).toHaveBeenCalledTimes(1);
     const dispatched = queue.add.mock.calls[0] as unknown as [
       string,
@@ -98,7 +102,7 @@ describe('MedicalAnalysisJobService', () => {
     const { service, store, queue } = createHarness();
     queue.add.mockRejectedValueOnce(new Error('Redis connection refused'));
 
-    await expect(service.enqueue(validDto)).rejects.toThrow(
+    await expect(service.enqueue(validDto, 'user-1')).rejects.toThrow(
       'Redis connection refused',
     );
 
@@ -115,7 +119,7 @@ describe('MedicalAnalysisJobService', () => {
 
   it('moves a job from queued to running to completed', async () => {
     const { service } = createHarness();
-    const created = await service.enqueue(validDto);
+    const created = await service.enqueue(validDto, 'user-1');
 
     await service.markRunning(created.jobId);
     await expect(service.getJob(created.jobId)).resolves.toEqual(
@@ -132,7 +136,7 @@ describe('MedicalAnalysisJobService', () => {
 
   it('records a failed analysis without dropping the job', async () => {
     const { service } = createHarness();
-    const created = await service.enqueue(validDto);
+    const created = await service.enqueue(validDto, 'user-1');
 
     await service.markFailed(created.jobId, 'The model returned invalid JSON');
 

@@ -53,8 +53,9 @@ export class AnalysisHistoryService {
   async createCase(
     jobId: string,
     dto: AnalyzeMedicalCaseDto,
+    ownerUserId: string,
   ): Promise<AnalysisCase> {
-    return this.repository.create({ jobId, dto });
+    return this.repository.create({ jobId, dto, ownerUserId });
   }
 
   async syncFromJobRecord(record: MedicalAnalysisJobRecord): Promise<void> {
@@ -72,16 +73,19 @@ export class AnalysisHistoryService {
     });
   }
 
-  async listHistories(): Promise<AnalysisHistoryListItem[]> {
-    const rows = await this.repository.listRecent();
+  async listHistories(ownerUserId: string): Promise<AnalysisHistoryListItem[]> {
+    const rows = await this.repository.listOwned(ownerUserId);
     const reconciled = await Promise.all(
       rows.map((row) => this.reconcileRow(row)),
     );
     return reconciled.map((row) => this.toListItem(row));
   }
 
-  async getHistory(id: string): Promise<AnalysisHistoryDetail> {
-    const row = await this.repository.findById(id);
+  async getHistory(
+    id: string,
+    ownerUserId: string,
+  ): Promise<AnalysisHistoryDetail> {
+    const row = await this.repository.findOwned(id, ownerUserId);
     if (!row) {
       throw new NotFoundException(`Analysis history "${id}" not found`);
     }
@@ -89,8 +93,15 @@ export class AnalysisHistoryService {
     return this.toDetail(reconciled);
   }
 
-  async deleteHistory(id: string): Promise<void> {
-    const row = await this.repository.findById(id);
+  async assertJobOwner(jobId: string, ownerUserId: string): Promise<void> {
+    const row = await this.repository.findOwnedByJobId(jobId, ownerUserId);
+    if (!row) {
+      throw new NotFoundException(`Analysis job "${jobId}" not found`);
+    }
+  }
+
+  async deleteHistory(id: string, ownerUserId: string): Promise<void> {
+    const row = await this.repository.findOwned(id, ownerUserId);
     if (!row) {
       throw new NotFoundException(`Analysis history "${id}" not found`);
     }

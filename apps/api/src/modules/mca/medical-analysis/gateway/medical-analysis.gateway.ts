@@ -12,7 +12,9 @@ import { ConfigService } from '@nestjs/config';
 import type { Server, Socket } from 'socket.io';
 import type { AppSettings } from '@config/config.types';
 import { AuthService } from '@platform/auth/auth.service';
+import type { AuthUserRef } from '@platform/auth/auth.types';
 import type { MedicalAnalysisJobRecord } from '../jobs/medical-analysis-job.types';
+import { AnalysisCaseRepository } from '../repositories/analysis-case.repository';
 
 export type MedicalAnalysisJobUpdate = Pick<
   MedicalAnalysisJobRecord,
@@ -46,6 +48,7 @@ export class MedicalAnalysisGateway
   constructor(
     private readonly configService: ConfigService,
     private readonly auth: AuthService,
+    private readonly cases: AnalysisCaseRepository,
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -65,15 +68,24 @@ export class MedicalAnalysisGateway
   }
 
   @SubscribeMessage('subscribe')
-  handleSubscribe(
+  async handleSubscribe(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { jobId?: string } | string,
-  ): void {
+  ): Promise<void> {
     const jobId =
       typeof payload === 'string' ? payload : payload?.jobId?.trim();
 
     if (!jobId) {
       client.emit('job:error', { message: 'jobId is required to subscribe' });
+      return;
+    }
+
+    const user = (client.data as { user?: AuthUserRef }).user;
+    const owned = user
+      ? await this.cases.findOwnedByJobId(jobId, user.id)
+      : null;
+    if (!owned) {
+      client.emit('job:error', { message: 'Analysis not found' });
       return;
     }
 

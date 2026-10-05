@@ -132,9 +132,11 @@ model AnalysisCase {
   createdAt           DateTime           @default(now()) @map("created_at")
   updatedAt           DateTime           @updatedAt @map("updated_at")
   completedAt         DateTime?          @map("completed_at")
+  ownerUserId         String?            @map("owner_user_id") @db.Uuid
 
   @@index([status])
   @@index([createdAt(sort: Desc)])
+  @@index([ownerUserId, createdAt(sort: Desc)])
   @@map("analysis_cases")
   @@schema("cases")
 }
@@ -262,6 +264,7 @@ model Investigation {
   cancelledAt   DateTime?           @map("cancelled_at")
   createdAt     DateTime            @default(now()) @map("created_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
+  ownerUserId   String?             @map("owner_user_id") @db.Uuid
 
   expert        Expert              @relation(fields: [expertId], references: [id])
   profile       ExpertProfile?
@@ -277,6 +280,7 @@ model Investigation {
   @@index([status])
   @@index([expertId])
   @@index([createdAt(sort: Desc)])
+  @@index([ownerUserId, createdAt(sort: Desc)])
   @@map("investigations")
   @@schema("ewi")
 }
