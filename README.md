@@ -16,6 +16,8 @@ Both products share one website, one API, PostgreSQL, and Redis. Their screens a
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Production on the droplet: PM2 for the website and API, Docker for PostgreSQL and Redis |
 | [docs/digitalocean.md](./docs/digitalocean.md) | Short command list for that server |
 | [docs/how-it-works.md](./docs/how-it-works.md) | Purpose and the two user flows |
+| [docs/mca-workflow.md](./docs/mca-workflow.md) | MCA step by step: button click, queue, search, AI, report |
+| [docs/ewi-workflow.md](./docs/ewi-workflow.md) | EWI step by step: button click, stages, Word report download |
 | [docs/index.html](./docs/index.html) | The same overview in a browser |
 | [TODO.md](./TODO.md) | What is done and what is still pending |
 

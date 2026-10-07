@@ -10,6 +10,8 @@ export interface AuthUserRef {
   displayName: string;
   roles: PlatformRole[];
   tenantId?: string;
+  /** Lets the web header show the photo without another request. */
+  avatarUpdatedAt?: string | null;
 }
 
 export interface AccessTokenPayload {

@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FieldErrors } from "react-hook-form";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import {
   Car,
+  Check,
   FileText,
   Loader2,
   HelpCircle,
@@ -17,12 +18,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select } from "@/components/ui/select";
+import { ListboxSelect } from "@/components/ui/listbox-select";
+import { DatePicker, parseIsoDate } from "@/components/ui/date-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { DateInput } from "@/components/mca/demo/date-input";
 import { FormField } from "@/components/mca/demo/form-field";
 import { FileUploader } from "@/components/mca/demo/file-uploader";
+import { cn } from "@/utils/cn";
 import {
   ACCIDENT_TYPE_OPTIONS,
   GENDER_OPTIONS,
@@ -61,8 +63,9 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="overflow-hidden border-border/80 shadow-sm">
-      <CardHeader className="border-b border-border/60 bg-muted/30 pb-4">
+    // No overflow-hidden: select and calendar popovers must extend past the card.
+    <Card className="border-border/80 shadow-sm">
+      <CardHeader className="rounded-t-xl border-b border-border/60 bg-muted/30 pb-4">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Icon className="h-5 w-5" />
@@ -91,6 +94,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     watch,
@@ -101,6 +105,13 @@ export function CaseForm({ initialValues }: CaseFormProps) {
   });
   const [draftReady, setDraftReady] = useState(false);
   const hydratedRef = useRef(false);
+
+  const fieldA11y = (name: keyof CaseFormValues) => ({
+    "aria-invalid": Boolean(errors[name]),
+    "aria-describedby": errors[name] ? `${name}-error` : undefined,
+  });
+
+  const accidentDate = parseIsoDate(watch("accidentDate") ?? "");
 
   useEffect(() => {
     if (hydratedRef.current) return;
@@ -207,7 +218,20 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             required
             error={errors.patientAge?.message}
           >
-            <Input id="patientAge" placeholder="52" {...register("patientAge")} />
+            <div className="relative">
+              <Input
+                id="patientAge"
+                inputMode="numeric"
+                maxLength={3}
+                placeholder="52"
+                className="pr-16"
+                {...fieldA11y("patientAge")}
+                {...register("patientAge")}
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                years
+              </span>
+            </div>
           </FormField>
           <FormField
             id="patientGender"
@@ -215,16 +239,22 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             required
             error={errors.patientGender?.message}
           >
-            <Select id="patientGender" {...register("patientGender")}>
-              <option value="" disabled>
-                Select gender
-              </option>
-              {GENDER_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
+            <Controller
+              control={control}
+              name="patientGender"
+              render={({ field }) => (
+                <ListboxSelect
+                  ref={field.ref}
+                  id="patientGender"
+                  placeholder="Select gender"
+                  options={GENDER_OPTIONS}
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  onBlur={field.onBlur}
+                  {...fieldA11y("patientGender")}
+                />
+              )}
+            />
           </FormField>
         </div>
       </FormSection>
@@ -239,10 +269,34 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             id="accidentDate"
             label="Accident Date"
             required
-            hint="Enter as YYYY-MM-DD"
+            hint={
+              accidentDate
+                ? accidentDate.toLocaleDateString("en-US", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })
+                : "Type YYYY-MM-DD or pick from the calendar."
+            }
             error={errors.accidentDate?.message}
           >
-            <DateInput id="accidentDate" {...register("accidentDate")} />
+            <Controller
+              control={control}
+              name="accidentDate"
+              render={({ field }) => (
+                <DatePicker
+                  ref={field.ref}
+                  id="accidentDate"
+                  name={field.name}
+                  disableFuture
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  onBlur={field.onBlur}
+                  {...fieldA11y("accidentDate")}
+                />
+              )}
+            />
           </FormField>
           <FormField
             id="accidentType"
@@ -250,16 +304,26 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             required
             error={errors.accidentType?.message}
           >
-            <Select id="accidentType" {...register("accidentType")}>
-              <option value="" disabled>
-                Select type
-              </option>
-              {ACCIDENT_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.label}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
+            <Controller
+              control={control}
+              name="accidentType"
+              render={({ field }) => (
+                <ListboxSelect
+                  ref={field.ref}
+                  id="accidentType"
+                  placeholder="Select type"
+                  // The API receives the label text, as before.
+                  options={ACCIDENT_TYPE_OPTIONS.map((opt) => ({
+                    value: opt.label,
+                    label: opt.label,
+                  }))}
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  onBlur={field.onBlur}
+                  {...fieldA11y("accidentType")}
+                />
+              )}
+            />
           </FormField>
         </div>
         <FormField
@@ -273,6 +337,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             id="accidentDescription"
             className="min-h-[140px]"
             placeholder="Describe how the accident occurred, mechanism of injury, and immediate aftermath..."
+            {...fieldA11y("accidentDescription")}
             {...register("accidentDescription")}
           />
         </FormField>
@@ -294,6 +359,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             id="diagnosis"
             className="min-h-[100px]"
             placeholder="e.g. Acute ischemic stroke; mild traumatic brain injury..."
+            {...fieldA11y("diagnosis")}
             {...register("diagnosis")}
           />
         </FormField>
@@ -307,6 +373,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             id="symptoms"
             className="min-h-[140px]"
             placeholder="Current and post-accident symptoms..."
+            {...fieldA11y("symptoms")}
             {...register("symptoms")}
           />
         </FormField>
@@ -357,6 +424,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
             id="medicalQuestion"
             className="min-h-[140px]"
             placeholder="e.g. Did the mild traumatic brain injury materially contribute to the subsequent ischemic stroke?"
+            {...fieldA11y("medicalQuestion")}
             {...register("medicalQuestion")}
           />
         </FormField>
@@ -388,24 +456,41 @@ export function CaseForm({ initialValues }: CaseFormProps) {
         </p>
       ) : null}
 
-      <Card className="border-amber-500/30 bg-amber-500/5">
-        <CardContent className="flex items-start gap-3 p-5">
+      <label
+        htmlFor="termsAccepted"
+        className={cn(
+          "flex cursor-pointer items-start gap-3 rounded-xl border p-5 shadow-sm transition-colors",
+          termsAccepted
+            ? "border-primary/40 bg-primary/5"
+            : "border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50",
+        )}
+      >
+        <span className="relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
           <input
             id="termsAccepted"
             type="checkbox"
             checked={termsAccepted}
             onChange={(e) => setTermsAccepted(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+            className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border-2 border-input bg-card transition-colors checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
-          <label htmlFor="termsAccepted" className="text-sm leading-relaxed">
-            {TERMS_ACKNOWLEDGMENT}{" "}
-            <a href="/terms" className="font-medium text-primary hover:underline">
-              Terms of Use
-            </a>
-            .
-          </label>
-        </CardContent>
-      </Card>
+          <Check
+            className="pointer-events-none absolute h-3.5 w-3.5 text-primary-foreground opacity-0 peer-checked:opacity-100"
+            strokeWidth={3}
+            aria-hidden
+          />
+        </span>
+        <span className="text-sm leading-relaxed text-foreground">
+          {TERMS_ACKNOWLEDGMENT}{" "}
+          <a
+            href="/terms"
+            className="font-medium text-primary hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Terms of Use
+          </a>
+          .
+        </span>
+      </label>
 
       <div aria-hidden className="h-8" />
       <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">

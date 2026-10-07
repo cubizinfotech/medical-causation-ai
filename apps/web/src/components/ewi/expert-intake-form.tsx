@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -36,6 +37,7 @@ export function ExpertIntakeForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -127,21 +129,26 @@ export function ExpertIntakeForm() {
 
           <div className="space-y-2">
             <Label htmlFor="specialty">Medical Specialty</Label>
-            <Input
-              id="specialty"
-              placeholder="e.g. Neurology"
-              list="ewi-specialty-examples"
-              aria-invalid={Boolean(errors.specialty)}
-              aria-describedby={
-                errors.specialty ? "specialty-error" : undefined
-              }
-              {...register("specialty")}
+            <Controller
+              control={control}
+              name="specialty"
+              render={({ field }) => (
+                <Combobox
+                  ref={field.ref}
+                  id="specialty"
+                  name={field.name}
+                  placeholder="e.g. Neurology"
+                  options={EWI_SPECIALTY_EXAMPLES}
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  onBlur={field.onBlur}
+                  aria-invalid={Boolean(errors.specialty)}
+                  aria-describedby={
+                    errors.specialty ? "specialty-error" : undefined
+                  }
+                />
+              )}
             />
-            <datalist id="ewi-specialty-examples">
-              {EWI_SPECIALTY_EXAMPLES.map((item) => (
-                <option key={item} value={item} />
-              ))}
-            </datalist>
             {errors.specialty ? (
               <p
                 id="specialty-error"

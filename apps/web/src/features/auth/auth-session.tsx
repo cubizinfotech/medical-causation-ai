@@ -19,6 +19,7 @@ export interface AuthSessionUser {
   email: string;
   displayName: string;
   roles: string[];
+  avatarUpdatedAt?: string | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -140,6 +141,7 @@ const PRIVATE_PREFIXES = [
   "/analysis",
   "/histories",
   "/report",
+  "/profile",
 ];
 
 function isPrivatePath(pathname: string): boolean {

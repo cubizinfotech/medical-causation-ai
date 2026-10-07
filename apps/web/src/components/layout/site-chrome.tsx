@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { roleLabel, useAuth } from "@/features/auth/auth-session";
+import { useAuth } from "@/features/auth/auth-session";
+import { UserMenu } from "./user-menu";
 
 function appHref(path: "/mca" | "/ewi", signedIn: boolean): string {
   if (signedIn) return path;
@@ -13,10 +13,9 @@ function appHref(path: "/mca" | "/ewi", signedIn: boolean): string {
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const { user, logout, signingOut } = useAuth();
+  const { user } = useAuth();
   const isEwi = pathname?.startsWith("/ewi");
   const isMca = pathname?.startsWith("/mca");
-  const role = user?.roles[0];
   const signedIn = Boolean(user);
 
   return (
@@ -33,29 +32,6 @@ export function SiteHeader() {
               : "Legal Research AI"}
         </Link>
         <nav className="flex flex-wrap items-center justify-end gap-2">
-          {user ? (
-            <span className="hidden max-w-[14rem] truncate text-sm text-muted-foreground md:inline">
-              {user.email}
-              {role ? ` · ${roleLabel(role)}` : ""}
-            </span>
-          ) : null}
-          {signedIn ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={logout}
-              disabled={signingOut}
-            >
-              {signingOut ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : null}
-              {signingOut ? "Signing out…" : "Sign out"}
-            </Button>
-          ) : (
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/login">Sign in</Link>
-            </Button>
-          )}
           <div className="flex items-center rounded-lg border border-border p-0.5">
             <Button
               asChild
@@ -92,6 +68,15 @@ export function SiteHeader() {
               </Button>
             </>
           ) : null}
+          {user ? (
+            <div className="ml-2 flex items-center border-l border-border pl-4">
+              <UserMenu user={user} />
+            </div>
+          ) : (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/login">Sign in</Link>
+            </Button>
+          )}
         </nav>
       </div>
     </header>

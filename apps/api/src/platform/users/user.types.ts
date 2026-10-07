@@ -26,6 +26,22 @@ export interface PlatformUser {
   /** Product-scoped permission claims, e.g. mca:*, ewi:* */
   permissions: string[];
   tenantId?: string;
+  jobTitle: string | null;
+  organization: string | null;
+  phone: string | null;
+  location: string | null;
+  bio: string | null;
+  /** ISO time of the last photo change, or null when there is no photo. */
+  avatarUpdatedAt: string | null;
+}
+
+export interface ProfileDetailsInput {
+  displayName?: string;
+  jobTitle?: string | null;
+  organization?: string | null;
+  phone?: string | null;
+  location?: string | null;
+  bio?: string | null;
 }
 
 export interface IUserService {

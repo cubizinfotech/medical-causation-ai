@@ -72,6 +72,20 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+/*
+ * Chrome paints autofilled fields light blue. Delay that background change
+ * indefinitely so autofilled inputs keep the card color. A box-shadow fill
+ * would also work but would hide the Tailwind focus ring (also a box-shadow).
+ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--foreground);
+  caret-color: var(--foreground);
+  transition: background-color 600000s 0s, color 600000s 0s;
+}
+
 @keyframes pulse-soft {
   0%,
   100% {

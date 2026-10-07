@@ -548,6 +548,17 @@ model User {
   updatedAt    DateTime   @updatedAt @map("updated_at")
   roles        UserRole[]
 
+  /// Self-service profile details. All optional.
+  jobTitle        String?   @map("job_title")
+  organization    String?
+  phone           String?
+  location        String?
+  bio             String?
+  /// Small square photo (resized in the browser). Omitted from normal user queries.
+  avatarData      Bytes?    @map("avatar_data")
+  avatarMimeType  String?   @map("avatar_mime_type")
+  avatarUpdatedAt DateTime? @map("avatar_updated_at")
+
   @@map("users")
   @@schema("platform")
 }

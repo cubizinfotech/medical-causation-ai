@@ -107,6 +107,7 @@ function toRef(user: PlatformUser): AuthUserRef {
     email: user.email,
     displayName: user.displayName,
     roles: user.roles,
+    avatarUpdatedAt: user.avatarUpdatedAt,
   };
 }
 
