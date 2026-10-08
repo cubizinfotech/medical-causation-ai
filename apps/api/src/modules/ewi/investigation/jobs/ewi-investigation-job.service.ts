@@ -98,6 +98,7 @@ export class EwiInvestigationJobService
           expertName: dto.expertName.trim(),
           city: dto.city.trim(),
           specialty: dto.specialty.trim(),
+          ...(dto.npi ? { npi: dto.npi } : {}),
         },
       },
       {

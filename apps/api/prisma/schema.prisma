@@ -133,11 +133,52 @@ model AnalysisCase {
   updatedAt           DateTime           @updatedAt @map("updated_at")
   completedAt         DateTime?          @map("completed_at")
   ownerUserId         String?            @map("owner_user_id") @db.Uuid
+  records             CaseRecord[]
 
   @@index([status])
   @@index([createdAt(sort: Desc)])
   @@index([ownerUserId, createdAt(sort: Desc)])
   @@map("analysis_cases")
+  @@schema("cases")
+}
+
+/// A client medical record (PDF) uploaded for an MCA case. Staged (caseId
+/// null) until an analysis is started; staged uploads expire after a day.
+model CaseRecord {
+  id              String           @id @default(uuid()) @db.Uuid
+  ownerUserId     String           @map("owner_user_id") @db.Uuid
+  caseId          String?          @map("case_id") @db.Uuid
+  originalName    String           @map("original_name")
+  mimeType        String           @map("mime_type")
+  byteSize        Int              @map("byte_size")
+  sha256          String
+  /// Path relative to the case-records storage root. Never the original name.
+  storageKey      String           @map("storage_key")
+  pageCount       Int              @map("page_count")
+  /// Pages without a text layer (scanned or blank); not read until OCR exists.
+  unreadablePages Int[]            @map("unreadable_pages")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  case  AnalysisCase?    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  pages CaseRecordPage[]
+
+  @@index([ownerUserId, createdAt(sort: Desc)])
+  @@index([caseId])
+  @@map("case_records")
+  @@schema("cases")
+}
+
+/// Extracted text of one PDF page, used to build and verify the chronology.
+model CaseRecordPage {
+  recordId     String   @map("record_id") @db.Uuid
+  pageNumber   Int      @map("page_number")
+  text         String
+  batesNumbers String[] @map("bates_numbers")
+
+  record CaseRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@id([recordId, pageNumber])
+  @@map("case_record_pages")
   @@schema("cases")
 }
 
@@ -259,6 +300,8 @@ model Investigation {
   message       String?
   errorMessage  String?             @map("error_message")
   notes         String?
+  /// Optional NPI supplied by the attorney to confirm the expert.
+  npi           String?             @db.VarChar(10)
   startedAt     DateTime?           @map("started_at")
   completedAt   DateTime?           @map("completed_at")
   cancelledAt   DateTime?           @map("cancelled_at")

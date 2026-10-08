@@ -135,6 +135,7 @@ export class EwiInvestigationController {
         expertName: body.expertName.trim(),
         city: body.city.trim(),
         specialty: body.specialty.trim(),
+        ...(body.npi ? { npi: body.npi } : {}),
       });
       return outcome.result;
     } catch (error) {

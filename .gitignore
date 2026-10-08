@@ -65,3 +65,6 @@ knowledge-base/**/*.zip
 knowledge-base/uploads/*
 knowledge-base/ewi/reports/investigations/
 !knowledge-base/**/README.md
+
+# Client medical records uploaded for MCA cases (patient data)
+/data/

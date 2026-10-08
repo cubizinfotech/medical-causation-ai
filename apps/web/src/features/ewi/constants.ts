@@ -1,6 +1,9 @@
 export const EWI_PROGRESS_STEPS = [
   { id: "identify-expert", label: "Identify Expert" },
-  { id: "profiles", label: "Find CV and professional profiles" },
+  {
+    id: "profiles",
+    label: "Confirm identity (NPI) and find professional profiles",
+  },
   { id: "education", label: "Verify education and degrees" },
   { id: "licenses", label: "Verify medical licenses" },
   { id: "boards", label: "Verify board certifications" },

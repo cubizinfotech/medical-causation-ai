@@ -23,7 +23,7 @@ import { DatePicker, parseIsoDate } from "@/components/ui/date-picker";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FormField } from "@/components/mca/demo/form-field";
-import { FileUploader } from "@/components/mca/demo/file-uploader";
+import { MedicalRecordsUploader } from "@/components/mca/demo/medical-records-uploader";
 import { cn } from "@/utils/cn";
 import {
   ACCIDENT_TYPE_OPTIONS,
@@ -38,11 +38,15 @@ import {
   caseFormSchema,
   type CaseFormValues,
 } from "@/features/mca/demo/schemas/case-form.schema";
-import { TERMS_ACKNOWLEDGMENT } from "@/features/mca/medical-analysis/types";
+import {
+  TERMS_ACKNOWLEDGMENT,
+  type CaseRecordSummary,
+} from "@/features/mca/medical-analysis/types";
 import {
   loadCaseForm,
   saveCaseForm,
-  saveUploadedFileNames,
+  saveCaseRecords,
+  loadCaseRecords,
   clearAnalysisResult,
   clearActiveAnalysis,
 } from "@/features/mca/demo/storage/case-storage";
@@ -83,7 +87,10 @@ function FormSection({
 
 export function CaseForm({ initialValues }: CaseFormProps) {
   const router = useRouter();
-  const [files, setFiles] = useState<File[]>([]);
+  // Uploaded records survive a refresh; the ids stay valid for about a day.
+  const [records, setRecords] = useState<CaseRecordSummary[]>(() =>
+    loadCaseRecords(),
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [exampleIndex, setExampleIndex] = useState(0);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -124,6 +131,17 @@ export function CaseForm({ initialValues }: CaseFormProps) {
   }, [initialValues, reset]);
 
   useEffect(() => {
+    if (draftReady) saveCaseRecords(records);
+  }, [draftReady, records]);
+
+  const addRecord = (record: CaseRecordSummary) =>
+    setRecords((current) =>
+      current.some((r) => r.id === record.id) ? current : [...current, record],
+    );
+  const removeRecord = (id: string) =>
+    setRecords((current) => current.filter((r) => r.id !== id));
+
+  useEffect(() => {
     if (!draftReady) return;
     const subscription = watch((values) => {
       saveCaseForm(values);
@@ -155,12 +173,19 @@ export function CaseForm({ initialValues }: CaseFormProps) {
       setSubmitError("Accept the terms of use before running analysis.");
       return;
     }
+    const recordPages = records.reduce((sum, r) => sum + r.pageCount, 0);
+    if (recordPages > 200) {
+      setSubmitError(
+        `The medical records have ${recordPages} pages. Remove some to stay within 200 pages.`,
+      );
+      return;
+    }
     setSubmitError(null);
     try {
       clearAnalysisResult();
       clearActiveAnalysis();
       saveCaseForm(values);
-      saveUploadedFileNames(files.map((f) => f.name));
+      saveCaseRecords(records);
       router.push("/mca/analysis");
     } catch {
       setSubmitError("Unable to save case data. Please try again.");
@@ -437,16 +462,20 @@ export function CaseForm({ initialValues }: CaseFormProps) {
               <FileText className="h-5 w-5" />
             </div>
             <div>
-              <CardTitle className="text-lg">Supporting Documents</CardTitle>
+              <CardTitle className="text-lg">Medical Records</CardTitle>
               <CardDescription className="mt-1">
-                Optional uploads for demonstration — files are not sent to the
-                API in this phase.
+                Optional. Upload the client&apos;s records to build a dated
+                chronology cited to the page, which the analysis can cite.
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-6">
-          <FileUploader files={files} onChange={setFiles} />
+          <MedicalRecordsUploader
+            records={records}
+            onAdd={addRecord}
+            onRemove={removeRecord}
+          />
         </CardContent>
       </Card>
 

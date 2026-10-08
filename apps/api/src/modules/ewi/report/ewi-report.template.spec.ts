@@ -10,7 +10,7 @@ import { DocxReportRenderer } from '@platform/report/docx-report.renderer';
 describe('EWI report template', () => {
   const renderer = new DocxReportRenderer();
 
-  it('includes the full 40-section outline with metadata, TOC, version, and disclaimer', () => {
+  it('includes the full 41-section outline with metadata, TOC, version, and disclaimer', () => {
     const document = buildEwiReportDocument({
       expertName: 'Jane Doe',
       city: 'Boston',
@@ -21,7 +21,7 @@ describe('EWI report template', () => {
       generatedAt: '2026-09-23T00:00:00.000Z',
     });
 
-    expect(document.sections).toHaveLength(40);
+    expect(document.sections).toHaveLength(41);
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );

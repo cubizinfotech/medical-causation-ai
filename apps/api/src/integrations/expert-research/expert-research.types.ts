@@ -4,6 +4,7 @@
  */
 
 export type ExpertResearchProviderId =
+  | 'npi_registry'
   | 'web_search'
   | 'cv_profile'
   | 'education_verification'
@@ -112,6 +113,45 @@ export interface ExpertResearchQuery {
   expertName: string;
   city: string;
   specialty: string;
+  /** National Provider Identifier supplied by the attorney (10 digits). */
+  npi?: string;
+}
+
+/**
+ * How the expert was identified in the NPI Registry.
+ * confirmed — one NPI record fits (or the supplied NPI fits the name).
+ * ambiguous — several records could fit, or one fits only partly.
+ * not_found — no record fits. That is not evidence the expert is unlicensed.
+ * npi_mismatch — the supplied NPI belongs to someone else.
+ * unavailable — the registry could not be checked.
+ */
+export type IdentityResolutionStatus =
+  'confirmed' | 'ambiguous' | 'not_found' | 'npi_mismatch' | 'unavailable';
+
+export interface ExpertIdentityCandidate {
+  npi: string;
+  name: string;
+  credential: string | null;
+  taxonomy: string | null;
+  city: string | null;
+  state: string | null;
+  url: string;
+}
+
+export interface ExpertIdentityResolution {
+  status: IdentityResolutionStatus;
+  /** The confirmed record. Null unless status is confirmed. */
+  identity: ExpertIdentityCandidate | null;
+  /** What agreed, e.g. "NPI supplied", "name", "practice city", "specialty". */
+  basis: string[];
+  /** Plain-language explanation for the attorney. */
+  note: string;
+  /** Differences worth checking, e.g. a practice city that differs. */
+  notes: string[];
+  /** Possible records when the identity was not confirmed. */
+  candidates: ExpertIdentityCandidate[];
+  /** True for development fixtures. */
+  simulated?: boolean;
 }
 
 export interface SourceMetadata {
@@ -145,6 +185,8 @@ export interface ExpertResearchSourceResult {
   message?: string;
   retrievedAt: string;
   items: ExpertEvidenceItem[];
+  /** Set by the NPI Registry source. */
+  identity?: ExpertIdentityResolution;
 }
 
 export interface ProviderDefinition {
@@ -156,8 +198,8 @@ export interface ProviderDefinition {
   requirement: ProviderRequirement;
   /** Env var for a future credential. Empty means no key is required. */
   credentialEnv?: string;
-  /** Live HTTP is intentionally not connected. */
-  liveImplemented: false;
+  /** True when RESEARCH_PROVIDER=live calls the real source. */
+  liveImplemented: boolean;
   summary: string;
 }
 

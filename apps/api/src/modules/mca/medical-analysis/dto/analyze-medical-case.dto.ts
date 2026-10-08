@@ -1,7 +1,10 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -63,4 +66,11 @@ export class AnalyzeMedicalCaseDto {
   @MinLength(10)
   @MaxLength(2000)
   medicalQuestion!: string;
+
+  /** Uploaded medical records (POST /medical-analysis/records) to read. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID('all', { each: true })
+  recordIds?: string[];
 }

@@ -18,6 +18,33 @@ export interface PublicReference {
   url: string;
   year?: number;
   excerpt?: string;
+  /** Present on real literature results; absent on older demo reports. */
+  pmid?: string;
+  doi?: string;
+  pmcid?: string;
+  /** e.g. "Smith J, Lee K, Park S, et al." */
+  authors?: string;
+  journal?: string;
+  /** Study design label, e.g. "Meta-analysis". */
+  publicationType?: string;
+  /** Free full text (PubMed Central). */
+  fullTextUrl?: string;
+}
+
+export type LiteratureSearchStatus =
+  'completed' | 'no_results' | 'unavailable' | 'disabled';
+
+/** How the public literature search ran for one analysis. */
+export interface LiteratureSearchSummary {
+  status: LiteratureSearchStatus;
+  provider: 'PubMed';
+  /** Exact queries sent to PubMed, so an attorney can re-run them. */
+  queries: string[];
+  /** ai = written by the AI provider; keywords = built from the diagnosis. */
+  queryMethod: 'ai' | 'keywords';
+  abstractsAvailable: boolean;
+  searchedAt: string;
+  message?: string;
 }
 
 export interface PrivateReference {
@@ -61,7 +88,9 @@ export interface ResearchSourcesSummary {
   public: Array<{
     name: string;
     description: string;
-    status: 'simulated' | 'live';
+    /** simulated appears only on reports saved before the live search. */
+    status: 'live' | 'unavailable' | 'disabled' | 'simulated';
+    count?: number;
   }>;
 }
 
@@ -77,6 +106,8 @@ export interface MedicalAnalysisRequest {
   medicalHistory?: string;
   accidentDate?: string;
   preExistingConditions?: string;
+  /** Uploaded medical records attached to this case. */
+  recordIds?: string[];
   filters?: RetrievalFilters;
   topK?: number;
 }
@@ -89,6 +120,70 @@ export interface AnalysisCitation {
   similarityScore: number;
   citationText: string;
   sourceFile: string;
+  /** Absent on older reports, which only cited the knowledge base. */
+  sourceKind?: 'knowledge_base' | 'medical_record';
+  /** Set for medical_record citations: the uploaded record to open. */
+  recordId?: string;
+}
+
+export type ChronologyEventType =
+  | 'emergency'
+  | 'office_visit'
+  | 'hospital_admission'
+  | 'imaging'
+  | 'lab'
+  | 'procedure'
+  | 'surgery'
+  | 'therapy'
+  | 'medication'
+  | 'other';
+
+export interface ChronologyDiagnosis {
+  description: string;
+  /** Only kept when the code is printed on the cited page. */
+  icd10?: string;
+}
+
+/** One dated medical event, cited to a page of an uploaded record. */
+export interface ChronologyEvent {
+  /** Citation id, e.g. "rec-3"; the analysis cites events by this id. */
+  id: string;
+  /** YYYY-MM-DD, YYYY-MM or YYYY; empty when the record gives no date. */
+  date: string;
+  type: ChronologyEventType;
+  provider?: string;
+  facility?: string;
+  summary: string;
+  diagnoses: ChronologyDiagnosis[];
+  treatments: string[];
+  medications: string[];
+  recordId: string;
+  documentName: string;
+  pageNumber: number;
+  batesNumbers: string[];
+  /** Short passage from the page that supports the event. */
+  quote: string;
+  /** False when the quote could not be found on the cited page. */
+  quoteVerified: boolean;
+  citedInAnalysis?: boolean;
+}
+
+export interface ChronologyDocument {
+  recordId: string;
+  documentName: string;
+  pageCount: number;
+  /** Scanned or blank pages that were not read (OCR is not available yet). */
+  unreadablePages: number[];
+}
+
+export interface MedicalChronology {
+  /** partial: some pages could not be processed; see warnings. */
+  status: 'completed' | 'partial' | 'failed';
+  documents: ChronologyDocument[];
+  events: ChronologyEvent[];
+  pagesProcessed: number;
+  warnings: string[];
+  generatedAt: string;
 }
 
 export interface RetrievedEvidenceItem {
@@ -153,6 +248,8 @@ export interface MedicalAnalysisLlmOutput {
     chunkId: string;
     statement: string;
   }>;
+  /** Suggested PubMed search; validated before use, may be absent. */
+  literatureSearch?: unknown;
 }
 
 export interface BaseMedicalAnalysisResult {
@@ -183,6 +280,10 @@ export interface MedicalAnalysisResult extends BaseMedicalAnalysisResult {
   timelineEvents: TimelineEvent[];
   riskFactors: RiskFactor[];
   publicReferences: PublicReference[];
+  /** Absent on reports saved before the live literature search. */
+  literatureSearch?: LiteratureSearchSummary;
+  /** Present when medical records were uploaded with the case. */
+  chronology?: MedicalChronology;
   privateReferences: PrivateReference[];
   crossExamination: CrossExamCategory[];
   researchSources: ResearchSourcesSummary;

@@ -2,6 +2,7 @@ import type { ExpertEvidenceItem } from '@integrations/expert-research';
 import type { ExpertResearchSourceResult } from '@integrations/expert-research';
 import { normalizeLegalMatters } from './legal-matter-normalizer';
 import type {
+  ChallengeRecord,
   ChronologicalFiling,
   DepositionRecord,
   LegalMatter,
@@ -56,11 +57,42 @@ export function buildLegalResearchDossier(input: {
     motionsAndPleadings,
     depositions,
     testimonyContradictions,
+    challenges: challengeRecords(matters),
     sourceAttempts: sourceAttemptsFor(
       input.sourceResults ?? [],
       input.legalProviderIds,
     ),
   };
+}
+
+const OUTCOME_RANK: Record<ChallengeRecord['challenge']['outcome'], number> = {
+  excluded: 0,
+  limited: 1,
+  admitted: 2,
+  not_determined: 3,
+  not_challenged: 4,
+};
+
+export function challengeRecords(matters: LegalMatter[]): ChallengeRecord[] {
+  return matters
+    .filter(
+      (
+        matter,
+      ): matter is LegalMatter & {
+        challenge: NonNullable<LegalMatter['challenge']>;
+      } => matter.challenge !== null,
+    )
+    .map((matter) => ({
+      matter,
+      challenge: matter.challenge,
+      sortDate: matter.documentDate ?? matter.filingDate,
+    }))
+    .sort(
+      (left, right) =>
+        OUTCOME_RANK[left.challenge.outcome] -
+          OUTCOME_RANK[right.challenge.outcome] ||
+        compareDatesAsc(right.sortDate, left.sortDate),
+    );
 }
 
 export function prioritizeOrders(orders: LegalMatter[]): PrioritizedOrder[] {

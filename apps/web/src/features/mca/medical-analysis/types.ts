@@ -25,6 +25,69 @@ export interface AnalysisCitation {
   similarityScore: number;
   citationText: string;
   sourceFile: string;
+  /** Absent on older reports, which only cited the knowledge base. */
+  sourceKind?: "knowledge_base" | "medical_record";
+  /** Set for medical_record citations: the uploaded record to open. */
+  recordId?: string;
+}
+
+export type ChronologyEventType =
+  | "emergency"
+  | "office_visit"
+  | "hospital_admission"
+  | "imaging"
+  | "lab"
+  | "procedure"
+  | "surgery"
+  | "therapy"
+  | "medication"
+  | "other";
+
+export interface ChronologyEvent {
+  /** Citation id, e.g. "rec-3". */
+  id: string;
+  /** YYYY-MM-DD, YYYY-MM or YYYY; empty when the record gives no date. */
+  date: string;
+  type: ChronologyEventType;
+  provider?: string;
+  facility?: string;
+  summary: string;
+  diagnoses: Array<{ description: string; icd10?: string }>;
+  treatments: string[];
+  medications: string[];
+  recordId: string;
+  documentName: string;
+  pageNumber: number;
+  batesNumbers: string[];
+  quote: string;
+  /** False when the quote could not be found on the cited page. */
+  quoteVerified: boolean;
+  citedInAnalysis?: boolean;
+}
+
+export interface MedicalChronology {
+  status: "completed" | "partial" | "failed";
+  documents: Array<{
+    recordId: string;
+    documentName: string;
+    pageCount: number;
+    unreadablePages: number[];
+  }>;
+  events: ChronologyEvent[];
+  pagesProcessed: number;
+  warnings: string[];
+  generatedAt: string;
+}
+
+/** An uploaded record, as the upload endpoint returns it. */
+export interface CaseRecordSummary {
+  id: string;
+  name: string;
+  sizeBytes: number;
+  pageCount: number;
+  readablePages: number;
+  unreadablePages: number[];
+  createdAt: string;
 }
 
 export interface PublicReference {
@@ -34,6 +97,26 @@ export interface PublicReference {
   url: string;
   year?: number;
   excerpt?: string;
+  /** Present on real PubMed results; absent on older demo reports. */
+  pmid?: string;
+  doi?: string;
+  pmcid?: string;
+  authors?: string;
+  journal?: string;
+  /** Study design, e.g. "Meta-analysis". */
+  publicationType?: string;
+  /** Free full text (PubMed Central). */
+  fullTextUrl?: string;
+}
+
+export interface LiteratureSearchSummary {
+  status: "completed" | "no_results" | "unavailable" | "disabled";
+  provider: "PubMed";
+  queries: string[];
+  queryMethod: "ai" | "keywords";
+  abstractsAvailable: boolean;
+  searchedAt: string;
+  message?: string;
 }
 
 export interface PrivateReference {
@@ -76,7 +159,9 @@ export interface ResearchSourcesSummary {
   public: Array<{
     name: string;
     description: string;
-    status: "simulated" | "live";
+    /** simulated appears only on reports saved before the live search. */
+    status: "live" | "unavailable" | "disabled" | "simulated";
+    count?: number;
   }>;
 }
 
@@ -122,6 +207,10 @@ export interface MedicalAnalysisResult {
   timelineEvents: TimelineEvent[];
   riskFactors: RiskFactor[];
   publicReferences: PublicReference[];
+  /** Absent on reports saved before the live literature search. */
+  literatureSearch?: LiteratureSearchSummary;
+  /** Present when medical records were uploaded with the case. */
+  chronology?: MedicalChronology;
   privateReferences: PrivateReference[];
   crossExamination: CrossExamCategory[];
   researchSources: ResearchSourcesSummary;
@@ -151,6 +240,8 @@ export type AnalyzeCaseRequest = {
   medications?: string;
   timeline?: string;
   medicalQuestion: string;
+  /** Uploaded medical records to read into the chronology. */
+  recordIds?: string[];
 };
 
 export const TERMS_ACKNOWLEDGMENT =

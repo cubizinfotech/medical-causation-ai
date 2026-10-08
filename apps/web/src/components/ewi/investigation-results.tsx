@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
+import { AdmissibilityChallenges } from "@/components/ewi/admissibility-challenges";
+import { ExpertIdentityCard } from "@/components/ewi/expert-identity-card";
 import {
   Tabs,
   TabsContent,
@@ -34,6 +36,10 @@ const PUBLICATION_CATEGORIES = new Set([
 ]);
 
 const SOURCE_LABELS: Record<string, string> = {
+  npi_registry: "NPI Registry",
+  open_payments: "CMS Open Payments",
+  openalex: "OpenAlex",
+  courtlistener: "CourtListener",
   criminal_records: "Criminal background",
   constitutional_sheriff: "Constitutional Sheriff movement",
   post_records: "Peace Officer Standards and Training",
@@ -128,6 +134,14 @@ function sourceStatusLabel(source: EwiSourceStatus): string {
   return "Checked";
 }
 
+/** The Open Payments totals record, shown ahead of the per-company records. */
+function isOpenPaymentsTotals(record: EwiProfessionalRecord): boolean {
+  return (
+    record.kind === "open_payments" &&
+    record.title.startsWith("CMS Open Payments ")
+  );
+}
+
 function filterEvidence(
   evidence: EwiEvidenceItem[],
   categories: Set<string>,
@@ -137,7 +151,20 @@ function filterEvidence(
   );
 }
 
-export function InvestigationResults({
+export function InvestigationResults(props: {
+  summary: string | null;
+  result: EwiInvestigationResult | null;
+  reportSlot?: ReactNode;
+}) {
+  return (
+    <div className="space-y-4">
+      <ExpertIdentityCard identity={props.result?.identity} />
+      <InvestigationResultTabs {...props} />
+    </div>
+  );
+}
+
+function InvestigationResultTabs({
   summary,
   result,
   reportSlot,
@@ -163,6 +190,13 @@ export function InvestigationResults({
       source.attemptStatus === "unavailable" ||
       source.attemptStatus === "restricted" ||
       source.attemptStatus === "failed",
+  );
+
+  const challenges = legal?.challenges ?? [];
+  const financial = professional?.financial ?? [];
+  const paymentTotals = financial.find(isOpenPaymentsTotals);
+  const otherFinancial = financial.filter(
+    (record) => !isOpenPaymentsTotals(record),
   );
 
   return (
@@ -335,6 +369,15 @@ export function InvestigationResults({
             </EmptyCopy>
           ) : (
             <div className="space-y-6 text-sm">
+              {challenges.length > 0 ? (
+                <ExpandableGroup
+                  title="Daubert / Frye challenges"
+                  empty=""
+                  count={challenges.length}
+                >
+                  <AdmissibilityChallenges records={challenges} />
+                </ExpandableGroup>
+              ) : null}
               <ExpandableGroup
                 title="Orders"
                 empty="No orders were located."
@@ -506,16 +549,39 @@ export function InvestigationResults({
 
       <TabsContent value="income">
         <ResultPanel title="Income and bias indicators">
-          {!professional || professional.financial.length === 0 ? (
+          {financial.length === 0 ? (
             <EmptyCopy>
               No public financial or bias-related records were collected.
               Nothing was inferred.
             </EmptyCopy>
           ) : (
-            <ProfessionalGroup
-              title="Public financial information"
-              records={professional.financial}
-            />
+            <div className="space-y-4 text-sm">
+              {paymentTotals ? (
+                <div className="rounded-lg border border-border p-4">
+                  <p className="font-medium">{paymentTotals.title}</p>
+                  {paymentTotals.summary ? (
+                    <p className="mt-1 text-muted-foreground">
+                      {paymentTotals.summary}
+                    </p>
+                  ) : null}
+                  {paymentTotals.sourceUrl ? (
+                    <p className="mt-2">
+                      <ExternalLink href={paymentTotals.sourceUrl}>
+                        Open Payments profile
+                      </ExternalLink>
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              <ProfessionalGroup
+                title={
+                  paymentTotals
+                    ? "Payments by company"
+                    : "Public financial information"
+                }
+                records={otherFinancial}
+              />
+            </div>
           )}
           {professional &&
           (professional.corporateAffiliations.length > 0 ||

@@ -42,6 +42,21 @@ export function developmentFixtures(
 ): Partial<Record<ExpertResearchProviderId, DevelopmentFixture[]>> {
   const { expertName, specialty, city } = query;
   return {
+    npi_registry: [
+      {
+        category: 'identity',
+        title: `Development fixture: NPI Registry record for ${expertName}`,
+        summary: `${FIXTURE_NOTE} Sample NPI record. Primary taxonomy: ${specialty}. Practice location: ${city}.`,
+        url: 'https://npiregistry.cms.hhs.gov/provider-view/1234567893',
+        access: 'public',
+        informationStatus: 'unverified',
+        raw: matchedIdentity(query, {
+          npi: '1234567893',
+          primaryTaxonomy: specialty,
+          evidenceReference: 'NPI Registry record (fixture)',
+        }),
+      },
+    ],
     web_search: [
       {
         category: 'profile',

@@ -10,6 +10,7 @@ import type { MedicalAnalysisResult } from '../types';
 import type { MedicalAnalysisJobRecord } from '../jobs/medical-analysis-job.types';
 import { AnalysisCaseRepository } from '../repositories/analysis-case.repository';
 import { MedicalAnalysisJobService } from '../jobs/medical-analysis-job.service';
+import { CaseRecordsService } from '../records/case-records.service';
 
 export interface AnalysisHistoryListItem {
   id: string;
@@ -48,6 +49,7 @@ export class AnalysisHistoryService {
     private readonly repository: AnalysisCaseRepository,
     @Inject(forwardRef(() => MedicalAnalysisJobService))
     private readonly jobService: MedicalAnalysisJobService,
+    private readonly caseRecords: CaseRecordsService,
   ) {}
 
   async createCase(
@@ -107,6 +109,8 @@ export class AnalysisHistoryService {
     }
 
     await this.jobService.deleteJobRecord(row.jobId);
+    // Record files are patient data: remove them with the analysis.
+    await this.caseRecords.deleteFilesForCase(id);
     await this.repository.delete(id);
   }
 

@@ -6,9 +6,9 @@ For the product overview, see [how-it-works.md](./how-it-works.md). For the Expe
 
 ## The short version
 
-1. The attorney fills in the case form and clicks **Run AI Analysis**.
+1. The attorney fills in the case form, optionally uploads the client's medical records (PDF), and clicks **Run AI Analysis**.
 2. The website sends the case to the API. The API saves it, puts a job on a Redis queue, and replies immediately with a `jobId`.
-3. A background worker inside the API picks up the job. It searches the indexed medical books, gives the best passages to the AI model, and checks that every citation points to a real passage.
+3. A background worker inside the API picks up the job. It reads any uploaded records into a dated chronology cited to the page, searches the indexed medical books, gives the chronology and the best passages to the AI model, and checks that every citation points to a real passage or record entry.
 4. While the worker runs, it pushes progress to the browser over a WebSocket. The browser also polls every 4 seconds as a backup.
 5. When the job finishes, the full report is saved in PostgreSQL. The attorney clicks **View Report**, and the report page loads it from the database.
 
@@ -67,7 +67,18 @@ Indexing reads each PDF, splits the text into chunks, turns each chunk into a 76
 - The form is checked in the browser with a Zod schema ([case-form.schema.ts](../apps/web/src/features/mca/demo/schemas/case-form.schema.ts)).
 - On **Run AI Analysis**, `onSubmit` saves the form to `sessionStorage` (`saveCaseForm`) and navigates to `/mca/analysis`.
 
-No API call happens yet. The case travels between pages through `sessionStorage`.
+The case itself travels between pages through `sessionStorage`. The only API calls on this page are record uploads.
+
+#### Uploading medical records
+
+[medical-records-uploader.tsx](../apps/web/src/components/mca/demo/medical-records-uploader.tsx) uploads each PDF as soon as it is chosen (`POST /medical-analysis/records`, multipart). The API ([case-records.service.ts](../apps/api/src/modules/mca/medical-analysis/records/case-records.service.ts)):
+
+1. Checks the file is a real PDF by its first bytes, not its name, and within `UPLOAD_MAX_SIZE_MB` and `MCA_RECORDS_MAX_PAGES`.
+2. Reads the text of every page with the existing PDF parser. Pages with almost no text are **scanned or blank**. They are listed back to the attorney and skipped, because OCR is not available yet. A fully scanned or password-protected file is rejected with a clear message.
+3. Saves the file as `<CASE_RECORDS_PATH>/<userId>/<recordId>.pdf` (never under the uploaded name), and the page text and any Bates numbers in `cases.case_records` / `cases.case_record_pages`.
+4. Returns the record's id, page count, and unreadable pages. The form keeps the ids in `sessionStorage` and sends them as `recordIds` with the job.
+
+Until an analysis uses them, uploads are "staged": they can be removed (`DELETE /medical-analysis/records/:id`) and are deleted automatically after `MCA_RECORDS_STAGED_TTL_HOURS`. Uploading the same file twice returns the existing record.
 
 ### 2. The analysis page starts the job
 
@@ -101,8 +112,8 @@ Before the controller runs:
 
 Then `enqueue()`:
 
-1. Creates a `jobId` (UUID).
-2. Inserts a row in **`cases.analysis_cases`** owned by the logged-in user, with status `queued`. This row is the permanent record and the one the history pages read.
+1. Creates a `jobId` (UUID). If `recordIds` were sent, checks first that they all belong to this user, are not already used by another analysis, and stay within the file and page limits; otherwise nothing is created.
+2. Inserts a row in **`cases.analysis_cases`** owned by the logged-in user, with status `queued`, and attaches the records to it. This row is the permanent record and the one the history pages read.
 3. Writes a fast-changing **job record** to Redis at `analysis:job:{jobId}` (status, step, progress, message). It expires after `JOB_STATE_TTL_SECONDS` / `ANALYSIS_JOB_TTL_SECONDS`.
 4. Adds the job to the **BullMQ queue `medical-analysis`** in Redis. `attempts: 1` means a failed job is not retried automatically.
 5. Returns **HTTP 202** with `{ caseId, jobId, status: "queued" }`.
@@ -117,16 +128,43 @@ The worker is part of the same API process (concurrency 1, so one analysis at a 
 
 | Progress | Step (`step` id) | What happens |
 |---|---|---|
-| 12% | Intake (`intake`) | `MedicalQueryBuilder` turns the form into a retrieval request. |
-| 28% | Private knowledge base (`private-kb`) | `RetrievalService.retrieve()` searches the indexed books. See "How the search works" below. |
+| 10% | Intake (`intake`) | `MedicalQueryBuilder` turns the form into a retrieval request. |
+| 14% | Medical records (`records`) | Only when records are attached: their page text is loaded from `cases.case_record_pages`. |
+| 16–34% | Chronology (`chronology`) | `ChronologyExtractionService` sends the readable pages to the LLM in batches of about `CHRONOLOGY_BATCH_CHARS` characters and checks every event it returns. See "How the chronology is built" below. A failed batch is listed as a warning; it never fails the analysis. |
+| 38% | Private knowledge base (`private-kb`) | `RetrievalService.retrieve()` searches the indexed books. See "How the search works" below. |
 | | Safety check | `validateRetrievalHasContext()`. If no passages were found, the job **fails** here with an insufficient-evidence message. |
-| 45% | Evidence (`evidence`) | `AnalysisPromptBuilder` builds the system and user prompts from [causation-analysis.prompt.txt](../apps/api/src/ai/prompts/medical/causation-analysis.prompt.txt). Every passage gets a chunk ID, and the set of allowed IDs is remembered. |
-| 62% | Reasoning (`reasoning`) | The LLM (`AI_PROVIDER`, currently Mistral) is asked for a JSON answer at temperature 0.2. The answer is parsed and **every cited chunk ID is checked against the allowed set**. An empty answer, broken JSON, or an invented citation triggers a retry with a corrective instruction, up to 5 attempts in total. |
-| 82% | Summary (`summary`) | `responseMapper` turns the LLM output into the result shape. `ReportEnrichmentService` then adds the timeline, risk factors, private references with book and page, public references, and cross-examination questions. |
+| 45% | Evidence (`evidence`) | `AnalysisPromptBuilder` builds the system and user prompts from the files in [medical-analysis/prompts/](../apps/api/src/modules/mca/medical-analysis/prompts/) (system, analysis, evidence evaluation, JSON output). Every library passage gets a chunk ID and every chronology entry a `rec-N` ID, and the set of allowed IDs is remembered. |
+| 62% | Reasoning (`reasoning`) | The LLM (`AI_PROVIDER`, currently Mistral) is asked for a JSON answer at temperature 0.2. The answer is parsed and **every cited chunk ID is checked against the allowed set**. An empty answer, broken JSON, or an invented citation triggers a retry with a corrective instruction, up to 5 attempts in total. The same JSON also carries a `literatureSearch` block: 2–3 short PubMed queries plus the injury and condition terms. |
+| 74% | Public literature (`public-lit`) | `CaseLiteratureService` searches PubMed with those queries, or with keyword queries built from the diagnosis if the block is missing. See "How the literature search works" below. A failed search is recorded in the report; it never fails the analysis. |
+| 82% | Summary (`summary`) | `responseMapper` turns the LLM output into the result shape. `ReportEnrichmentService` then adds the timeline, risk factors, private references with book and page, the PubMed studies, and cross-examination questions. |
 | 95% | Report (`report`) | Final assembly and logging. |
 | 100% | Completed | `markCompleted()` stores the full result in the Redis record and in `analysis_cases.result` (JSON), then pushes the final `job:update` including the result. |
 
 If any step throws, the worker calls `markFailed()`. The status becomes `failed` and the error message is shown on the analysis page.
+
+#### How the chronology is built
+
+[records/](../apps/api/src/modules/mca/medical-analysis/records/), mainly [chronology.helpers.ts](../apps/api/src/modules/mca/medical-analysis/records/chronology.helpers.ts):
+
+1. **Batches.** Readable pages are grouped per record (a batch never spans two files), each page marked `=== Page N ===`.
+2. **Extraction.** The LLM returns events with date, type, provider, facility, summary, diagnoses (ICD-10 only if printed), treatments, medications, page number, and a short exact quote ([chronology-extraction.prompt.txt](../apps/api/src/modules/mca/medical-analysis/prompts/chronology-extraction.prompt.txt)).
+3. **Verification.** Each event must point at a page of its batch. The quote is searched on that page; if it is on a neighbouring page of the batch, the page number is corrected; if it is nowhere, the event is kept but marked unverified and the report says so. ICD-10 codes are kept only when printed on the cited page. Impossible dates are blanked, never guessed.
+4. **Ordering.** Events are deduplicated and sorted by date (undated last) and get citation ids `rec-1`, `rec-2`, ….
+5. **Citation.** The chronology goes into the analysis prompt (trimmed to `CHRONOLOGY_PROMPT_CHARS`, keeping the entries that mention the diagnosis first). Each entry is in the citation catalog as a `medical_record` citation, so the same check that rejects invented library citations also rejects invented record citations.
+
+The report's **Medical Chronology** section lists every entry with a link that opens the PDF at the cited page (the file is fetched with the login token, since a plain link cannot carry it), marks the entries the analysis cited, and repeats the warnings: unread scanned pages, failed batches, and unverified quotes.
+
+#### How the literature search works
+
+[integrations/medical-literature/](../apps/api/src/integrations/medical-literature/), called from [case-literature.service.ts](../apps/api/src/modules/mca/medical-analysis/services/case-literature.service.ts):
+
+1. **Queries.** The analysis model suggests them in the same call, so the search adds no AI cost. Only medical terms are allowed: PubMed syntax, years and age phrases are stripped before anything is sent.
+2. **PubMed search.** NCBI E-utilities, sorted by PubMed's Best Match relevance, top 20 per query. Requests are spaced to stay under NCBI's limit (3 per second, 10 with `PUBMED_API_KEY`) and retried once on a rate limit, server error, or network drop.
+3. **Filtering.** Retracted papers, letters, editorials, preprints, non-English records, and records without an abstract are dropped.
+4. **Ranking.** Results from all queries are merged. Titles that name both the injury and the claimed condition, causation wording ("risk after", "cohort"), and stronger designs (meta-analysis, cohort) rank higher; treatment studies and studies of the reverse direction ("collision *after* stroke") rank lower. When at least three studies name the claimed condition, the rest are dropped. The top 8 are kept.
+5. **Abstracts.** Europe PMC supplies the abstract's conclusion and free full-text links. If it fails, the studies still appear without excerpts.
+
+The report shows each study with its design, authors, journal, PMID, DOI, and links, plus the exact queries (each opens the same search on PubMed). It states that **the AI analysis did not read these studies**; the analysis relies only on the firm library. `FEATURE_LITERATURE_SEARCH=false` turns the search off. PubMed's ranking varies slightly between calls, so two runs of the same case can list slightly different studies.
 
 #### How the search works
 
@@ -167,12 +205,17 @@ The report is on screen only. PDF download is listed as pending in [TODO.md](../
 | Queue entry | Redis, BullMQ queue `medical-analysis` | Last 100 completed and 50 failed are kept |
 | Case, status, and final result | PostgreSQL `cases.analysis_cases` | Permanent until deleted |
 | Book passages and embeddings | `documents.document_chunks`, `vectors.chunk_embeddings` | Until re-indexed |
+| Uploaded medical records (PDF) | Disk, `CASE_RECORDS_PATH` (default `data/case-records`) | Deleted with the analysis; unused uploads after 24 hours |
+| Record page text and Bates numbers | `cases.case_records`, `cases.case_record_pages` | Same as the file |
+| Chronology | Inside `analysis_cases.result` (JSON) | With the case |
 
 ## Things to know
 
-- **Public references are not live searches yet.** The PubMed, NIH, and similar entries in the report come from `simulatePublicReferences()` in [report-enrichment.helpers.ts](../apps/api/src/modules/mca/medical-analysis/services/report-enrichment.helpers.ts). It picks a fixed list based on keywords in the question. The "Searching Public Medical Literature" step label exists in the constants, but no code reports it.
+- **The PubMed studies are for attorney review, not AI evidence.** The analysis cites only the firm library; the literature section lists real, linked studies found afterwards. Reports saved before the live search existed show a warning that their references were demo examples.
 - **Cross-examination questions are templates**, personalized with the question and diagnosis (`generateCrossExamination`). They are not written by the AI.
-- **Only the private-library citations come from the AI**, and they are verified against the passages it was given.
+- **Citations from the AI are verified**: library passages and record entries are both checked against what the model was given.
+- **Scanned pages are not read yet.** Only PDFs with a text layer can be used; scanned or blank pages are listed as skipped. OCR is the next step.
+- **Record text goes to the AI provider.** Building the chronology sends the page text to whichever `AI_PROVIDER` is configured. Use a provider the firm has approved for patient records, and serve the site over HTTPS before uploading real records.
 - **A synchronous endpoint exists**: `POST /medical-analysis/analyze` runs the whole analysis inside one request. The website does not use it. It is useful for scripts and testing.
 - **One job at a time.** Worker concurrency is 1, and PM2 runs a single API instance, so a second analysis waits in the queue.
 
@@ -190,8 +233,14 @@ The report is on screen only. PDF download is listed as pending in [TODO.md](../
 | Worker | `apps/api/src/modules/mca/medical-analysis/jobs/medical-analysis.processor.ts` |
 | Analysis pipeline | `apps/api/src/modules/mca/medical-analysis/services/medical-analysis.service.ts` |
 | Report enrichment | `apps/api/src/modules/mca/medical-analysis/services/report-enrichment.service.ts` |
+| Literature search (PubMed, Europe PMC) | `apps/api/src/integrations/medical-literature/`, `apps/api/src/modules/mca/medical-analysis/services/case-literature.service.ts` |
+| Literature section of the report | `apps/web/src/components/mca/report/public-literature-section.tsx` |
 | History (Postgres) | `apps/api/src/modules/mca/medical-analysis/services/analysis-history.service.ts` |
 | WebSocket gateway | `apps/api/src/modules/mca/medical-analysis/gateway/medical-analysis.gateway.ts` |
 | Search | `apps/api/src/modules/rag/` |
 | Indexing | `apps/api/src/modules/indexing/`, `apps/api/scripts/run-indexing.ts` |
-| Prompt | `apps/api/src/ai/prompts/medical/causation-analysis.prompt.txt` |
+| Prompts | `apps/api/src/modules/mca/medical-analysis/prompts/` |
+| Records upload and storage | `apps/api/src/modules/mca/medical-analysis/records/case-records.service.ts`, `case-records.controller.ts` |
+| Chronology extraction and checks | `apps/api/src/modules/mca/medical-analysis/records/chronology-extraction.service.ts`, `chronology.helpers.ts` |
+| Records uploader | `apps/web/src/components/mca/demo/medical-records-uploader.tsx` |
+| Chronology section of the report | `apps/web/src/components/mca/report/medical-chronology-section.tsx` |

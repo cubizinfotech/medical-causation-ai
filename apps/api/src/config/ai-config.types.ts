@@ -1,4 +1,7 @@
-import type { AIProviderSettings } from './config.types';
+import type {
+  AIProviderSettings,
+  AnthropicProviderSettings,
+} from './config.types';
 
 /**
  * Per-provider LLM configuration.
@@ -13,7 +16,7 @@ export interface ProviderConfigSettings {
   requestTimeoutMs: number;
   retryDelayMs: number;
   openai: AIProviderSettings;
-  anthropic: AIProviderSettings;
+  anthropic: AnthropicProviderSettings;
   google: AIProviderSettings;
   azureOpenai: AIProviderSettings;
   openrouter: AIProviderSettings;

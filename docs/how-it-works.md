@@ -39,7 +39,7 @@ The knowledge-base files are not in Git. Copy them onto the server and index the
 6. The finished page shows the summary, findings, inconsistencies, sources, and cross-examination questions.
 7. Download the Microsoft Word report.
 
-Local and server demos use sample research records (`RESEARCH_PROVIDER=mock`). Live paid databases are not connected. A missing source is not proof that the expert lacks a credential.
+Local and server demos use sample research records (`RESEARCH_PROVIDER=mock`). With `RESEARCH_PROVIDER=live`, the investigation confirms the expert in the NPI Registry, then searches CMS Open Payments, OpenAlex, and CourtListener, including Daubert/Frye challenges. Paid databases are not connected. A missing source is not proof that the expert lacks a credential.
 
 ## Shared pieces
 

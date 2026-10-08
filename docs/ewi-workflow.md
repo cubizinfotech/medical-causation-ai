@@ -6,9 +6,9 @@ For the product overview, see [how-it-works.md](./how-it-works.md). For the caus
 
 ## The short version
 
-1. The attorney enters the expert's name, city, and specialty and clicks **Start investigation**.
+1. The attorney enters the expert's name, city, and specialty (and, optionally, the expert's NPI) and clicks **Start investigation**.
 2. The website sends this to the API. The API creates the investigation, puts a job on a Redis queue, and replies immediately with a `jobId` and `investigationId`.
-3. A background worker inside the API walks through 27 stages, from identification through research, cross-checks, inconsistencies, and summary to the report. It saves a checkpoint after each stage and stops if the attorney cancels.
+3. A background worker inside the API walks through 27 stages, from identification through research, cross-checks, inconsistencies, and summary to the report. It saves a checkpoint after each stage and stops if the attorney cancels. With `RESEARCH_PROVIDER=live`, the first research stage confirms the expert in the NPI Registry, and Open Payments, OpenAlex, and CourtListener are searched with that identity.
 4. The browser shows a live timeline, fed by a WebSocket plus polling every 4 seconds.
 5. At the end, the worker builds a Word file, saves it to disk, and saves the findings in PostgreSQL. The browser jumps to the results page, where **Download** streams the `.docx`.
 
@@ -20,11 +20,11 @@ sequenceDiagram
     participant R as Redis (job record + BullMQ queue)
     participant P as PostgreSQL (ewi schema)
     participant K as Worker (inside the API)
-    participant S as Research providers (mock fixtures)
+    participant S as Research providers (fixtures or live public sources)
     participant AI as LLM (optional wording)
     participant D as Disk (knowledge-base/ewi/reports)
 
-    U->>W: Enter name, city, specialty, click "Start investigation"
+    U->>W: Enter name, city, specialty (optional NPI), click "Start investigation"
     W->>A: POST /ewi/jobs (Bearer token)
     A->>P: Create expert + investigation rows (pending)
     A->>R: Save job record, add job to "ewi-investigation" queue
@@ -72,6 +72,8 @@ Content-Type: application/json
 { "expertName": "Jane Doe", "city": "Houston", "specialty": "Neurology" }
 ```
 
+   `npi` may be added (10 digits). The form checks the NPI check digit before sending.
+
 4. Saves `{ jobId, investigationId }` (`saveActiveEwiJob`) and navigates to `/ewi/investigation`.
 
 If the call fails, the error is shown on the form and the user stays there.
@@ -83,12 +85,12 @@ If the call fails, the error is shown on the form and the user stays there.
 Before the controller runs:
 
 - **AccessGuard** rejects the request if the JWT is missing or invalid.
-- **ValidationPipe** checks the body against `CreateExpertInvestigationDto`. All three fields are required strings.
+- **ValidationPipe** checks the body against `CreateExpertInvestigationDto`. Name, city, and specialty are required strings. `npi` is optional and must be a valid 10-digit NPI.
 
 Then `enqueue()`:
 
 1. Creates a `jobId` (UUID).
-2. Creates the **investigation row** in the `ewi` schema (`ewi.experts`, `ewi.investigations`), owned by the logged-in user, with status `pending`.
+2. Creates the **investigation row** in the `ewi` schema (`ewi.experts`, `ewi.investigations`), owned by the logged-in user, with status `pending`. Any NPI is stored on `ewi.investigations.npi` and sent with the job.
 3. Writes the **job record** to Redis (status, step, progress, message, and later the checkpoint).
 4. Adds the job to the **BullMQ queue `ewi-investigation`** with `attempts: 1`.
 5. Returns **HTTP 202** with `{ investigationId, jobId, status: "pending" }`.
@@ -121,11 +123,11 @@ The stage list comes from [investigation-stages.ts](../apps/api/src/modules/ewi/
 
 | Kind | Stages | What happens |
 |---|---|---|
-| `identify` | Identify Expert | Records the name, city, and specialty and builds the research plan. **No identity facts are added.** |
-| `research` | CV and profiles, education, licenses, board certifications, publications, grants, patents, awards, memberships, legal cases, expert directories, websites, IME, videos, social media, news, university rules, public records | Each stage calls `ExpertResearchService.collectProviders()` ([expert-research.service.ts](../apps/api/src/integrations/expert-research/expert-research.service.ts)) for its list of providers (for example `state_license`, `state_discipline`). Each provider returns a result with a **status** (found, not found, unavailable, failed, and so on) and an **access** level (public, restricted, and so on). Failures are retried (`RESEARCH_RETRY_*`) and one failing provider does not stop the others. Results are cached briefly. |
+| `identify` | Identify Expert | Records the name, city, specialty, and any NPI and builds the research plan. **No identity facts are added here**; the NPI Registry check is the first research source. |
+| `research` | CV and profiles, education, licenses, board certifications, publications, grants, patents, awards, memberships, legal cases, expert directories, websites, IME, videos, social media, news, university rules, public records | Each stage calls `ExpertResearchService.collectProviders()` ([expert-research.service.ts](../apps/api/src/integrations/expert-research/expert-research.service.ts)) for its list of providers (for example `state_license`, `state_discipline`). Each provider returns a result with a **status** (found, not found, unavailable, failed, and so on) and an **access** level (public, restricted, and so on). Failures are retried (`RESEARCH_RETRY_*`) and one failing provider does not stop the others. Results are cached briefly. The first stage starts with the NPI Registry. |
 | `cross-check` | Cross-check information | Compares what different sources say about the same thing. |
 | `discrepancy` | Identify inconsistencies | `DiscrepancyAnalyzer` compares claims, including CV against other sources, and records inconsistencies with a significance level. If none are found, it says so. |
-| `analyze-legal` | Analyze legal materials | Groups matters, orders, motions, and depositions. |
+| `analyze-legal` | Analyze legal materials | Groups matters, orders, motions, and depositions, and reads Daubert/Frye rulings from the court's words (below). |
 | `analyze-presence` | Analyze online presence | Groups websites, videos, social media, and news. |
 | `analyze-financial` | Analyze income and bias | Groups financial and professional background records. **Percentages appear only when a source states them.** |
 | `summary` | Generate investigation summary | Runs the analysis described below. |
@@ -137,7 +139,18 @@ The stage list comes from [investigation-stages.ts](../apps/api/src/modules/ewi/
 `RESEARCH_PROVIDER` controls this:
 
 - **`mock` (default, local and demo):** providers return development fixtures from [development-fixtures.ts](../apps/api/src/integrations/expert-research/providers/development-fixtures.ts). No network calls are made. Some sources come back as unavailable or restricted on purpose, to show how the product handles gaps.
-- **`live`:** no live adapter is connected yet, so **every provider returns `unavailable`**, still without network calls. Setting an API key in `.env` does not turn anything on.
+- **`live`:** four free public sources are connected (code in [integrations/expert-research/live/](../apps/api/src/integrations/expert-research/live/)). Every other source still returns `unavailable` without a network call; paid, restricted, and manual sources are never scraped.
+
+| Source | What it adds | How it avoids the wrong person |
+|---|---|---|
+| NPI Registry (CMS NPPES) | Who the expert is: NPI, registered name, taxonomy, practice location, and the licenses the clinician reported to NPPES (self-reported, not verified). | Exactly one record must match the name, practice city, and specialty, or the NPI the attorney entered must belong to that name. If several could match, the identity is "not confirmed", the candidates are listed, and nothing is attributed. |
+| CMS Open Payments | Exact totals of general payments from drug and device makers by year, company, and payment type, summed by the CMS datastore for the latest `OPEN_PAYMENTS_YEARS` program years. | Searched **only** by the confirmed NPI. Without a confirmed identity it is not searched. |
+| OpenAlex | Author profile (works, citations, h-index) and the top-cited, recent, and retracted works with the expert's author position. | Used only when the name, research topics, and an institution's location (the city, or a state from the query or NPI record) all fit, and only one profile fits. |
+| CourtListener | Opinions that contain the expert's full name and a specialty term. Those that also contain Daubert, Frye, Rule 702, or motion-to-exclude language are listed as admissibility challenges. | Full name and specialty term in the same opinion. The expert's role (witness, treating doctor, or party) is not assumed. |
+
+The identity check runs once per investigation and is shared by the other three sources ([identity-resolver.ts](../apps/api/src/integrations/expert-research/live/identity-resolver.ts)). Its result (confirmed, not confirmed with candidates, not found, or NPI mismatch) appears at the top of the results page and in section 6 of the Word report. Name variants are accepted but stated ("the registry lists Ravinder; the investigation used Ravi"). When the name is common or the expert practices in a nearby city, entering the NPI on the intake form confirms the identity directly.
+
+Optional settings: `COURTLISTENER_API_TOKEN` (free account) lets the API read the opinion text around the expert's name, so rulings can be read from the court's words; without it only short search excerpts are available. `COURTLISTENER_TIMEOUT_MS` (default 60000) allows for slow full-text searches. `OPENALEX_API_KEY` and `OPENALEX_MAILTO` are optional.
 
 #### How the AI is used (and not used)
 
@@ -147,6 +160,8 @@ The stage list comes from [investigation-stages.ts](../apps/api/src/modules/ewi/
 2. If an LLM provider is available, it sends the findings and source attempts to the model with the prompts in [ai/prompts/ewi/](../apps/api/src/ai/prompts/ewi/). The model is asked for better wording of the required sections and at least 100 questions.
 3. `validateAiAnalysis()` checks the reply against the collected evidence. If the reply is accepted, only the **wording** is applied. The assessments of each source (verified, conflicting, not found, and so on) are kept from the rule-based analysis.
 4. If the provider is unavailable, or the reply is invalid, it falls back to the rule-based analysis. The summary says which path was used ("phrased from collected findings" or "built from collected findings only").
+
+**Reading Daubert/Frye rulings.** In the `analyze-legal` stage, `EwiAnalysisService.readChallengeRulings()` sends the excerpts of up to 8 challenge opinions to the model and asks whether each ruling concerned this expert and how the court ruled, with the court's exact words. [expert-challenge.ts](../apps/api/src/modules/ewi/research/legal/expert-challenge.ts) keeps a reading only if the quote appears word for word in the excerpt, names the expert, and uses ruling words that fit the outcome (excluded, limited, admitted). Everything else stays "Not determined — read the opinion". Accepted readings are written into the finding, so a resumed or reloaded investigation shows the same result.
 
 The AI never adds a fact. A missing source is reported as missing, not as proof that the expert lacks a credential.
 
@@ -176,7 +191,7 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 ## Cancel and retry
 
 - **Cancel:** `POST /ewi/histories/:id/cancel` sets the investigation to `cancelled` in PostgreSQL and in the Redis record. The worker notices at the next stage boundary (`shouldContinue` returns false) and stops. Stages already completed stay recorded.
-- **Retry:** the browser submits the saved name, city, and specialty again. This creates a **new** investigation with a new `jobId`. The old one stays in history.
+- **Retry:** the browser submits the saved name, city, specialty, and NPI again. This creates a **new** investigation with a new `jobId`. The old one stays in history.
 
 ## Where the data lives
 
@@ -186,11 +201,12 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 | Live job state, progress, checkpoint | Redis job record | Expires after the job TTL |
 | Queue entry | Redis, BullMQ queue `ewi-investigation` | Last 100 completed and 50 failed are kept |
 | Investigation, sources, findings, discrepancies, report record | PostgreSQL `ewi` schema | Permanent until deleted |
+| NPI identity result, source statuses | PostgreSQL, `ewi.investigation_analyses` payload | Permanent until deleted |
 | Word file | `knowledge-base/ewi/reports/investigations/{jobId}.docx` | Permanent until deleted |
 
 ## Things to know
 
-- **Sample data only.** With `RESEARCH_PROVIDER=mock`, every finding comes from fixtures. With `live`, every source is unavailable until real adapters are built (see [TODO.md](../TODO.md)).
+- **Research data.** With `RESEARCH_PROVIDER=mock`, every finding comes from fixtures. With `live`, the NPI Registry, Open Payments, OpenAlex, and CourtListener are real; every other source is unavailable until an adapter is built (see [TODO.md](../TODO.md)). Open Payments covers payments from drug and device makers only, not legal or expert-witness fees.
 - **A synchronous endpoint exists**: `POST /ewi/investigate`. It is turned off unless `EWI_ALLOW_SYNC_INVESTIGATE=true` and is meant for tests and tools only.
 - **The request and email workflow** (FOIA, university, and follow-up letters under `/ewi/requests`) exists in the API but has no screens yet, and it is turned off by default (`EWI_REQUEST_WORKFLOW_ENABLED=false`).
 - **One job at a time.** EWI has its own queue and worker, separate from MCA, but each runs one job at a time.
@@ -212,6 +228,9 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 | Workflow engine | `apps/api/src/modules/ewi/investigation/workflow/investigation-workflow.ts` |
 | AI wording and fallback | `apps/api/src/modules/ewi/investigation/analysis/ewi-analysis.service.ts` |
 | Research providers | `apps/api/src/integrations/expert-research/` |
+| Live sources and identity check | `apps/api/src/integrations/expert-research/live/` |
+| Daubert/Frye rulings | `apps/api/src/modules/ewi/research/legal/expert-challenge.ts` |
+| Identity card, challenge list | `apps/web/src/components/ewi/expert-identity-card.tsx`, `admissibility-challenges.tsx` |
 | Inconsistencies and questions | `apps/api/src/modules/ewi/research/` |
 | Word report | `apps/api/src/modules/ewi/report/ewi-word-report.service.ts` |
 | History, report file storage | `apps/api/src/modules/ewi/investigation/services/investigation-history.service.ts` |

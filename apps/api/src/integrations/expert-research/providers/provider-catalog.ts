@@ -1,18 +1,41 @@
 import type { ProviderDefinition } from '../expert-research.types';
 
 /**
- * Independent research providers. Live HTTP is not connected.
- * Mock mode uses fixtures only where a fixture exists. Other providers return
- * unavailable and do not invent credentials, publications, cases, or records.
- * Restricted providers are never scraped. LexisNexis is authorized access only.
+ * Independent research providers.
+ * Live mode calls the connected public sources (NPI Registry, Open Payments,
+ * OpenAlex, CourtListener). Mock mode uses fixtures only where a fixture
+ * exists. Other providers return unavailable and do not invent credentials,
+ * publications, cases, or records. Restricted providers are never scraped.
+ * LexisNexis is authorized access only.
  */
 function source(
   definition: Omit<ProviderDefinition, 'liveImplemented'>,
+  liveImplemented = false,
 ): ProviderDefinition {
-  return { ...definition, liveImplemented: false };
+  return { ...definition, liveImplemented };
 }
 
+/** Sources with a real adapter when RESEARCH_PROVIDER=live. */
+export const LIVE_SOURCE_IDS = [
+  'npi_registry',
+  'open_payments',
+  'openalex',
+  'courtlistener',
+] as const;
+
 export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
+  source(
+    {
+      id: 'npi_registry',
+      name: 'NPI Registry (NPPES)',
+      category: 'identity',
+      accessClass: 'public',
+      requirement: 'free_api',
+      summary:
+        'Free CMS NPI Registry. Confirms the expert by NPI, name, practice city, and taxonomy before other sources are attributed to them. Lists licenses as self-reported to NPPES.',
+    },
+    true,
+  ),
   source({
     id: 'web_search',
     name: 'General web research',
@@ -125,15 +148,19 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     summary:
       'Free Crossref REST API. A mailto address is recommended. Not called locally.',
   }),
-  source({
-    id: 'openalex',
-    name: 'OpenAlex',
-    category: 'publication',
-    accessClass: 'public',
-    requirement: 'free_api',
-    credentialEnv: 'OPENALEX_API_KEY',
-    summary: 'Free OpenAlex API. An API key is optional. Not called locally.',
-  }),
+  source(
+    {
+      id: 'openalex',
+      name: 'OpenAlex',
+      category: 'publication',
+      accessClass: 'public',
+      requirement: 'free_api',
+      credentialEnv: 'OPENALEX_API_KEY',
+      summary:
+        'Free OpenAlex API. An author profile is used only when the name, research topics, and an institution location all fit. Lists top-cited, recent, and retracted works. An API key is optional.',
+    },
+    true,
+  ),
   source({
     id: 'orcid',
     name: 'ORCID',
@@ -217,16 +244,19 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     summary:
       'Public professional organization records. Membership is verified only when public evidence exists.',
   }),
-  source({
-    id: 'courtlistener',
-    name: 'Legal cases (CourtListener)',
-    category: 'legal',
-    accessClass: 'public',
-    requirement: 'account',
-    credentialEnv: 'COURTLISTENER_API_TOKEN',
-    summary:
-      'Free Law Project API. A free account token is required. Not called locally.',
-  }),
+  source(
+    {
+      id: 'courtlistener',
+      name: 'Legal cases (CourtListener)',
+      category: 'legal',
+      accessClass: 'public',
+      requirement: 'free_api',
+      credentialEnv: 'COURTLISTENER_API_TOKEN',
+      summary:
+        'Free Law Project case law. Keeps opinions with the expert’s full name and a specialty term, and flags Daubert, Frye, Rule 702, and motion-to-exclude language. A free token adds opinion excerpts.',
+    },
+    true,
+  ),
   source({
     id: 'justia',
     name: 'Justia',
@@ -514,15 +544,18 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     summary:
       'Review sites are not scraped. A user-supplied public review link may be stored as metadata.',
   }),
-  source({
-    id: 'open_payments',
-    name: 'Open Payments',
-    category: 'income_bias',
-    accessClass: 'public',
-    requirement: 'free_api',
-    summary:
-      'CMS Open Payments public data. Not called locally. No payment is invented.',
-  }),
+  source(
+    {
+      id: 'open_payments',
+      name: 'Open Payments',
+      category: 'income_bias',
+      accessClass: 'public',
+      requirement: 'free_api',
+      summary:
+        'CMS Open Payments general payments, searched only by the confirmed NPI. Totals are summed by CMS per year, company, and payment type. No payment is invented.',
+    },
+    true,
+  ),
   source({
     id: 'corporate_affiliations',
     name: 'Corporate affiliations',

@@ -58,6 +58,7 @@ export interface InvestigationView {
   expertName: string;
   city: string;
   specialty: string;
+  npi: string | null;
   status: InvestigationStatus;
   step: string | null;
   stepLabel: string | null;
@@ -103,6 +104,7 @@ export class ExpertInvestigationRepository {
           stageLabel: EWI_JOB_STEP_LABELS[EWI_STAGE_IDENTIFY],
           progress: 0,
           ownerUserId,
+          npi: dto.npi ?? null,
           profile: {
             create: { displayName: name, city, specialty },
           },
@@ -267,7 +269,7 @@ export class ExpertInvestigationRepository {
         retrievedAt,
         restricted:
           item.access === 'restricted' || item.source?.access === 'restricted',
-        attributes: item.raw ?? null,
+        attributes: withInformationStatus(item.raw, item.informationStatus),
         identityMatch: item.identityMatch,
       });
     });
@@ -417,6 +419,7 @@ export class ExpertInvestigationRepository {
                   questions: [],
                 } as unknown as Prisma.InputJsonValue),
               sourceStatuses: result.sourceStatuses ?? [],
+              identity: result.identity ?? null,
             } as unknown as Prisma.InputJsonValue,
           },
         });
@@ -602,6 +605,7 @@ export class ExpertInvestigationRepository {
     message: string | null;
     errorMessage: string | null;
     notes: string | null;
+    npi?: string | null;
     createdAt: Date;
     updatedAt: Date;
     completedAt: Date | null;
@@ -615,6 +619,7 @@ export class ExpertInvestigationRepository {
       expertName: row.expert.name,
       city: row.expert.city,
       specialty: row.expert.specialty,
+      npi: row.npi ?? null,
       status: row.status,
       step: row.currentStage,
       stepLabel: row.stageLabel,
@@ -663,6 +668,9 @@ export class ExpertInvestigationRepository {
               : ('public' as const),
             retrievedAt: finding.retrievedAt?.toISOString(),
             raw: attributes,
+            informationStatus: readInformationStatus(
+              attributes?.informationStatus,
+            ),
             identityMatch:
               attributes?.identityMatch === 'matched'
                 ? ('matched' as const)
@@ -675,6 +683,8 @@ export class ExpertInvestigationRepository {
           expertName: row.expert.name,
           city: row.expert.city,
           specialty: row.expert.specialty,
+          npi: row.npi ?? null,
+          identity: readStoredIdentity(row.analysis?.payload),
           evidence,
           discrepancies: row.discrepancies.map((item) => ({
             id: item.id,
@@ -777,6 +787,42 @@ function readAnalysisDocument(
     conclusions: [],
     questions: [],
   };
+}
+
+/** Keeps the collected verification status with the stored attributes. */
+function withInformationStatus(
+  raw: Record<string, unknown> | undefined,
+  status: string | undefined,
+): Record<string, unknown> | null {
+  if (!raw && !status) return null;
+  return status ? { ...(raw ?? {}), informationStatus: status } : (raw ?? null);
+}
+
+function readInformationStatus(
+  value: unknown,
+): 'verified' | 'unverified' | 'conflicting' | 'unavailable' | undefined {
+  return value === 'verified' ||
+    value === 'unverified' ||
+    value === 'conflicting' ||
+    value === 'unavailable'
+    ? value
+    : undefined;
+}
+
+function readStoredIdentity(
+  payload: unknown,
+): EwiInvestigationResult['identity'] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const identity = (payload as Record<string, unknown>).identity;
+  if (!identity || typeof identity !== 'object' || Array.isArray(identity)) {
+    return null;
+  }
+  const record = identity as Record<string, unknown>;
+  return typeof record.status === 'string' && typeof record.note === 'string'
+    ? (identity as NonNullable<EwiInvestigationResult['identity']>)
+    : null;
 }
 
 function readSourceStatuses(

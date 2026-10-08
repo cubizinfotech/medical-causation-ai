@@ -43,7 +43,7 @@ export const DEFAULT_EMBEDDING_PROVIDER: EmbeddingProviderName =
 export const DEFAULT_LLM_MODELS: Record<LlmProviderName, string> = {
   [LLM_PROVIDERS.OPENROUTER]: 'openai/gpt-4o',
   [LLM_PROVIDERS.OPENAI]: 'gpt-4o',
-  [LLM_PROVIDERS.ANTHROPIC]: 'claude-sonnet-4-20250514',
+  [LLM_PROVIDERS.ANTHROPIC]: 'claude-opus-5-5',
   [LLM_PROVIDERS.GEMINI]: 'gemini-3.5-flash-lite',
   [LLM_PROVIDERS.GROQ]: 'llama-3.3-70b-versatile',
   [LLM_PROVIDERS.MISTRAL]: 'mistral-small-latest',

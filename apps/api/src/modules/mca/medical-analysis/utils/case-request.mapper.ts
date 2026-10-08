@@ -19,5 +19,6 @@ export function mapCaseDtoToAnalysisRequest(
     medicalHistory:
       historyParts.length > 0 ? historyParts.join('\n') : undefined,
     accidentDate: dto.accidentDate,
+    recordIds: dto.recordIds?.length ? [...new Set(dto.recordIds)] : undefined,
   };
 }

@@ -1,0 +1,25 @@
+Build a medical chronology from these pages of a client's medical records for a personal injury attorney.
+
+Document: {{documentName}}
+
+List every clinically meaningful event on these pages: emergency visits, office visits, hospital admissions, imaging, lab results, procedures, surgeries, therapy sessions, and medication starts or changes. Skip billing lines, fax cover sheets, and repeated headers.
+
+Return a JSON object {"events": [...]} where each event has:
+- "date": the date of service as YYYY-MM-DD (or YYYY-MM, or YYYY, when only part is given); "" when these pages give no date. Never guess a date.
+- "type": one of emergency, office_visit, hospital_admission, imaging, lab, procedure, surgery, therapy, medication, other
+- "provider": the clinician's name as written, or ""
+- "facility": the facility's name as written, or ""
+- "summary": one or two plain-English sentences on what happened and what was found
+- "diagnoses": [{"description": "...", "icd10": "the code only if it is printed on the page, otherwise \"\""}]
+- "treatments": short phrases
+- "medications": short phrases with the name and dose as written
+- "page": the number from the "=== Page N ===" marker of the page that documents the event
+- "quote": 5 to 25 words copied exactly from that page that support the event
+
+Rules:
+- Use only what these pages say. Do not infer diagnoses, dates, codes, or causes.
+- Make one event per date of service and type; combine findings from the same visit.
+- If the pages contain no medical events, return {"events": []}.
+
+Pages:
+{{pages}}

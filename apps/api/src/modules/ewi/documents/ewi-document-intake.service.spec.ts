@@ -108,7 +108,7 @@ describe('EwiDocumentIntakeService', () => {
     });
 
     const index = reportRefs.buildIndex({ investigationId: 'inv-9' });
-    expect(index.entries.length).toBe(40);
+    expect(index.entries.length).toBe(41);
     expect(index.batesIndex.COURT000111?.length).toBeGreaterThan(0);
     expect(reportRefs.findByBates('COURT000111', 'inv-9')[0]?.documentId).toBe(
       doc.documentId,

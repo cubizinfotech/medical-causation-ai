@@ -1,7 +1,9 @@
 import { Logger } from '@nestjs/common';
 import {
   markConflicts,
+  parsePersonName,
   type ExpertEvidenceItem,
+  type ExpertIdentityResolution,
   type ExpertResearchProviderId,
   type ExpertResearchQuery,
   type ExpertResearchSourceResult,
@@ -10,7 +12,11 @@ import { DiscrepancyAnalyzer } from '../../research/discrepancy-analyzer';
 import type { VerificationAttempt } from '../../research/inconsistency-analyzer';
 import {
   LEGAL_RESEARCH_PROVIDER_IDS,
+  applyChallengeReadings,
   buildLegalResearchDossier,
+  challengeCandidates,
+  type ChallengeCandidate,
+  type ChallengeReading,
   type LegalResearchDossier,
 } from '../../research/legal';
 import {
@@ -59,6 +65,9 @@ const TRANSIENT_FAILURE =
 const AUTHORIZED_ACCESS =
   'requires authorized access. No request was sent and restricted content was not stored.';
 
+/** Opinions sent to the model in one request to read Daubert/Frye rulings. */
+const MAX_CHALLENGE_READINGS = 8;
+
 export class InvestigationCancelledError extends Error {
   constructor(message = 'Investigation cancelled.') {
     super(message);
@@ -84,6 +93,12 @@ export interface InvestigationWorkflowDependencies {
   research: InvestigationResearchPort;
   report: Pick<EwiWordReportService, 'build'>;
   analyze?: (packet: AnalysisPacket) => Promise<EwiAnalysisRecord>;
+  /** Reads Daubert/Frye rulings from opinion excerpts (AI). Optional. */
+  readChallengeRulings?: (input: {
+    expertName: string;
+    surname: string;
+    candidates: ChallengeCandidate[];
+  }) => Promise<ChallengeReading[]>;
   onProgress?: (update: EwiProgressUpdate) => void | Promise<void>;
   onCheckpoint?: (
     checkpoint: InvestigationWorkflowCheckpoint,
@@ -292,7 +307,7 @@ export async function executeInvestigationWorkflow(
           'Expert name, city, and medical specialty are required to start an investigation.',
         );
       }
-      const message = `Identified ${name} in ${city} (${specialty}). Research plan created with ${stages.filter((item) => item.kind === 'research').length} research stages. No additional identity facts were added.`;
+      const message = `Identified ${name} in ${city} (${specialty})${request.npi ? ` with NPI ${request.npi}` : ''}. Research plan created with ${stages.filter((item) => item.kind === 'research').length} research stages. Identity is confirmed against the NPI Registry before other sources are attributed.`;
       stageNotes.push({ label: stage.label, message });
       await report(dependencies, stage, progress, message);
       await persistCheckpoint(stage.id);
@@ -374,15 +389,25 @@ export async function executeInvestigationWorkflow(
     }
 
     if (stage.kind === 'analyze-legal') {
+      const rulings = await readChallengeRulings(
+        request,
+        evidence,
+        dependencies,
+      );
+      evidence = rulings.evidence;
       legalResearch = buildLegalResearchDossier({
         evidence,
         sourceResults,
         legalProviderIds: LEGAL_RESEARCH_PROVIDER_IDS,
       });
+      const challengeCount = legalResearch.challenges.length;
       const message =
-        legalResearch.matters.length === 0
+        (legalResearch.matters.length === 0
           ? 'Legal analysis complete. No legal matter was collected. Nothing was inferred.'
-          : `Legal analysis complete. ${legalResearch.matters.length} matter(s), ${legalResearch.orders.length} order(s), ${legalResearch.depositions.length} deposition(s).`;
+          : `Legal analysis complete. ${legalResearch.matters.length} matter(s), ${legalResearch.orders.length} order(s), ${legalResearch.depositions.length} deposition(s).`) +
+        (challengeCount > 0
+          ? ` ${challengeCount} opinion(s) mention an admissibility challenge (Daubert, Frye, Rule 702); ${rulings.determined} ruling(s) were read from the court's own words and the rest were not determined.`
+          : '');
       stageNotes.push({ label: stage.label, message });
       await report(dependencies, stage, progress, message);
       await persistCheckpoint(stage.id);
@@ -501,6 +526,7 @@ export async function executeInvestigationWorkflow(
       discrepancies,
     });
   const generatedAt = new Date().toISOString();
+  const identity = identityFromResearch(request, sourceResults, evidence);
   const reportArtifact = await dependencies.report.build({
     expertName: request.expertName,
     city: request.city,
@@ -514,6 +540,7 @@ export async function executeInvestigationWorkflow(
     legalResearch,
     onlinePresence,
     professionalBackground,
+    identity,
   });
 
   const sourceStatuses: EwiSourceAttemptStatus[] = sourceResults.map(
@@ -536,6 +563,8 @@ export async function executeInvestigationWorkflow(
     expertName: request.expertName,
     city: request.city,
     specialty: request.specialty,
+    npi: request.npi ?? null,
+    identity,
     evidence,
     discrepancies,
     questions,
@@ -674,6 +703,89 @@ async function runResearchStage(
     }
     return result;
   });
+}
+
+/**
+ * Reads Daubert/Frye rulings and writes only validated readings back into
+ * the evidence, so a resumed investigation keeps them.
+ */
+async function readChallengeRulings(
+  request: EwiInvestigationRequest,
+  evidence: ExpertEvidenceItem[],
+  dependencies: InvestigationWorkflowDependencies,
+): Promise<{ evidence: ExpertEvidenceItem[]; determined: number }> {
+  const surname = parsePersonName(request.expertName)?.last;
+  const candidates = challengeCandidates(evidence, MAX_CHALLENGE_READINGS);
+  if (
+    !surname ||
+    candidates.length === 0 ||
+    !dependencies.readChallengeRulings
+  ) {
+    return { evidence, determined: 0 };
+  }
+  try {
+    const readings = await dependencies.readChallengeRulings({
+      expertName: request.expertName,
+      surname,
+      candidates,
+    });
+    return applyChallengeReadings(evidence, candidates, readings, surname);
+  } catch (error) {
+    dependencies.logger?.warn(
+      `EWI challenge rulings were not read: ${error instanceof Error ? error.message : 'unknown error'}`,
+    );
+    return { evidence, determined: 0 };
+  }
+}
+
+/** The NPI Registry identity result, or a development-fixture stand-in. */
+export function identityFromResearch(
+  request: EwiInvestigationRequest,
+  sourceResults: ExpertResearchSourceResult[],
+  evidence: ExpertEvidenceItem[],
+): ExpertIdentityResolution | null {
+  const registry = sourceResults.find(
+    (result) => result.sourceId === 'npi_registry',
+  );
+  if (registry?.identity) return registry.identity;
+  const fixture = evidence.find(
+    (item) =>
+      item.sourceId === 'npi_registry' &&
+      item.simulated === true &&
+      typeof item.raw?.npi === 'string',
+  );
+  if (fixture) {
+    return {
+      status: 'confirmed',
+      identity: {
+        npi: String(fixture.raw?.npi),
+        name: request.expertName,
+        credential: null,
+        taxonomy: request.specialty,
+        city: request.city,
+        state: null,
+        url: fixture.url ?? '',
+      },
+      basis: ['development fixture'],
+      note: 'Development fixture. This is not a real NPI Registry record.',
+      notes: [],
+      candidates: [],
+      simulated: true,
+    };
+  }
+  if (registry) {
+    return {
+      status: 'unavailable',
+      identity: null,
+      basis: [],
+      note:
+        registry.message ??
+        'The NPI Registry could not be checked. Identity was not confirmed.',
+      notes: [],
+      candidates: [],
+    };
+  }
+  return null;
 }
 
 function verificationAttempts(

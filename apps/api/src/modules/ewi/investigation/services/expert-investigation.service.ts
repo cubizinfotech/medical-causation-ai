@@ -57,6 +57,8 @@ export class ExpertInvestigationService {
       research: this.research,
       report: this.reportService,
       analyze: (packet) => this.analysis.interpret(packet),
+      readChallengeRulings: (input) =>
+        this.analysis.readChallengeRulings(input),
       onProgress: options.onProgress,
       onCheckpoint: options.onCheckpoint,
       shouldContinue:

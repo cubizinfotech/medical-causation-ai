@@ -42,9 +42,14 @@ function createHarness() {
     createCase: jest.fn().mockResolvedValue({ id: 'case-1' }),
     syncFromJobRecord: jest.fn().mockResolvedValue(undefined),
   };
+  const caseRecords = {
+    assertAttachable: jest.fn().mockResolvedValue(undefined),
+    attachToCase: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new MedicalAnalysisJobService(
     redis as never,
     history as never,
+    caseRecords as never,
   );
   service.onModuleInit();
   const queue = (Queue as unknown as jest.Mock).mock.results.at(-1)?.value as {

@@ -24,6 +24,8 @@ import {
   saveActiveAnalysis,
   saveAnalysisResult,
   clearActiveAnalysis,
+  loadCaseRecords,
+  clearCaseRecords,
 } from "@/features/demo/storage/case-storage";
 import type { CaseFormValues } from "@/features/demo/schemas/case-form.schema";
 
@@ -83,6 +85,7 @@ export default function AnalysisView() {
       medications: caseData.medications,
       timeline: caseData.timeline,
       medicalQuestion: caseData.medicalQuestion,
+      recordIds: loadCaseRecords().map((record) => record.id),
     };
   }, [caseData]);
 
@@ -94,6 +97,8 @@ export default function AnalysisView() {
     void submit(request)
       .then((created) => {
         saveActiveAnalysis({ caseId: created.caseId, jobId: created.jobId });
+        // The records now belong to this analysis and cannot be reused.
+        clearCaseRecords();
       })
       .catch(() => {
         // The hook stores the failure so the page can show it.

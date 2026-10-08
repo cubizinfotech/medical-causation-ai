@@ -13,4 +13,4 @@ Do not import from `modules/mca`. Use `@platform` contracts and `@integrations/e
 
 ## Local integration status
 
-With `RESEARCH_PROVIDER=mock`, the full investigation path is connected: HTTP intake → BullMQ (`ewi-investigation`) → stage workflow → findings/events in schema `ewi` → analysis → Word report → download. Cancel and retry are supported. Live HTTP adapters are not connected. Request/email workflow is API-only and off by default.
+With `RESEARCH_PROVIDER=mock`, the full investigation path is connected: HTTP intake → BullMQ (`ewi-investigation`) → stage workflow → findings/events in schema `ewi` → analysis → Word report → download. Cancel and retry are supported. With `RESEARCH_PROVIDER=live`, four free public sources have real adapters in `integrations/expert-research/live/` (NPI Registry, CMS Open Payments, OpenAlex, CourtListener); every other source stays unavailable. Request/email workflow is API-only and off by default.

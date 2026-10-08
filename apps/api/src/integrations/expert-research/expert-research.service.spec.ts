@@ -4,7 +4,10 @@ import {
 } from './expert-research.service';
 import { CatalogExpertResearchProvider } from './providers/catalog-expert-research.provider';
 import { EXPERT_RESEARCH_CATALOG } from './providers/provider-catalog';
-import { ProviderRateLimiter } from './providers/provider-runtime';
+import {
+  ProviderRateLimiter,
+  type ProviderRuntimeOptions,
+} from './providers/provider-runtime';
 
 describe('ExpertResearchService', () => {
   const originalFetch = global.fetch;
@@ -85,12 +88,28 @@ describe('ExpertResearchService', () => {
     ).toBe(true);
   });
 
-  it('returns unavailable for every provider in live mode and does not call the network', async () => {
-    global.fetch = jest.fn() as typeof fetch;
+  it('calls only the connected public sources in live mode', async () => {
+    global.fetch = jest.fn(() => {
+      throw new Error('global fetch must not be used');
+    }) as typeof fetch;
+    const hosts: string[] = [];
+    const fetchImpl = jest.fn((input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : input);
+      hosts.push(url.host);
+      const body = url.host.includes('npiregistry')
+        ? { result_count: 0, results: [] }
+        : url.host.includes('openalex')
+          ? { results: [], meta: { count: 0 } }
+          : { count: 0, results: [] };
+      return Promise.resolve(
+        new Response(JSON.stringify(body), { status: 200 }),
+      );
+    }) as typeof fetch;
     const service = serviceWith({
       mode: 'live',
       timeoutMs: 1000,
       minIntervalMs: 0,
+      live: { timeoutMs: 1000, fetchImpl },
     });
     const results = await service.collect({
       expertName: 'Jane Smith',
@@ -99,12 +118,35 @@ describe('ExpertResearchService', () => {
     });
     expect(results).toHaveLength(EXPERT_RESEARCH_CATALOG.length);
     expect(results.every((result) => result.items.length === 0)).toBe(true);
-    expect(results.every((result) => result.status === 'unavailable')).toBe(
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect([...new Set(hosts)].sort()).toEqual([
+      'api.openalex.org',
+      'npiregistry.cms.hhs.gov',
+      'www.courtlistener.com',
+    ]);
+
+    const live = new Set([
+      'npi_registry',
+      'open_payments',
+      'openalex',
+      'courtlistener',
+    ]);
+    const others = results.filter((result) => !live.has(result.sourceId));
+    expect(others.every((result) => result.status === 'unavailable')).toBe(
       true,
     );
-    expect(global.fetch).not.toHaveBeenCalled();
     const lexis = results.find((result) => result.sourceId === 'lexisnexis');
     expect(lexis?.message).toMatch(/no request was sent/i);
+
+    const npi = results.find((result) => result.sourceId === 'npi_registry');
+    expect(npi?.status).toBe('no_result');
+    expect(npi?.identity?.status).toBe('not_found');
+    // Payments are never searched without a confirmed NPI.
+    const payments = results.find(
+      (result) => result.sourceId === 'open_payments',
+    );
+    expect(payments?.status).toBe('unavailable');
+    expect(payments?.message).toMatch(/confirmed NPI/);
   });
 
   it('returns an error and no items when the name is missing', async () => {
@@ -216,10 +258,6 @@ describe('ExpertResearchService', () => {
   });
 });
 
-function serviceWith(runtime: {
-  mode: 'mock' | 'live';
-  timeoutMs: number;
-  minIntervalMs: number;
-}): ExpertResearchService {
+function serviceWith(runtime: ProviderRuntimeOptions): ExpertResearchService {
   return new ExpertResearchService(createCatalogProviders(runtime));
 }

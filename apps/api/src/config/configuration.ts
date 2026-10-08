@@ -16,6 +16,8 @@ import { ewiRequestConfig } from './ewi-request.config';
 import { authConfig } from './auth.config';
 import { jobsConfig } from './jobs.config';
 import { researchConfig } from './research.config';
+import { literatureConfig } from './literature.config';
+import { caseRecordsConfig } from './case-records.config';
 import { ocrConfig } from './ocr.config';
 
 export const configuration = (): RootConfig => ({
@@ -34,6 +36,8 @@ export const configuration = (): RootConfig => ({
   auth: authConfig(),
   jobs: jobsConfig(),
   research: researchConfig(),
+  literature: literatureConfig(),
+  caseRecords: caseRecordsConfig(),
   features: featureFlagsConfig(),
   indexing: indexingConfig(),
   rag: ragConfig(),

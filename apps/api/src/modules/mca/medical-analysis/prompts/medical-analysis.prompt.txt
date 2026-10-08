@@ -1,4 +1,4 @@
-Analyze the following medical causation research question using ONLY the retrieved evidence.
+Analyze the following medical causation research question using ONLY the evidence below: the client's medical records and the retrieved medical literature.
 
 ## Medical Question
 {{medicalQuestion}}
@@ -6,16 +6,21 @@ Analyze the following medical causation research question using ONLY the retriev
 ## Patient / Case Context
 {{caseContext}}
 
-## Retrieved Evidence (ONLY source you may use)
+## Client Medical Records (facts of this case)
+{{recordsContext}}
+
+## Retrieved Medical Literature
 {{retrievedContext}}
 
 ## Citation Catalog (use these chunkIds only)
 {{citationCatalog}}
 
+Use the client's medical records to establish the facts of this case: the dates of injury and symptom onset, documented diagnoses, treatment, and any prior conditions. Use the retrieved literature for the medical science. Cite record entries by their rec-N ids and literature passages by their chunkIds. If the records and the case context disagree, say so.
+
 Apply accepted medical causation principles:
 1. Temporal relationship between trauma and condition onset
 2. Biological plausibility of the causal mechanism
-3. Strength of epidemiological evidence in the retrieved context
-4. Consideration of alternative causes mentioned in the evidence
+3. Strength of epidemiological evidence in the retrieved literature
+4. Consideration of alternative causes, including prior conditions documented in the records
 
-Evaluate each piece of retrieved evidence and classify it as supporting, opposing, neutral, or unknown relative to the medical question.
+Evaluate each piece of evidence and classify it as supporting, opposing, neutral, or unknown relative to the medical question.

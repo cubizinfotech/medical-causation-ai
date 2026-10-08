@@ -9,6 +9,7 @@ import type {
 } from './expert-research.types';
 import { CatalogExpertResearchProvider } from './providers/catalog-expert-research.provider';
 import { EXPERT_RESEARCH_CATALOG } from './providers/provider-catalog';
+import { createLiveSourceProviders } from './live/live-sources';
 import { applyIdentityMatch } from './providers/identity-match';
 import { applyPublicEvidenceGate } from './providers/public-affiliation';
 import { markConflicts } from './providers/information-status';
@@ -22,19 +23,40 @@ import {
 export function createExpertResearchRuntime(
   settings?: ResearchProviderSettings,
 ): ProviderRuntimeOptions {
+  const timeoutMs = settings?.timeoutMs ?? 20000;
   return {
     mode: settings?.mode === 'live' ? 'live' : 'mock',
-    timeoutMs: settings?.timeoutMs ?? 20000,
+    timeoutMs,
     minIntervalMs: settings?.minIntervalMs ?? 0,
+    live: {
+      timeoutMs,
+      courtListenerToken: settings?.courtListenerToken,
+      courtListenerTimeoutMs: settings?.courtListenerTimeoutMs,
+      openAlexApiKey: settings?.openAlexApiKey,
+      openAlexMailto: settings?.openAlexMailto,
+      openPaymentsYears: settings?.openPaymentsYears,
+    },
   };
 }
 
+/**
+ * One provider per catalog entry. In live mode the connected public sources
+ * use their real adapters; every other source keeps the catalog behavior.
+ */
 export function createCatalogProviders(
   runtime: ProviderRuntimeOptions,
   rateLimiter: ProviderRateLimiter = new ProviderRateLimiter(),
 ): IExpertResearchProvider[] {
+  const live =
+    runtime.mode === 'live'
+      ? createLiveSourceProviders(
+          EXPERT_RESEARCH_CATALOG,
+          runtime.live ?? { timeoutMs: runtime.timeoutMs },
+        )
+      : new Map<ExpertResearchProviderId, IExpertResearchProvider>();
   return EXPERT_RESEARCH_CATALOG.map(
     (definition) =>
+      live.get(definition.id) ??
       new CatalogExpertResearchProvider(definition, runtime, rateLimiter),
   );
 }

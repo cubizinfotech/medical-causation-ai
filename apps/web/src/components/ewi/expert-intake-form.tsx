@@ -30,6 +30,7 @@ import {
 } from "@/features/ewi/storage/ewi-storage";
 import { toUserFacingError } from "@/features/ewi/utils/user-facing-error";
 import { EWI_SPECIALTY_EXAMPLES } from "@/features/ewi/constants";
+import { NPI_REGISTRY_SEARCH_URL } from "@/features/ewi/utils/npi";
 
 export function ExpertIntakeForm() {
   const router = useRouter();
@@ -48,6 +49,7 @@ export function ExpertIntakeForm() {
       expertName: "",
       city: "",
       specialty: "",
+      npi: "",
     },
   });
 
@@ -163,6 +165,44 @@ export function ExpertIntakeForm() {
               </p>
             )}
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="npi">
+              NPI{" "}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </Label>
+            <Input
+              id="npi"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={14}
+              placeholder="10 digits, e.g. 1234567893"
+              aria-invalid={Boolean(errors.npi)}
+              aria-describedby={errors.npi ? "npi-error" : "npi-help"}
+              {...register("npi")}
+            />
+            {errors.npi ? (
+              <p id="npi-error" className="text-sm text-destructive" role="alert">
+                {errors.npi.message}
+              </p>
+            ) : (
+              <p id="npi-help" className="text-xs text-muted-foreground">
+                The expert&apos;s National Provider Identifier. Add it when the
+                name is common or the expert may practice in a nearby city;
+                payments and records are then tied to this one clinician.{" "}
+                <a
+                  href={NPI_REGISTRY_SEARCH_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary underline-offset-2 hover:underline"
+                >
+                  Look up an NPI
+                </a>
+              </p>
+            )}
+          </div>
         </CardContent>
         <CardFooter className="flex flex-wrap gap-2">
           {submitError ? (
@@ -186,6 +226,7 @@ export function ExpertIntakeForm() {
                 expertName: "Jane A. Smith, MD",
                 city: "Boston",
                 specialty: "Neurology",
+                npi: "",
               });
             }}
           >

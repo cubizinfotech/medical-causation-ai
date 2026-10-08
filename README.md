@@ -4,7 +4,7 @@ This application helps personal injury attorneys do two kinds of legal research.
 
 **Medical Causation Analysis (MCA)** studies whether a trauma or accident medically contributed to an injury or disease. It searches the firm’s indexed medical documents and writes an on-screen report with citations. It does not diagnose patients and it is not a hospital record system.
 
-**Expert Witness Investigation (EWI)** researches an opposing expert from a name, city, and medical specialty, then downloads a Microsoft Word report with cross-examination questions. The local and server demo uses sample research records. Live paid research sites are not connected.
+**Expert Witness Investigation (EWI)** researches an opposing expert from a name, city, and medical specialty, then downloads a Microsoft Word report with cross-examination questions. The local and server demo uses sample research records. With `RESEARCH_PROVIDER=live`, it searches free public sources (NPI Registry, CMS Open Payments, OpenAlex, CourtListener) and confirms the expert's identity before attributing anything. Paid research sites are not connected.
 
 Both products share one website, one API, PostgreSQL, and Redis. Their screens and data stay separate.
 

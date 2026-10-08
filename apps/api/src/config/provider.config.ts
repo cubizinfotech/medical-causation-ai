@@ -1,8 +1,23 @@
 import type { ProviderConfigSettings } from './ai-config.types';
+import type { AnthropicEffort } from './config.types';
 import { DEFAULT_LLM_PROVIDER } from '@ai/constants';
+
+const ANTHROPIC_EFFORTS: readonly AnthropicEffort[] = [
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+];
 
 function resolveGoogleApiKey(): string {
   return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
+}
+
+/** Causation analysis is accuracy-sensitive, so the default is "high". */
+function resolveAnthropicEffort(): AnthropicEffort {
+  const value = process.env.ANTHROPIC_EFFORT?.trim().toLowerCase();
+  return ANTHROPIC_EFFORTS.find((effort) => effort === value) ?? 'high';
 }
 
 export const providerConfig = (): ProviderConfigSettings => ({
@@ -30,6 +45,9 @@ export const providerConfig = (): ProviderConfigSettings => ({
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
     baseUrl: process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com',
+    effort: resolveAnthropicEffort(),
+    minMaxTokens: Number(process.env.ANTHROPIC_MAX_TOKENS ?? 32000),
+    workspaceId: process.env.ANTHROPIC_WORKSPACE_ID?.trim() || undefined,
   },
   google: {
     apiKey: resolveGoogleApiKey(),

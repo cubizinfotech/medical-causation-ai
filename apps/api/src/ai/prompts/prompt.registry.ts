@@ -64,6 +64,26 @@ export const PROMPT_REGISTRY: PromptTemplateMetadata[] = [
       'Asks the model to phrase a summary, conclusions, and questions from collected EWI findings.',
   },
   {
+    id: 'ewi/challenge-rulings-system',
+    name: 'EWI Challenge Rulings System',
+    category: 'ewi',
+    filename: 'ewi/challenge-rulings.system.prompt.txt',
+    version: '1.0.0',
+    variables: [],
+    description:
+      'Rules for reading Daubert/Frye rulings from court opinion excerpts. Outcomes need an exact quote.',
+  },
+  {
+    id: 'ewi/challenge-rulings',
+    name: 'EWI Challenge Rulings',
+    category: 'ewi',
+    filename: 'ewi/challenge-rulings.prompt.txt',
+    version: '1.0.0',
+    variables: ['expertName', 'surname', 'itemsJson'],
+    description:
+      'Asks the model which admissibility rulings in the excerpts concern the expert, with exact quotes.',
+  },
+  {
     id: 'testing/smoke-test',
     name: 'Smoke Test',
     category: 'testing',

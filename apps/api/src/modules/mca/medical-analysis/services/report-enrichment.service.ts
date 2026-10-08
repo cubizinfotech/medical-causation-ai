@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type {
   BaseMedicalAnalysisResult,
+  LiteratureSearchSummary,
   MedicalAnalysisRequest,
+  MedicalChronology,
   MedicalAnalysisResult,
+  ResearchSourcesSummary,
 } from '../types';
+import type { CaseLiteratureResult } from './case-literature.service';
 import {
   LEGAL_DISCLAIMER_TEXT,
   buildPrivateSourceSummary,
@@ -11,25 +15,58 @@ import {
   formatKnowledgeBaseDocumentName,
   generateCrossExamination,
   inferRiskFactors,
-  simulatePublicReferences,
 } from './report-enrichment.helpers';
+
+function publicSources(
+  literature: LiteratureSearchSummary,
+  referenceCount: number,
+): ResearchSourcesSummary['public'] {
+  const searchStatus =
+    literature.status === 'disabled'
+      ? 'disabled'
+      : literature.status === 'unavailable'
+        ? 'unavailable'
+        : 'live';
+  const sources: ResearchSourcesSummary['public'] = [
+    {
+      name: 'PubMed',
+      description:
+        'National Library of Medicine database of peer-reviewed biomedical studies, ranked by PubMed Best Match',
+      status: searchStatus,
+      count: referenceCount,
+    },
+  ];
+  if (referenceCount > 0) {
+    sources.push({
+      name: 'Europe PMC',
+      description: 'Abstract excerpts and free full-text availability',
+      status: literature.abstractsAvailable ? 'live' : 'unavailable',
+    });
+  }
+  return sources;
+}
 
 @Injectable()
 export class ReportEnrichmentService {
   enrich(
     result: BaseMedicalAnalysisResult,
     request: MedicalAnalysisRequest,
+    literature: CaseLiteratureResult,
+    chronology?: MedicalChronology,
   ): MedicalAnalysisResult {
-    const publicReferences = simulatePublicReferences(
-      request.medicalQuestion,
-      request.diagnosis,
-    );
+    const publicReferences = literature.references;
 
     const evidenceByChunk = new Map(
       result.retrievedEvidence.map((item) => [item.chunkId, item]),
     );
 
-    const privateReferences = result.citations.map((citation) => {
+    // Record citations appear in the chronology, not as library sources.
+    const libraryCitations = result.citations.filter(
+      (citation) => citation.sourceKind !== 'medical_record',
+    );
+    const citedIds = new Set(result.citations.map((c) => c.chunkId));
+
+    const privateReferences = libraryCitations.map((citation) => {
       const evidence = evidenceByChunk.get(citation.chunkId);
       return {
         chunkId: citation.chunkId,
@@ -49,7 +86,7 @@ export class ReportEnrichmentService {
     });
 
     const uniqueDocumentCount = new Set(
-      result.citations.map((citation) => citation.documentName),
+      libraryCitations.map((citation) => citation.documentName),
     ).size;
 
     const crossExamination = generateCrossExamination(
@@ -68,6 +105,16 @@ export class ReportEnrichmentService {
       timelineEvents: buildTimelineEvents(request, result.conclusion),
       riskFactors: inferRiskFactors(request, result.opposingEvidence.length),
       publicReferences,
+      literatureSearch: literature.summary,
+      chronology: chronology
+        ? {
+            ...chronology,
+            events: chronology.events.map((event) => ({
+              ...event,
+              citedInAnalysis: citedIds.has(event.id),
+            })),
+          }
+        : undefined,
       privateReferences,
       crossExamination,
       researchSources: {
@@ -84,49 +131,17 @@ export class ReportEnrichmentService {
               'Knowledge-base excerpts matched to this case via hybrid search',
             count: privateReferences.length,
           },
+          ...(chronology
+            ? [
+                {
+                  name: 'Client Medical Records',
+                  description: `Uploaded records, read into ${chronology.events.length} cited chronology entries`,
+                  count: chronology.documents.length,
+                },
+              ]
+            : []),
         ],
-        public: [
-          {
-            name: 'PubMed',
-            description: 'Biomedical literature database',
-            status: 'simulated',
-          },
-          {
-            name: 'PubMed Central',
-            description: 'Open-access full-text archive',
-            status: 'simulated',
-          },
-          {
-            name: 'NIH',
-            description: 'National Institutes of Health resources',
-            status: 'simulated',
-          },
-          {
-            name: 'ClinicalTrials.gov',
-            description: 'Clinical trial registry',
-            status: 'simulated',
-          },
-          {
-            name: 'Semantic Scholar',
-            description: 'AI-powered research tool',
-            status: 'simulated',
-          },
-          {
-            name: 'Crossref',
-            description: 'Scholarly metadata and citations',
-            status: 'simulated',
-          },
-          {
-            name: 'WHO',
-            description: 'World Health Organization publications',
-            status: 'simulated',
-          },
-          {
-            name: 'CDC',
-            description: 'Centers for Disease Control guidance',
-            status: 'simulated',
-          },
-        ],
+        public: publicSources(literature.summary, publicReferences.length),
       },
       legalDisclaimer: LEGAL_DISCLAIMER_TEXT,
       metadata: {

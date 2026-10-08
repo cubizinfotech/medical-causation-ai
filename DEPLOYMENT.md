@@ -102,6 +102,13 @@ Use `127.0.0.1` for Postgres and Redis. The names `postgres` and `redis` work on
 
 Paste AI keys into the server `.env` only. Do not commit them and do not put them in GitHub.
 
+EWI live research is optional. With `RESEARCH_PROVIDER=live`, the API calls four free public sources over HTTPS: `npiregistry.cms.hhs.gov`, `openpaymentsdata.cms.gov`, `api.openalex.org`, and `www.courtlistener.com`. Only the opposing expert's name, city, specialty, and NPI are sent; no case or patient data. A free `COURTLISTENER_API_TOKEN` is optional and lets the API read opinion text for Daubert/Frye rulings. See [docs/ewi-workflow.md](docs/ewi-workflow.md).
+
+```env
+RESEARCH_PROVIDER=live
+COURTLISTENER_API_TOKEN=
+```
+
 A laptop file named `.env.live` can be copied up instead. Rename it to `.env` on the server and change `DATABASE_URL`, `REDIS_URL`, and `REDIS_HOST` to `127.0.0.1` if they still use a Docker hostname. Set `NODE_ENV=production`.
 
 ```powershell
@@ -329,6 +336,14 @@ npm run reembed:kb:full
 
 That reads `KNOWLEDGE_BASE_PATH` and stores embeddings in PostgreSQL. Do not start it while an upload is incomplete.
 
+### Uploaded medical records
+
+Records that attorneys upload on the MCA case form are stored in `CASE_RECORDS_PATH` (default `/var/www/medical-causation-ai/data/case-records`), with their page text in PostgreSQL. The folder is ignored by Git, so deploys never touch it. These are patient records:
+
+- Back up the folder together with the database. A database backup without the files, or the files without the database, cannot be restored on its own.
+- Serve the site over HTTPS before real records are uploaded; the IP demo sends them unencrypted.
+- The chronology sends record text to the configured `AI_PROVIDER`. Use a provider the firm has approved for patient data.
+
 ## 17. Disk and Docker cleanup
 
 Inspect before deleting anything:
@@ -449,6 +464,6 @@ npm run dev:web
 Leave these off on the public server until you decide otherwise:
 
 - `npm run seed:demo-users` refuses to run when `NODE_ENV=production`
-- `RESEARCH_PROVIDER=mock` until a research vendor is approved
+- `RESEARCH_PROVIDER=mock` until you choose to use the live public sources (NPI Registry, Open Payments, OpenAlex, CourtListener); paid research vendors are still not connected
 - `EMAIL_DELIVERY_ENABLED=false` until a real sender is approved
 - `AUTH_ENABLED=true` and a long `JWT_SECRET` before the site is shared beyond a private demo

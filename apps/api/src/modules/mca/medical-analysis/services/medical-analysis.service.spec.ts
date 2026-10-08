@@ -1,5 +1,8 @@
 import { MedicalQueryBuilder } from '../builders';
 import { MedicalAnalysisService } from './medical-analysis.service';
+import type { CaseLiteratureService } from './case-literature.service';
+import type { CaseRecordsService } from '../records/case-records.service';
+import type { ChronologyExtractionService } from '../records/chronology-extraction.service';
 import type { AiService } from '@ai/services';
 import type { RetrievalService } from '@modules/rag/services';
 import type { AnalysisPromptBuilder } from '../builders';
@@ -67,6 +70,11 @@ describe('MedicalAnalysisService', () => {
   };
 
   const llmJson = {
+    literatureSearch: {
+      exposureTerms: ['traumatic brain injury'],
+      outcomeTerms: ['stroke'],
+      queries: ['stroke risk after traumatic brain injury'],
+    },
     executiveSummary: 'Summary',
     patientSummary: 'Patient',
     medicalQuestion: 'Can mild TBI increase stroke risk?',
@@ -130,6 +138,49 @@ describe('MedicalAnalysisService', () => {
   let safetyValidator: AnalysisSafetyValidator;
   let responseMapper: jest.Mocked<Pick<AnalysisResponseMapper, 'mapToResult'>>;
   let reportEnrichment: { enrich: jest.Mock };
+  const literatureResult = {
+    summary: {
+      status: 'completed',
+      provider: 'PubMed',
+      queries: ['stroke risk after traumatic brain injury'],
+      queryMethod: 'ai',
+      abstractsAvailable: true,
+      searchedAt: '2026-01-01T00:00:00.000Z',
+    },
+    references: [],
+  };
+  const research = jest.fn().mockResolvedValue(literatureResult);
+  const caseLiterature = { research } as unknown as CaseLiteratureService;
+  const loadedRecords = [
+    {
+      id: 'record-1',
+      name: 'er.pdf',
+      pageCount: 2,
+      unreadablePages: [],
+      pages: [],
+    },
+  ];
+  const chronology = {
+    status: 'completed',
+    documents: [],
+    events: [],
+    pagesProcessed: 2,
+    warnings: [],
+    generatedAt: '2026-01-01T00:00:00.000Z',
+  };
+  const loadForAnalysis = jest.fn().mockResolvedValue(loadedRecords);
+  const caseRecords = {
+    loadForAnalysis,
+    chronologySettings: {
+      chronologyBatchChars: 12000,
+      chronologyPromptChars: 10000,
+    },
+  } as unknown as CaseRecordsService;
+  const buildChronology = jest.fn().mockResolvedValue(chronology);
+  const chronologyExtraction = {
+    build: buildChronology,
+  } as unknown as ChronologyExtractionService;
+  let buildPrompts: jest.Mock;
 
   beforeEach(() => {
     retrievalService = {
@@ -160,16 +211,21 @@ describe('MedicalAnalysisService', () => {
       })),
     };
 
+    buildPrompts = jest.fn().mockResolvedValue(builtPrompts);
+    loadForAnalysis.mockClear();
+    buildChronology.mockClear();
+
     service = new MedicalAnalysisService(
       retrievalService as unknown as RetrievalService,
       aiService as unknown as AiService,
       new MedicalQueryBuilder(),
-      {
-        build: jest.fn().mockResolvedValue(builtPrompts),
-      } as unknown as AnalysisPromptBuilder,
+      { build: buildPrompts } as unknown as AnalysisPromptBuilder,
       safetyValidator,
       responseMapper,
       reportEnrichment,
+      caseLiterature,
+      caseRecords,
+      chronologyExtraction,
     );
   });
 
@@ -193,6 +249,19 @@ describe('MedicalAnalysisService', () => {
       }),
     );
     expect(responseMapper.mapToResult).toHaveBeenCalled();
+    // The search reuses the analysis model's suggested queries.
+    expect(research).toHaveBeenCalledWith(
+      expect.anything(),
+      llmJson.literatureSearch,
+    );
+    expect(reportEnrichment.enrich).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      literatureResult,
+      undefined,
+    );
+    // No records attached: the chronology steps are skipped.
+    expect(loadForAnalysis).not.toHaveBeenCalled();
     expect(result.confidenceScore.score).toBe(72);
   });
 
@@ -237,5 +306,31 @@ describe('MedicalAnalysisService', () => {
     });
 
     expect(aiService.complete).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads attached records into a chronology before the analysis', async () => {
+    await service.analyze({
+      medicalQuestion: 'Can mild TBI increase stroke risk?',
+      recordIds: ['record-1'],
+    });
+
+    expect(loadForAnalysis).toHaveBeenCalledWith(['record-1']);
+    expect(buildChronology).toHaveBeenCalledWith(
+      loadedRecords,
+      12000,
+      expect.any(Function),
+    );
+    expect(buildPrompts).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      chronology,
+      10000,
+    );
+    expect(reportEnrichment.enrich).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      literatureResult,
+      chronology,
+    );
   });
 });

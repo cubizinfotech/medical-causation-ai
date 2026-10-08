@@ -34,9 +34,10 @@ export const EWI_WORKFLOW_STAGES: readonly InvestigationStageDefinition[] = [
   },
   {
     id: 'profiles',
-    label: 'Find CV and professional profiles',
+    label: 'Confirm identity (NPI) and find professional profiles',
     kind: 'research',
-    providers: ['web_search', 'cv_profile', 'orcid'],
+    // NPI Registry first: later sources use the identity it confirms.
+    providers: ['npi_registry', 'web_search', 'cv_profile', 'orcid'],
   },
   {
     id: 'education',

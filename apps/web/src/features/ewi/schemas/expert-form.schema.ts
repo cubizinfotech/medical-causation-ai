@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidNpi } from "@/features/ewi/utils/npi";
 
 const NAME_PATTERN = /^[\p{L}\p{M}\d .,'’\-()/]+$/u;
 
@@ -28,6 +29,18 @@ export const expertInvestigationSchema = z.object({
     (value) => !/^[0-9]+$/.test(value),
     "Enter a medical specialty, not a number",
   ),
+  npi: z
+    .string()
+    .optional()
+    .transform((value) => value?.replace(/\s+/g, "") || undefined)
+    .refine(
+      (value) => value === undefined || /^\d{10}$/.test(value),
+      "An NPI is exactly 10 digits",
+    )
+    .refine(
+      (value) => value === undefined || isValidNpi(value),
+      "This is not a valid NPI. Check the digits for a typo.",
+    ),
 });
 
 export type ExpertInvestigationFormValues = z.infer<

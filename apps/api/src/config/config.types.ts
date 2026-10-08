@@ -40,6 +40,17 @@ export interface AIProviderSettings {
   apiVersion?: string;
 }
 
+export type AnthropicEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export interface AnthropicProviderSettings extends AIProviderSettings {
+  /** output_config.effort for models with adaptive thinking (ANTHROPIC_EFFORT). */
+  effort: AnthropicEffort;
+  /** Lower bound for max_tokens on thinking models (ANTHROPIC_MAX_TOKENS). */
+  minMaxTokens: number;
+  /** Required by API keys that are not scoped to a workspace (ANTHROPIC_WORKSPACE_ID). */
+  workspaceId?: string;
+}
+
 export type AISettings = ProviderConfigSettings;
 
 export interface KnowledgeBasePaths {
@@ -87,6 +98,36 @@ export interface FeatureFlags {
   enableEwi: boolean;
   enableEmail: boolean;
   enableAuth: boolean;
+}
+
+/** Public medical literature search (PubMed, with Europe PMC abstracts). */
+export interface LiteratureSearchSettings {
+  enabled: boolean;
+  pubmedBaseUrl: string;
+  europePmcBaseUrl: string;
+  /** Optional NCBI key: raises the limit from 3 to 10 requests per second. */
+  pubmedApiKey?: string;
+  /** NCBI asks callers to identify themselves with tool and email. */
+  tool: string;
+  email?: string;
+  maxResults: number;
+  resultsPerQuery: number;
+  timeoutMs: number;
+}
+
+/** Client medical records uploaded for MCA cases. */
+export interface CaseRecordsSettings {
+  storagePath: string;
+  maxFileSizeBytes: number;
+  maxFilesPerCase: number;
+  /** Total pages across all records of one analysis. */
+  maxPagesPerCase: number;
+  /** Characters of record text per chronology extraction call. */
+  chronologyBatchChars: number;
+  /** Characters of chronology given to the causation analysis prompt. */
+  chronologyPromptChars: number;
+  /** Unattached uploads are deleted after this many hours. */
+  stagedTtlHours: number;
 }
 
 export type EmailProviderName = 'console' | 'smtp' | 'transactional';
@@ -152,13 +193,23 @@ export interface JobsSettings {
 }
 
 export interface ResearchProviderSettings {
-  /** mock uses local fixtures; live does not call external research APIs until an adapter is connected. */
+  /** mock uses local fixtures; live calls the connected public sources (NPI Registry, Open Payments, OpenAlex, CourtListener). */
   mode: 'mock' | 'live';
   timeoutMs: number;
   retryMaxAttempts: number;
   retryDelayMs: number;
   /** Minimum gap between calls to the same provider. 0 disables the local limiter. */
   minIntervalMs: number;
+  /** Optional. CourtListener search works without it; opinion excerpts need it. */
+  courtListenerToken?: string;
+  /** CourtListener full-text search can take 30+ seconds. */
+  courtListenerTimeoutMs: number;
+  /** Optional OpenAlex API key. */
+  openAlexApiKey?: string;
+  /** Optional contact address OpenAlex asks API users to send. */
+  openAlexMailto?: string;
+  /** Most recent CMS Open Payments program years to total. */
+  openPaymentsYears: number;
 }
 
 export interface IndexingConfigSettings {
@@ -204,6 +255,8 @@ export interface RootConfig {
   auth: AuthSettings;
   jobs: JobsSettings;
   research: ResearchProviderSettings;
+  literature: LiteratureSearchSettings;
+  caseRecords: CaseRecordsSettings;
   features: FeatureFlags;
   indexing: IndexingConfigSettings;
   rag: RagConfigSettings;

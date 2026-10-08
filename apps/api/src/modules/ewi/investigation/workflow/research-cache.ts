@@ -24,6 +24,7 @@ export class PublicResearchCache {
       normalize(query.expertName),
       normalize(query.city),
       normalize(query.specialty),
+      query.npi?.trim() ?? '',
     ].join('|');
   }
 

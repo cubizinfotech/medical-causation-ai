@@ -78,8 +78,13 @@ export class EmbeddingProviderFactory {
     const provider = this.providers.get(providerName);
 
     if (!provider) {
+      // Anthropic has no embeddings API; Claude is set with AI_PROVIDER instead.
+      const hint =
+        String(providerName) === 'anthropic'
+          ? ' Anthropic does not offer embeddings: set AI_PROVIDER=anthropic for Claude and keep EMBEDDING_PROVIDER on the provider your knowledge base was indexed with (Anthropic recommends voyage for new indexes).'
+          : '';
       throw new ConfigurationErrorException(
-        `Unknown embedding provider "${providerName}". Supported: ${Array.from(this.providers.keys()).join(', ')}`,
+        `Unknown embedding provider "${providerName}". Supported: ${Array.from(this.providers.keys()).join(', ')}.${hint}`,
       );
     }
 

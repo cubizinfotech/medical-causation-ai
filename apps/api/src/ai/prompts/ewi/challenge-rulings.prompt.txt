@@ -1,0 +1,7 @@
+Expert: {{expertName}} (surname: {{surname}})
+
+Court opinion excerpts. Each item lists the case and verbatim excerpts:
+
+{{itemsJson}}
+
+Return one JSON object with an entry for every item id.

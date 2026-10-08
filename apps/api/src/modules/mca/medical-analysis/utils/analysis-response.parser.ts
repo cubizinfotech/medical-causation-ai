@@ -245,5 +245,6 @@ export function parseMedicalAnalysisJson(
     limitations: output.limitations ?? [],
     conclusion: output.conclusion ?? '',
     citations: output.citations ?? [],
+    literatureSearch: output.literatureSearch,
   };
 }

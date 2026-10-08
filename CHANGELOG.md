@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- EWI live research (`RESEARCH_PROVIDER=live`): NPI Registry identity check (optional NPI on the intake form), CMS Open Payments totals by the confirmed NPI, OpenAlex publications with strict author matching, and CourtListener opinions with Daubert/Frye/Rule 702 challenges. Rulings are recorded only from quoted court text.
+- EWI report section 27 "Daubert/Frye Challenges" (template `2.1.0`, 41 sections) and an identity block in Expert Background.
+
 ### Changed
 
 - Guides consolidated to `README.md`, `TODO.md`, `DEMO_GUIDE.md`, `DEPLOYMENT.md`, `docs/how-it-works.md`, and `docs/index.html`.

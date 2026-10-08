@@ -8,7 +8,6 @@ import {
   Brain,
   Calendar,
   Download,
-  ExternalLink,
   FileText,
   Gavel,
   Globe,
@@ -16,6 +15,7 @@ import {
   Printer,
   Scale,
   Shield,
+  Stethoscope,
 } from "lucide-react";
 import type { MedicalAnalysisResult } from "@/features/mca/medical-analysis/types";
 import {
@@ -27,6 +27,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ReportTermsSection } from "@/components/mca/report/report-terms-section";
+import { PublicLiteratureSection } from "@/components/mca/report/public-literature-section";
+import { MedicalChronologySection } from "@/components/mca/report/medical-chronology-section";
+import { RecordPageLink } from "@/components/mca/report/record-page-link";
 import { formatReportDate } from "@/utils/format-date";
 
 function SectionCard({
@@ -245,6 +248,12 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
           </ol>
         </SectionCard>
 
+        {result.chronology ? (
+          <SectionCard icon={Stethoscope} title="Medical Chronology">
+            <MedicalChronologySection chronology={result.chronology} />
+          </SectionCard>
+        ) : null}
+
         <SectionCard icon={AlertTriangle} title="Risk Factors">
           <div className="space-y-3">
             {result.riskFactors.map((factor) => (
@@ -264,55 +273,8 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
           </div>
         </SectionCard>
 
-        <SectionCard icon={Globe} title="Public Research Sources">
-          <p className="mb-4 text-sm text-muted-foreground">
-            Simulated public literature search across PubMed, NIH,
-            ClinicalTrials.gov, and other biomedical databases for
-            demonstration.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {result.researchSources.public.map((source) => (
-              <div
-                key={source.name}
-                className="rounded-lg border border-border bg-muted/20 px-4 py-3 text-sm"
-              >
-                <p className="font-medium">{source.name}</p>
-                <p className="text-muted-foreground">{source.description}</p>
-                <Badge variant="outline" className="mt-2">
-                  {source.status}
-                </Badge>
-              </div>
-            ))}
-          </div>
-          <ul className="mt-6 space-y-3">
-            {result.publicReferences.map((ref) => (
-              <li
-                key={ref.id}
-                className="rounded-lg border border-border p-4 text-sm"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{ref.source}</Badge>
-                  {ref.year ? (
-                    <span className="text-xs text-muted-foreground">
-                      {ref.year}
-                    </span>
-                  ) : null}
-                </div>
-                <p className="mt-2 font-medium">{ref.title}</p>
-                {ref.excerpt ? (
-                  <p className="mt-1 text-muted-foreground">{ref.excerpt}</p>
-                ) : null}
-                <a
-                  href={ref.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="no-print mt-2 inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  View source <ExternalLink className="h-3 w-3" />
-                </a>
-              </li>
-            ))}
-          </ul>
+        <SectionCard icon={Globe} title="Published Medical Literature">
+          <PublicLiteratureSection result={result} />
         </SectionCard>
 
         <SectionCard icon={BookOpen} title="Private Knowledge Base Sources">
@@ -457,10 +419,23 @@ function EvidenceList({
         >
           <p className="leading-relaxed">{item.excerpt}</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            {item.citation.documentName}
-            {item.citation.pageNumber
-              ? ` · Page ${item.citation.pageNumber}`
-              : ""}
+            {item.citation.sourceKind === "medical_record" &&
+            item.citation.recordId &&
+            item.citation.pageNumber ? (
+              <RecordPageLink
+                recordId={item.citation.recordId}
+                pageNumber={item.citation.pageNumber}
+              >
+                {item.citation.documentName} · Page {item.citation.pageNumber}
+              </RecordPageLink>
+            ) : (
+              <>
+                {item.citation.documentName}
+                {item.citation.pageNumber
+                  ? ` · Page ${item.citation.pageNumber}`
+                  : ""}
+              </>
+            )}
           </p>
           <p className="mt-2 text-muted-foreground">{item.reasoning}</p>
         </li>

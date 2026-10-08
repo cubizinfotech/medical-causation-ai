@@ -2,6 +2,7 @@
  * Normalized legal research records.
  * Values come only from collected source statements. Nothing is invented.
  */
+import type { ExpertChallenge } from './expert-challenge';
 
 export const LEGAL_DOCUMENT_TYPES = [
   'case',
@@ -52,6 +53,8 @@ export const LEGAL_METADATA_KEYS = [
   'publicationDate',
   'metadataOnly',
   'identity',
+  'citation',
+  'challenge',
 ] as const;
 
 export interface LegalMatter {
@@ -77,6 +80,16 @@ export interface LegalMatter {
   shortDescription: string | null;
   transcriptMetadata: string | null;
   importantStatements: string[];
+  citation: string | null;
+  /** Set when the opinion mentions an admissibility challenge. */
+  challenge: ExpertChallenge | null;
+}
+
+/** An opinion that mentions the expert with Daubert/Frye/Rule 702 language. */
+export interface ChallengeRecord {
+  matter: LegalMatter;
+  challenge: ExpertChallenge;
+  sortDate: string | null;
 }
 
 export interface PrioritizedOrder {
@@ -129,5 +142,7 @@ export interface LegalResearchDossier {
   motionsAndPleadings: ChronologicalFiling[];
   depositions: DepositionRecord[];
   testimonyContradictions: TestimonyContradiction[];
+  /** Determined rulings first (excluded, limited, admitted), newest first. */
+  challenges: ChallengeRecord[];
   sourceAttempts: LegalSourceAttempt[];
 }

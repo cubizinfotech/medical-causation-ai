@@ -2,14 +2,17 @@ import {
   caseFormDefaults,
   type CaseFormValues,
 } from "../schemas/case-form.schema";
-import type { MedicalAnalysisResult } from "@/features/mca/medical-analysis/types";
+import type {
+  CaseRecordSummary,
+  MedicalAnalysisResult,
+} from "@/features/mca/medical-analysis/types";
 import { isBrowser } from "@/lib/config/env";
 
 const CASE_FIELDS = Object.keys(caseFormDefaults) as (keyof CaseFormValues)[];
 
 export const STORAGE_KEYS = {
   case: "mca:case-form",
-  uploadedFiles: "mca:uploaded-files",
+  caseRecords: "mca:case-records",
   analysisResult: "mca:analysis-result",
   activeAnalysis: "mca:active-analysis",
 } as const;
@@ -59,9 +62,32 @@ export function loadCaseForm(): CaseFormValues | null {
   }
 }
 
-export function saveUploadedFileNames(names: string[]): void {
+/** Uploaded records waiting for the next analysis (ids stay valid ~24 h). */
+export function saveCaseRecords(records: CaseRecordSummary[]): void {
   if (!isBrowser()) return;
-  sessionStorage.setItem(STORAGE_KEYS.uploadedFiles, JSON.stringify(names));
+  sessionStorage.setItem(STORAGE_KEYS.caseRecords, JSON.stringify(records));
+}
+
+export function loadCaseRecords(): CaseRecordSummary[] {
+  if (!isBrowser()) return [];
+  try {
+    const parsed: unknown = JSON.parse(
+      sessionStorage.getItem(STORAGE_KEYS.caseRecords) ?? "[]",
+    );
+    return Array.isArray(parsed)
+      ? (parsed as CaseRecordSummary[]).filter(
+          (record) => typeof record?.id === "string",
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** After an analysis starts, its records belong to it and cannot be reused. */
+export function clearCaseRecords(): void {
+  if (!isBrowser()) return;
+  sessionStorage.removeItem(STORAGE_KEYS.caseRecords);
 }
 
 export function saveAnalysisResult(result: MedicalAnalysisResult): void {
@@ -114,5 +140,5 @@ export function clearDemoSessionCache(): void {
   if (!isBrowser()) return;
   sessionStorage.removeItem(STORAGE_KEYS.analysisResult);
   sessionStorage.removeItem(STORAGE_KEYS.activeAnalysis);
-  sessionStorage.removeItem(STORAGE_KEYS.uploadedFiles);
+  sessionStorage.removeItem(STORAGE_KEYS.caseRecords);
 }

@@ -12,7 +12,7 @@ export const EWI_DISPLAY_STAGES = [
   },
   {
     id: "profiles",
-    label: "CV/Profile Research",
+    label: "Identity (NPI) and Profiles",
     stageIds: ["profiles"],
   },
   {

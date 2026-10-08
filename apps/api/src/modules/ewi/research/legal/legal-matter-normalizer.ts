@@ -1,4 +1,5 @@
 import type { ExpertEvidenceItem } from '@integrations/expert-research';
+import { readExpertChallenge } from './expert-challenge';
 import {
   LEGAL_DOCUMENT_TYPES,
   ORDER_SIGNIFICANCE_TAGS,
@@ -92,6 +93,8 @@ function matterFromItem(item: ExpertEvidenceItem, index: number): LegalMatter {
     shortDescription: readString(raw.shortDescription) ?? summary,
     transcriptMetadata: readString(raw.transcriptMetadata),
     importantStatements: readStringList(raw.importantStatements),
+    citation: readString(raw.citation),
+    challenge: readExpertChallenge(raw.challenge),
   };
 }
 

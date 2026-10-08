@@ -1,9 +1,17 @@
-import type { ExpertEvidenceItem } from '@integrations/expert-research';
+import type {
+  ExpertEvidenceItem,
+  ExpertIdentityResolution,
+} from '@integrations/expert-research';
 import type { ExpertDiscrepancy } from '../research/discrepancy-analyzer';
 import type { CrossExamQuestion } from '../research/cross-exam-question.generator';
 import type { EwiAnalysisDocument } from '../investigation/analysis/ewi-analysis.types';
 import type { LegalMatter, LegalResearchDossier } from '../research/legal';
-import { buildLegalResearchDossier, isLegalItem } from '../research/legal';
+import {
+  CHALLENGE_OUTCOME_LABEL,
+  CHALLENGE_STANDARD_LABEL,
+  buildLegalResearchDossier,
+  isLegalItem,
+} from '../research/legal';
 import type {
   OnlinePresenceDossier,
   PresenceRecord,
@@ -97,35 +105,40 @@ export const EWI_REPORT_SECTIONS: EwiReportSectionSpec[] = [
     number: 26,
     title: '26. Testimony Inconsistencies',
   },
-  { id: 'income-bias', number: 27, title: '27. Income/Bias' },
-  { id: 'lawsuits', number: 28, title: '28. Lawsuits/Malpractice' },
-  { id: 'criminal', number: 29, title: '29. Criminal Records' },
-  { id: 'social', number: 30, title: '30. Social Media' },
-  { id: 'videos', number: 31, title: '31. Videos/Transcripts' },
-  { id: 'news', number: 32, title: '32. News/Blogs' },
-  { id: 'university-rules', number: 33, title: '33. University Rules' },
+  {
+    id: 'admissibility-challenges',
+    number: 27,
+    title: '27. Daubert/Frye Challenges',
+  },
+  { id: 'income-bias', number: 28, title: '28. Income/Bias' },
+  { id: 'lawsuits', number: 29, title: '29. Lawsuits/Malpractice' },
+  { id: 'criminal', number: 30, title: '30. Criminal Records' },
+  { id: 'social', number: 31, title: '31. Social Media' },
+  { id: 'videos', number: 32, title: '32. Videos/Transcripts' },
+  { id: 'news', number: 33, title: '33. News/Blogs' },
+  { id: 'university-rules', number: 34, title: '34. University Rules' },
   {
     id: 'corporate',
-    number: 34,
-    title: '34. Corporate Affiliations',
+    number: 35,
+    title: '35. Corporate Affiliations',
   },
-  { id: 'patient-reviews', number: 35, title: '35. Patient Reviews' },
+  { id: 'patient-reviews', number: 36, title: '36. Patient Reviews' },
   {
     id: 'office-location',
-    number: 36,
-    title: '36. Office/Location Findings',
+    number: 37,
+    title: '37. Office/Location Findings',
   },
-  { id: 'misc', number: 37, title: '37. Miscellaneous Findings' },
+  { id: 'misc', number: 38, title: '38. Miscellaneous Findings' },
   {
     id: 'overall-findings',
-    number: 38,
-    title: '38. Overall Research Findings',
+    number: 39,
+    title: '39. Overall Research Findings',
   },
-  { id: 'source-index', number: 39, title: '39. Source Index' },
+  { id: 'source-index', number: 40, title: '40. Source Index' },
   {
     id: 'questions',
-    number: 40,
-    title: '40. Cross-Examination Questions',
+    number: 41,
+    title: '41. Cross-Examination Questions',
   },
 ];
 
@@ -147,6 +160,7 @@ export function buildEwiReportDocument(input: {
   legalResearch?: LegalResearchDossier;
   onlinePresence?: OnlinePresenceDossier;
   professionalBackground?: ProfessionalBackgroundDossier;
+  identity?: ExpertIdentityResolution | null;
 }): ReportDocumentModel {
   const tracker: ClaimTracker = {
     claimed: new Set<number>(),
@@ -178,10 +192,7 @@ export function buildEwiReportDocument(input: {
       case 'summary':
         return summarySection(spec, input);
       case 'background':
-        return evidenceSection(spec, tracker, {
-          categories: ['identity', 'profile', 'specialty', 'location'],
-          providers: ['web_search', 'orcid'],
-        });
+        return backgroundSection(spec, tracker, input.identity ?? null);
       case 'inconsistencies':
         return inconsistenciesSection(spec, input);
       case 'cv-comparison':
@@ -271,6 +282,8 @@ export function buildEwiReportDocument(input: {
         return depositionsSection(spec, legalDossier, tracker);
       case 'testimony-inconsistencies':
         return testimonyInconsistenciesSection(spec, legalDossier, tracker);
+      case 'admissibility-challenges':
+        return admissibilitySection(spec, legalDossier, tracker);
       case 'income-bias':
         return incomeBiasSection(spec, professionalDossier, tracker);
       case 'lawsuits':
@@ -279,9 +292,10 @@ export function buildEwiReportDocument(input: {
           legalDossier,
           tracker,
           (matter) =>
-            matter.documentType === 'malpractice' ||
-            matter.documentType === 'case' ||
-            matter.documentType === 'expert_witness_case',
+            matter.challenge === null &&
+            (matter.documentType === 'malpractice' ||
+              matter.documentType === 'case' ||
+              matter.documentType === 'expert_witness_case'),
         );
       case 'criminal':
         return legalMattersSection(
@@ -398,6 +412,153 @@ function simpleFieldSection(
     title: spec.title,
     blocks: [{ text }],
   };
+}
+
+function backgroundSection(
+  spec: EwiReportSectionSpec,
+  tracker: ClaimTracker,
+  identity: ExpertIdentityResolution | null,
+): ReportSectionModel {
+  // NPI Registry items are claimed by category: its license list belongs in
+  // the Licenses section.
+  const items = claimEvidence(tracker, {
+    categories: ['identity', 'profile', 'specialty', 'location'],
+    providers: ['web_search', 'orcid'],
+  });
+  const blocks = identityBlocks(identity);
+  if (items.length > 0) {
+    blocks.push(...items.flatMap(findingBlocks));
+  } else if (blocks.length === 0) {
+    blocks.push({ text: EMPTY, style: 'note' });
+  }
+  return { id: spec.id, title: spec.title, blocks };
+}
+
+const IDENTITY_STATUS_TEXT: Record<ExpertIdentityResolution['status'], string> =
+  {
+    confirmed: 'Identity confirmed in the NPI Registry',
+    ambiguous: 'Identity not confirmed — several possible NPI records',
+    not_found: 'No matching NPI Registry record',
+    npi_mismatch: 'The supplied NPI does not match the expert',
+    unavailable: 'NPI Registry not checked',
+  };
+
+function identityBlocks(
+  identity: ExpertIdentityResolution | null,
+): ReportBlock[] {
+  if (!identity) return [];
+  const blocks: ReportBlock[] = [
+    { text: IDENTITY_STATUS_TEXT[identity.status], style: 'subheading' },
+    { text: identity.note },
+  ];
+  const record = identity.identity;
+  if (record) {
+    blocks.push({
+      text: [
+        `NPI: ${record.npi}`,
+        `Name: ${record.name}`,
+        record.taxonomy ? `Primary taxonomy: ${record.taxonomy}` : null,
+        record.city
+          ? `Practice location: ${record.city}${record.state ? `, ${record.state}` : ''}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    });
+  }
+  if (identity.basis.length > 0) {
+    blocks.push({
+      text: `Matched on: ${identity.basis.join(', ')}.`,
+      style: 'citation',
+    });
+  }
+  for (const note of identity.notes) {
+    blocks.push({ text: note, style: 'note' });
+  }
+  for (const candidate of identity.candidates) {
+    blocks.push({
+      text: `Possible record: NPI ${candidate.npi} — ${candidate.name}${candidate.taxonomy ? `, ${candidate.taxonomy}` : ''}${candidate.city ? `, ${candidate.city}${candidate.state ? `, ${candidate.state}` : ''}` : ''}`,
+    });
+  }
+  if (record?.url) {
+    blocks.push({ text: record.url, link: record.url, style: 'citation' });
+  }
+  if (identity.simulated) {
+    blocks.push({
+      text: 'Development fixture. Not a real NPI Registry record.',
+      style: 'note',
+    });
+  }
+  return blocks;
+}
+
+function admissibilitySection(
+  spec: EwiReportSectionSpec,
+  dossier: LegalResearchDossier,
+  tracker: ClaimTracker,
+): ReportSectionModel {
+  const records = dossier.challenges;
+  markLegalClaimed(
+    tracker,
+    records.map((record) => record.matter),
+  );
+  const blocks: ReportBlock[] = [
+    {
+      text: 'Court opinions that contain the expert’s full name, a specialty term, and Daubert, Frye, Rule 702, or motion-to-exclude language. An outcome is stated only when the court’s own words, quoted exactly from the collected opinion text, say how the court ruled on this expert. “Not determined” means the collected text did not say; read the opinion.',
+      style: 'note',
+    },
+  ];
+  if (records.length === 0) {
+    blocks.push({ text: EMPTY, style: 'note' });
+    return { id: spec.id, title: spec.title, blocks };
+  }
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const label = CHALLENGE_OUTCOME_LABEL[record.challenge.outcome];
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  blocks.push({
+    text: `${records.length} opinion(s): ${[...counts.entries()]
+      .map(([label, count]) => `${label} ${count}`)
+      .join('; ')}.`,
+  });
+  for (const record of records) {
+    const matter = record.matter;
+    const challenge = record.challenge;
+    blocks.push({
+      text: `${matter.caseName ?? matter.title}${record.sortDate ? ` (${record.sortDate})` : ''}`,
+      style: 'subheading',
+    });
+    const fields = [
+      matter.court ? `Court: ${matter.court}` : null,
+      matter.citation ? `Citation: ${matter.citation}` : null,
+      matter.caseNumber ? `Docket: ${matter.caseNumber}` : null,
+      `Standard: ${CHALLENGE_STANDARD_LABEL[challenge.standard]}`,
+      `Outcome: ${CHALLENGE_OUTCOME_LABEL[challenge.outcome]}`,
+    ].filter((line): line is string => Boolean(line));
+    for (const line of fields) blocks.push({ text: line });
+    blocks.push({
+      text: challenge.note,
+      style: challenge.basis === 'court_text' ? undefined : 'note',
+    });
+    if (challenge.basis !== 'court_text') {
+      for (const excerpt of challenge.excerpts.slice(0, 2)) {
+        blocks.push({ text: `Excerpt: “${excerpt}”`, style: 'citation' });
+      }
+    }
+    blocks.push({
+      text: `Evidence reference: ${matter.evidenceReference}`,
+      style: 'citation',
+    });
+    if (matter.sourceUrl) {
+      blocks.push({
+        text: matter.sourceUrl,
+        link: matter.sourceUrl,
+        style: 'citation',
+      });
+    }
+  }
+  return { id: spec.id, title: spec.title, blocks };
 }
 
 function summarySection(
@@ -744,11 +905,14 @@ function incomeBiasSection(
 ): ReportSectionModel {
   const records = uniqueProfessionalRecords(dossier.financial)
     .filter((record) => !hasEstimatedPercentage(record))
-    .sort((a, b) =>
-      compareOptionalDates(
-        a.sortDate ?? a.paymentDate,
-        b.sortDate ?? b.paymentDate,
-      ),
+    .sort(
+      (a, b) =>
+        // The Open Payments totals record leads its per-company records.
+        Number(isOpenPaymentsTotals(b)) - Number(isOpenPaymentsTotals(a)) ||
+        compareOptionalDates(
+          a.sortDate ?? a.paymentDate,
+          b.sortDate ?? b.paymentDate,
+        ),
     );
   markProfessionalClaimed(tracker, records);
   const blocks: ReportBlock[] = [
@@ -1374,6 +1538,13 @@ function presenceRecordBlocks(record: PresenceRecord): ReportBlock[] {
     blocks.push({ text: record.url, link: record.url, style: 'citation' });
   }
   return blocks;
+}
+
+function isOpenPaymentsTotals(record: ProfessionalRecord): boolean {
+  return (
+    record.kind === 'open_payments' &&
+    record.title.startsWith('CMS Open Payments ')
+  );
 }
 
 function orderDetailBlocks(matter: LegalMatter): ReportBlock[] {

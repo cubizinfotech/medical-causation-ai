@@ -2,11 +2,14 @@ import type {
   ExpertResearchQuery,
   ResearchRunMode,
 } from '../expert-research.types';
+import type { LiveSourceSettings } from '../live/live-sources';
 
 export interface ProviderRuntimeOptions {
   mode: ResearchRunMode;
   timeoutMs: number;
   minIntervalMs: number;
+  /** Settings for the connected public sources in live mode. */
+  live?: LiveSourceSettings;
 }
 
 const NAME_MIN = 2;
@@ -29,10 +32,33 @@ export class ProviderRateLimitError extends Error {
 export type QueryValidation =
   { ok: true; value: ExpertResearchQuery } | { ok: false; message: string };
 
+/**
+ * NPI check digit: Luhn over the first nine digits with the 80840 prefix
+ * (CMS NPI standard). Catches most typos before a registry request.
+ */
+export function isValidNpi(value: string): boolean {
+  if (!/^\d{10}$/.test(value)) return false;
+  const digits = `80840${value.slice(0, 9)}`.split('').map(Number);
+  let sum = 0;
+  for (let index = 0; index < digits.length; index++) {
+    // Double every second digit from the right of the check-digit position.
+    const fromRight = digits.length - index;
+    let digit = digits[index];
+    if (fromRight % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return check === Number(value[9]);
+}
+
 export function validateExpertResearchQuery(query: {
   expertName?: string;
   city?: string;
   specialty?: string;
+  npi?: string;
 }): QueryValidation {
   const expertName = query.expertName?.trim() ?? '';
   const city = query.city?.trim() ?? '';
@@ -55,7 +81,19 @@ export function validateExpertResearchQuery(query: {
       message: 'Medical specialty must be between 2 and 200 characters.',
     };
   }
-  return { ok: true, value: { expertName, city, specialty } };
+  const npi = query.npi?.replace(/\s+/g, '') ?? '';
+  if (npi && !isValidNpi(npi)) {
+    return {
+      ok: false,
+      message: 'NPI must be a valid 10-digit National Provider Identifier.',
+    };
+  }
+  return {
+    ok: true,
+    value: npi
+      ? { expertName, city, specialty, npi }
+      : { expertName, city, specialty },
+  };
 }
 
 export function withTimeout<T>(

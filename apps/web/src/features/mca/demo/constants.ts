@@ -1,10 +1,12 @@
 export const ANALYSIS_PROGRESS_STEPS = [
   { id: "intake", label: "Medical Case Intake" },
+  { id: "records", label: "Reading Medical Records" },
+  { id: "chronology", label: "Building Medical Chronology" },
   { id: "research", label: "AI Research" },
   { id: "private-kb", label: "Searching Private Knowledge Base" },
-  { id: "public-lit", label: "Searching Public Medical Literature" },
   { id: "evidence", label: "Evidence Analysis" },
   { id: "reasoning", label: "Medical Reasoning" },
+  { id: "public-lit", label: "Searching Public Medical Literature" },
   { id: "summary", label: "Generating Statistical Summary" },
   { id: "cross-exam", label: "Generating Cross Examination Questions" },
   { id: "report", label: "Final Report" },

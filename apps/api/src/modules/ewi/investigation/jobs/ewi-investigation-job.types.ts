@@ -1,4 +1,7 @@
-import type { ExpertEvidenceItem } from '@integrations/expert-research';
+import type {
+  ExpertEvidenceItem,
+  ExpertIdentityResolution,
+} from '@integrations/expert-research';
 import type { ExpertDiscrepancy } from '../../research/discrepancy-analyzer';
 import type { CrossExamQuestion } from '../../research/cross-exam-question.generator';
 import type { EwiAnalysisRecord } from '../analysis/ewi-analysis.types';
@@ -19,6 +22,8 @@ export interface EwiInvestigationRequest {
   expertName: string;
   city: string;
   specialty: string;
+  /** Optional National Provider Identifier supplied by the attorney. */
+  npi?: string;
 }
 
 export interface EwiSourceAttemptStatus {
@@ -39,6 +44,9 @@ export interface EwiInvestigationResult {
   expertName: string;
   city: string;
   specialty: string;
+  npi?: string | null;
+  /** How the expert was identified in the NPI Registry. Null when not checked. */
+  identity?: ExpertIdentityResolution | null;
   evidence: ExpertEvidenceItem[];
   discrepancies: ExpertDiscrepancy[];
   questions: CrossExamQuestion[];

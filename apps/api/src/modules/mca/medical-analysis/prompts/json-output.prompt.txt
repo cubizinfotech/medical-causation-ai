@@ -28,7 +28,12 @@ Return ONLY valid JSON matching this schema (no markdown, no extra text):
   "conclusion": "string — evidence-based assessment, not a diagnosis",
   "citations": [
     { "chunkId": "string", "statement": "string — claim supported by this citation" }
-  ]
+  ],
+  "literatureSearch": {
+    "exposureTerms": ["string — 1 to 3 standard medical names for the injury or trauma, e.g. traumatic brain injury"],
+    "outcomeTerms": ["string — 1 to 3 standard medical names for the claimed condition, e.g. ischemic stroke"],
+    "queries": ["string — 2 or 3 plain-English PubMed queries of 3 to 7 words that name the relationship, e.g. stroke risk after traumatic brain injury; most specific first"]
+  }
 }
 
 Rules:
@@ -38,3 +43,4 @@ Rules:
 - If you cannot match a citation to one exact allowed chunkId, omit that evidence item or citation entirely.
 - Never fabricate chunkIds, page numbers, or document names
 - If evidence is insufficient, set confidenceScore below 40 and explain in limitations
+- literatureSearch is used to search PubMed, a public database, for published studies on this causation question. Use only medical concepts: never the patient's age, sex, dates, names, or places. Keep queries short (PubMed requires every word to match) and do not use quotation marks, field tags, or AND/OR.

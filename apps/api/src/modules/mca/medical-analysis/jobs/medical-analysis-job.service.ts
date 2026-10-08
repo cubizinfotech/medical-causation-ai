@@ -27,6 +27,7 @@ import type { AnalyzeMedicalCaseDto } from '../dto/analyze-medical-case.dto';
 import { mapCaseDtoToAnalysisRequest } from '../utils/case-request.mapper';
 import type { MedicalAnalysisGateway } from '../gateway/medical-analysis.gateway';
 import { AnalysisHistoryService } from '../services/analysis-history.service';
+import { CaseRecordsService } from '../records/case-records.service';
 
 @Injectable()
 export class MedicalAnalysisJobService
@@ -40,6 +41,7 @@ export class MedicalAnalysisJobService
     private readonly redisService: RedisService,
     @Inject(forwardRef(() => AnalysisHistoryService))
     private readonly historyService: AnalysisHistoryService,
+    private readonly caseRecords: CaseRecordsService,
   ) {}
 
   setGateway(gateway: MedicalAnalysisGateway): void {
@@ -71,12 +73,25 @@ export class MedicalAnalysisJobService
     const request = mapCaseDtoToAnalysisRequest(dto);
     const jobId = randomUUID();
     const now = new Date().toISOString();
+    const recordIds = request.recordIds ?? [];
+
+    // Validate before the case exists, so a bad record list creates nothing.
+    if (recordIds.length > 0) {
+      await this.caseRecords.assertAttachable(ownerUserId, recordIds);
+    }
 
     const analysisCase = await this.historyService.createCase(
       jobId,
       dto,
       ownerUserId,
     );
+    if (recordIds.length > 0) {
+      await this.caseRecords.attachToCase(
+        ownerUserId,
+        recordIds,
+        analysisCase.id,
+      );
+    }
 
     const record: MedicalAnalysisJobRecord = {
       jobId,

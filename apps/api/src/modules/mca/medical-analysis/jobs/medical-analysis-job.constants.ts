@@ -12,6 +12,8 @@ export type AnalysisJobStatus =
 
 export const ANALYSIS_JOB_STEPS = {
   INTAKE: 'intake',
+  RECORDS: 'records',
+  CHRONOLOGY: 'chronology',
   PRIVATE_KB: 'private-kb',
   PUBLIC_LIT: 'public-lit',
   EVIDENCE: 'evidence',
@@ -26,6 +28,8 @@ export type AnalysisJobStep =
 
 export const ANALYSIS_JOB_STEP_LABELS: Record<AnalysisJobStep, string> = {
   [ANALYSIS_JOB_STEPS.INTAKE]: 'Medical Case Intake',
+  [ANALYSIS_JOB_STEPS.RECORDS]: 'Reading Medical Records',
+  [ANALYSIS_JOB_STEPS.CHRONOLOGY]: 'Building Medical Chronology',
   [ANALYSIS_JOB_STEPS.PRIVATE_KB]: 'Searching Private Knowledge Base',
   [ANALYSIS_JOB_STEPS.PUBLIC_LIT]: 'Searching Public Medical Literature',
   [ANALYSIS_JOB_STEPS.EVIDENCE]: 'Evidence Analysis',

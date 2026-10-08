@@ -7,7 +7,7 @@ const query = {
   specialty: 'Orthopedics',
 };
 
-function item(identity?: Record<string, string>): ExpertEvidenceItem {
+function item(identity?: Record<string, string | boolean>): ExpertEvidenceItem {
   return {
     sourceId: 'web_search',
     category: 'profile',
@@ -49,5 +49,63 @@ describe('expert identity matching', () => {
       'uncertain',
     );
     expect(assessIdentityMatch(query, item())).toBe('uncertain');
+  });
+
+  it('accepts name, city, and specialty written differently', () => {
+    expect(
+      assessIdentityMatch(
+        query,
+        item({
+          name: 'Dr. Jane A. Smith, MD',
+          city: 'Boston, MA',
+          specialty: 'Orthopaedic Surgery',
+        }),
+      ),
+    ).toBe('matched');
+  });
+
+  it('keeps a different middle initial or first name separate', () => {
+    const withMiddle = { ...query, expertName: 'Jane A. Smith' };
+    expect(
+      assessIdentityMatch(
+        withMiddle,
+        item({ name: 'Jane B. Smith', city: 'Boston' }),
+      ),
+    ).toBe('uncertain');
+    expect(
+      assessIdentityMatch(query, item({ name: 'Joan Smith', city: 'Boston' })),
+    ).toBe('uncertain');
+  });
+
+  it('trusts live-source matching but never ambiguous records', () => {
+    expect(
+      assessIdentityMatch(
+        query,
+        item({ name: 'JANE SMITH', city: 'Cambridge', verifiedBy: 'npi' }),
+      ),
+    ).toBe('matched');
+    expect(
+      assessIdentityMatch(
+        query,
+        item({ name: 'Jane Smith', verifiedBy: 'source_match' }),
+      ),
+    ).toBe('matched');
+    expect(
+      assessIdentityMatch(
+        query,
+        item({
+          name: 'Jane Smith',
+          city: 'Boston',
+          specialty: 'Orthopedics',
+          ambiguous: true,
+        }),
+      ),
+    ).toBe('uncertain');
+    expect(
+      assessIdentityMatch(
+        query,
+        item({ name: 'Mary Jones', verifiedBy: 'npi' }),
+      ),
+    ).toBe('uncertain');
   });
 });

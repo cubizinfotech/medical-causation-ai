@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { DocxReportRenderer } from '@platform/report/docx-report.renderer';
 import type { ReportArtifact } from '@platform/report/report.types';
-import type { ExpertEvidenceItem } from '@integrations/expert-research';
+import type {
+  ExpertEvidenceItem,
+  ExpertIdentityResolution,
+} from '@integrations/expert-research';
 import type { ExpertDiscrepancy } from '../research/discrepancy-analyzer';
 import type { CrossExamQuestion } from '../research/cross-exam-question.generator';
 import type { EwiAnalysisDocument } from '../investigation/analysis/ewi-analysis.types';
@@ -23,6 +26,7 @@ export interface EwiReportInput {
   legalResearch?: LegalResearchDossier;
   onlinePresence?: OnlinePresenceDossier;
   professionalBackground?: ProfessionalBackgroundDossier;
+  identity?: ExpertIdentityResolution | null;
 }
 
 export interface EwiReportOutput extends ReportArtifact {

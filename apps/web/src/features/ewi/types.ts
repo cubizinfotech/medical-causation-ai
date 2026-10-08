@@ -97,6 +97,51 @@ export interface EwiLegalMatter {
   shortDescription?: string | null;
   transcriptMetadata?: string | null;
   importantStatements?: string[];
+  citation?: string | null;
+  challenge?: EwiExpertChallenge | null;
+}
+
+/** Daubert/Frye/Rule 702 challenge. The outcome is set only from the court's own words. */
+export interface EwiExpertChallenge {
+  standard: "daubert" | "frye" | "rule_702" | "unspecified";
+  outcome:
+    | "excluded"
+    | "limited"
+    | "admitted"
+    | "not_challenged"
+    | "not_determined";
+  role: "challenged_expert" | "other" | "unclear";
+  quote: string | null;
+  basis: "court_text" | "not_determined";
+  excerpts: string[];
+  excerptSource: "opinion_text" | "search_snippet" | null;
+  note: string;
+}
+
+export interface EwiIdentityCandidate {
+  npi: string;
+  name: string;
+  credential: string | null;
+  taxonomy: string | null;
+  city: string | null;
+  state: string | null;
+  url: string;
+}
+
+/** How the expert was identified in the NPI Registry. */
+export interface EwiIdentityResolution {
+  status:
+    | "confirmed"
+    | "ambiguous"
+    | "not_found"
+    | "npi_mismatch"
+    | "unavailable";
+  identity: EwiIdentityCandidate | null;
+  basis: string[];
+  note: string;
+  notes: string[];
+  candidates: EwiIdentityCandidate[];
+  simulated?: boolean;
 }
 
 export interface EwiLegalResearch {
@@ -126,6 +171,11 @@ export interface EwiLegalResearch {
     id: string;
     description: string;
     relatedUrls: string[];
+  }>;
+  challenges?: Array<{
+    matter: EwiLegalMatter;
+    challenge: EwiExpertChallenge;
+    sortDate: string | null;
   }>;
   sourceAttempts: Array<{
     sourceId: string;
@@ -201,6 +251,7 @@ export interface EwiProfessionalRecord {
   paymentDate?: string | null;
   paymentAmount?: string | null;
   payer?: string | null;
+  natureOfPayment?: string | null;
   hourlyRate?: string | null;
   percentForensicWork?: string | null;
   percentDefenseWork?: string | null;
@@ -224,6 +275,8 @@ export interface EwiInvestigationResult {
   expertName: string;
   city: string;
   specialty: string;
+  npi?: string | null;
+  identity?: EwiIdentityResolution | null;
   evidence: EwiEvidenceItem[];
   discrepancies: EwiDiscrepancy[];
   questions: EwiCrossExamQuestion[];
@@ -296,6 +349,7 @@ export interface EwiHistoryListItem {
   expertName: string;
   city: string;
   specialty: string;
+  npi?: string | null;
   status: EwiJobStatus;
   step: string | null;
   stepLabel: string | null;
