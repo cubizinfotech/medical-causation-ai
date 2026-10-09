@@ -9,4 +9,11 @@ export * from './providers/identity-match';
 export * from './providers/public-affiliation';
 export * from './providers/research-outcome';
 export * from './live/live-sources';
-export { parsePersonName } from './live/person-name';
+export type {
+  PublicationLookupResult,
+  PublicationLookupStatus,
+} from './live/publication-lookup';
+export { sameTitle } from './live/publication-lookup';
+export { specialtyMatches, taxonomyMatches } from './live/specialty-match';
+export { stateCode, stateName } from './live/location';
+export { namesCompatible, parsePersonName } from './live/person-name';

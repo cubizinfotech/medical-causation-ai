@@ -6,7 +6,7 @@ For the product overview, see [how-it-works.md](./how-it-works.md). For the caus
 
 ## The short version
 
-1. The attorney enters the expert's name, city, and specialty (and, optionally, the expert's NPI) and clicks **Start investigation**.
+1. The attorney enters the expert's name, city, and specialty (and, optionally, the expert's NPI and CV) and clicks **Start investigation**.
 2. The website sends this to the API. The API creates the investigation, puts a job on a Redis queue, and replies immediately with a `jobId` and `investigationId`.
 3. A background worker inside the API walks through 27 stages, from identification through research, cross-checks, inconsistencies, and summary to the report. It saves a checkpoint after each stage and stops if the attorney cancels. With `RESEARCH_PROVIDER=live`, the first research stage confirms the expert in the NPI Registry, and Open Payments, OpenAlex, and CourtListener are searched with that identity.
 4. The browser shows a live timeline, fed by a WebSocket plus polling every 4 seconds.
@@ -58,6 +58,14 @@ sequenceDiagram
 
 **Page:** `/ewi/intake`, which renders [expert-intake-form.tsx](../apps/web/src/components/ewi/expert-intake-form.tsx).
 
+**The CV (optional).** Choosing a PDF uploads it at once ([expert-cv-upload.tsx](../apps/web/src/components/ewi/expert-cv-upload.tsx)):
+
+```
+POST {NEXT_PUBLIC_API_URL}/ewi/documents/cv     (multipart, field "file")
+```
+
+[expert-documents.service.ts](../apps/api/src/modules/ewi/documents/expert-documents.service.ts) checks that the bytes are a PDF, reads each page's text, and saves the file as `EWI_DOCUMENTS_PATH/{userId}/{documentId}.pdf` (default `data/ewi-documents`). Only the uploader can open it (`GET /ewi/documents/:id/file`) or remove it before the investigation starts (`DELETE /ewi/documents/:id`). Scanned pages are listed for OCR, which runs when the investigation reads the CV. A CV that is never used is deleted after `MCA_RECORDS_STAGED_TTL_HOURS`. The form sends its id as `cvDocumentId`.
+
 Unlike MCA, the API call happens **on this page**. On **Start investigation**, `onSubmit`:
 
 1. Saves the form in `sessionStorage` (`saveExpertForm`). This is used by Retry later.
@@ -72,7 +80,7 @@ Content-Type: application/json
 { "expertName": "Jane Doe", "city": "Houston", "specialty": "Neurology" }
 ```
 
-   `npi` may be added (10 digits). The form checks the NPI check digit before sending.
+   `npi` may be added (10 digits). The form checks the NPI check digit before sending. `cvDocumentId` is added when a CV was uploaded.
 
 4. Saves `{ jobId, investigationId }` (`saveActiveEwiJob`) and navigates to `/ewi/investigation`.
 
@@ -90,7 +98,7 @@ Before the controller runs:
 Then `enqueue()`:
 
 1. Creates a `jobId` (UUID).
-2. Creates the **investigation row** in the `ewi` schema (`ewi.experts`, `ewi.investigations`), owned by the logged-in user, with status `pending`. Any NPI is stored on `ewi.investigations.npi` and sent with the job.
+2. Creates the **investigation row** in the `ewi` schema (`ewi.experts`, `ewi.investigations`), owned by the logged-in user, with status `pending`. Any NPI is stored on `ewi.investigations.npi` and sent with the job. A CV is attached to the investigation (`ewi.expert_documents.investigation_id`). If another of the user's investigations already uses that CV (a retry or **Run again**), the file and its page text are copied, so each investigation keeps and deletes its own copy.
 3. Writes the **job record** to Redis (status, step, progress, message, and later the checkpoint).
 4. Adds the job to the **BullMQ queue `ewi-investigation`** with `attempts: 1`.
 5. Returns **HTTP 202** with `{ investigationId, jobId, status: "pending" }`.
@@ -165,6 +173,27 @@ Optional settings: `COURTLISTENER_API_TOKEN` (free account) lets the API read th
 
 The AI never adds a fact. A missing source is reported as missing, not as proof that the expert lacks a credential.
 
+#### Checking the expert's CV
+
+When a CV was uploaded, the **CV and profiles** stage reads it instead of asking a research provider ([expert-cv.service.ts](../apps/api/src/modules/ewi/cv/expert-cv.service.ts)). The CV is never cached with the public research.
+
+1. **OCR.** Scanned pages are read with OCR once (as for MCA records). The text is saved with the page.
+2. **Claims.** The page text goes to the AI in sections of `EWI_CV_BATCH_CHARS` characters, with the prompts `ewi/cv-claims-system` and `ewi/cv-claims`. The model lists what the CV claims (specialty, licenses, board certifications, education and training, appointments, publications and their count, memberships, awards, expert witness work, industry relationships), each with an exact quote. [cv-claims.ts](../apps/api/src/modules/ewi/cv/cv-claims.ts) keeps a claim only if its quote is found on a page of that section, and corrects the page number to where the quote is. Up to 160 claims are kept (40 publications).
+3. **Comparison.** In the inconsistencies stage, [cv-comparison.ts](../apps/api/src/modules/ewi/cv/cv-comparison.ts) sets each claim against the sources, without the AI:
+
+| CV claim | Compared with | Labeled a conflict or a gap when |
+|---|---|---|
+| Specialty | NPI Registry taxonomy | The taxonomy does not fit the stated specialty. |
+| State licenses | Licenses reported to NPPES | A CV license is not in NPPES (Not found), or NPPES lists a state the CV leaves out (Not verified). NPPES is self-reported, so a license is never marked Verified. |
+| Publication count | OpenAlex author profile | The CV claims at least 5 more works and over 25% more than OpenAlex lists. |
+| Publication titles (up to 25) | OpenAlex title search | A work with the title exists but the expert is not an author (high priority), or no work with the title is found. |
+| Industry relationships | Open Payments companies | A company paid $1,000 or more and the CV does not mention it (high priority at $10,000). |
+| Appointments | OpenAlex institutions | Shown as Partly verified when the institution matches. |
+| Expert witness work | CourtListener opinions | Never a conflict: published opinions cover few cases. |
+| Board certification, education | Nothing connected | Shown as Not checked, with where to confirm it. |
+
+Licenses, specialty, and payments are compared only when the NPI identity is confirmed. Conflicts and meaningful gaps are added to the inconsistencies (so they also feed the questions). The full check is saved with the result (`cvCheck`), shown in the **CV Check** tab with links to each CV page, and written to the "CV comparison" section of the Word report.
+
 ### 5. Finishing: the Word report and saved results
 
 When all stages are done, the workflow:
@@ -191,7 +220,7 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 ## Cancel and retry
 
 - **Cancel:** `POST /ewi/histories/:id/cancel` sets the investigation to `cancelled` in PostgreSQL and in the Redis record. The worker notices at the next stage boundary (`shouldContinue` returns false) and stops. Stages already completed stay recorded.
-- **Retry:** the browser submits the saved name, city, specialty, and NPI again. This creates a **new** investigation with a new `jobId`. The old one stays in history.
+- **Retry:** the browser submits the saved name, city, specialty, NPI, and CV again. This creates a **new** investigation with a new `jobId`, and the API copies the CV for it. The old one stays in history. **Run again** on a past investigation does the same.
 
 ## Where the data lives
 
@@ -203,6 +232,8 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 | Investigation, sources, findings, discrepancies, report record | PostgreSQL `ewi` schema | Permanent until deleted |
 | NPI identity result, source statuses | PostgreSQL, `ewi.investigation_analyses` payload | Permanent until deleted |
 | Word file | `knowledge-base/ewi/reports/investigations/{jobId}.docx` | Permanent until deleted |
+| Uploaded CV | `EWI_DOCUMENTS_PATH/{userId}/{documentId}.pdf` (default `data/ewi-documents`); page text in `ewi.expert_document_pages` | Until the investigation is deleted; unused uploads after `MCA_RECORDS_STAGED_TTL_HOURS` |
+| CV check (claims and comparisons) | PostgreSQL, `ewi.investigation_analyses` payload | Permanent until deleted |
 
 ## Things to know
 
@@ -216,6 +247,10 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 | Layer | File |
 |---|---|
 | Intake form (submits the job) | `apps/web/src/components/ewi/expert-intake-form.tsx` |
+| CV upload, CV check tab | `apps/web/src/components/ewi/expert-cv-upload.tsx`, `cv-check-panel.tsx` |
+| CV storage and OCR | `apps/api/src/modules/ewi/documents/` |
+| CV claims and comparison | `apps/api/src/modules/ewi/cv/` |
+| Publication title lookup | `apps/api/src/integrations/expert-research/live/publication-lookup.ts` |
 | Investigation page | `apps/web/src/app/ewi/investigation/investigation-view.tsx` |
 | Job hook (polling, WebSocket, cancel) | `apps/web/src/features/ewi/hooks/use-ewi-investigation-job.ts` |
 | API client | `apps/web/src/features/ewi/ewi.service.ts` |

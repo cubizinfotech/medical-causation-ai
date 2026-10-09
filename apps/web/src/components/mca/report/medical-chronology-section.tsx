@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, FileText, Quote } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileText,
+  Quote,
+  ScanText,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type {
   ChronologyEvent,
@@ -24,6 +30,9 @@ const TYPE_LABELS: Record<ChronologyEventType, string> = {
   medication: "Medication",
   other: "Other",
 };
+
+/** Matches the server default (MCA_RECORDS_OCR_LOW_CONFIDENCE). */
+const LOW_OCR_CONFIDENCE = 60;
 
 function EventItem({ event }: { event: ChronologyEvent }) {
   const where = [event.facility, event.provider].filter(Boolean).join(" · ");
@@ -111,6 +120,22 @@ function EventItem({ event }: { event: ChronologyEvent }) {
             {bates}
           </RecordPageLink>
         </p>
+        {event.ocrConfidence != null ? (
+          <p
+            className={cn(
+              "flex items-center gap-1.5 text-xs",
+              event.ocrConfidence < LOW_OCR_CONFIDENCE
+                ? "text-amber-700 dark:text-amber-300"
+                : "text-muted-foreground",
+            )}
+          >
+            <ScanText className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Scanned page read with OCR ({event.ocrConfidence}% confidence)
+            {event.ocrConfidence < LOW_OCR_CONFIDENCE
+              ? " — check this entry against the page."
+              : "."}
+          </p>
+        ) : null}
       </div>
     </li>
   );
@@ -149,8 +174,11 @@ export function MedicalChronologySection({
             </RecordPageLink>
             <span className="text-muted-foreground">
               · {doc.pageCount} {doc.pageCount === 1 ? "page" : "pages"}
+              {doc.ocrPages && doc.ocrPages.length > 0
+                ? ` · read with OCR: ${formatPageList(doc.ocrPages)}`
+                : ""}
               {doc.unreadablePages.length > 0
-                ? ` · scanned, not read: ${formatPageList(doc.unreadablePages)}`
+                ? ` · not read: ${formatPageList(doc.unreadablePages)}`
                 : ""}
             </span>
           </li>

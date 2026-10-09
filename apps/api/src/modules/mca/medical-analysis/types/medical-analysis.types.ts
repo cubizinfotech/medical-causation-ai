@@ -166,14 +166,20 @@ export interface ChronologyEvent {
   /** False when the quote could not be found on the cited page. */
   quoteVerified: boolean;
   citedInAnalysis?: boolean;
+  /** Set when the cited page was read with OCR: its confidence, 0–100. */
+  ocrConfidence?: number;
 }
 
 export interface ChronologyDocument {
   recordId: string;
   documentName: string;
   pageCount: number;
-  /** Scanned or blank pages that were not read (OCR is not available yet). */
+  /** Pages with no usable text: blank, or scanned and not readable with OCR. */
   unreadablePages: number[];
+  /** Scanned pages whose text was read with OCR. */
+  ocrPages?: number[];
+  /** OCR pages read with low confidence; check them against the original. */
+  lowConfidencePages?: number[];
 }
 
 export interface MedicalChronology {
@@ -275,6 +281,131 @@ export interface BaseMedicalAnalysisResult {
   };
 }
 
+export type DefenseIssueKind =
+  | 'delayed_treatment'
+  | 'treatment_gap'
+  | 'pre_existing'
+  | 'degenerative'
+  | 'non_compliance'
+  | 'intervening_event'
+  | 'attorney_involvement'
+  | 'reported_history';
+
+export interface DefenseIssueEvidence {
+  source: 'record' | 'intake';
+  /** Chronology citation id (rec-N) when the evidence is a chronology entry. */
+  chronologyId?: string;
+  recordId?: string;
+  documentName?: string;
+  pageNumber?: number;
+  date?: string;
+  /** Exact words from the record page or the intake form. */
+  quote: string;
+}
+
+/** A fact the defense is likely to raise, found by fixed rules. */
+export interface DefenseIssue {
+  id: string;
+  kind: DefenseIssueKind;
+  severity: 'high' | 'medium' | 'low';
+  title: string;
+  /** What the records show, stated factually. */
+  detail: string;
+  defenseArgument: string;
+  /** What to check or prepare. */
+  response: string;
+  evidence: DefenseIssueEvidence[];
+}
+
+export interface DefenseIssuesSummary {
+  /** limited: no records or no full accident date, so some checks were skipped. */
+  status: 'completed' | 'limited';
+  issues: DefenseIssue[];
+  notes: string[];
+}
+
+/** One charge line read from a bill, cited to its page. */
+export interface BillingCharge {
+  /** Citation id, e.g. "chg-3". */
+  id: string;
+  provider: string;
+  /** YYYY-MM-DD, or "" when no date of service is printed for the line. */
+  dateOfService: string;
+  description: string;
+  /** CPT, HCPCS, or revenue code; only kept when printed on the page. */
+  code?: string;
+  /** Dollars. */
+  amount: number;
+  /** The amount exactly as printed. */
+  amountText: string;
+  recordId: string;
+  documentName: string;
+  pageNumber: number;
+  batesNumbers: string[];
+  quote: string;
+  /** False when the line could not be found on the cited page. */
+  quoteVerified: boolean;
+  /** The same charge already counted from another page; left out of totals. */
+  duplicateOf?: string;
+  ocrConfidence?: number;
+}
+
+export type BillingTotalKind =
+  'total_charges' | 'payments' | 'adjustments' | 'balance';
+
+/** A total printed on a bill. Shown as printed; never added across bills. */
+export interface BillingPrintedTotal {
+  provider: string;
+  kind: BillingTotalKind;
+  amount: number;
+  amountText: string;
+  recordId: string;
+  documentName: string;
+  pageNumber: number;
+  quote: string;
+}
+
+export interface ProviderBilling {
+  provider: string;
+  firstDate: string;
+  lastDate: string;
+  /** Sum of the charge lines, or the printed total when no lines were read. */
+  billed: number;
+  billedFrom: 'charges' | 'printed_total';
+  chargeCount: number;
+  printedTotals: BillingPrintedTotal[];
+  /** The charge lines read do not add up to the total printed on the bill. */
+  mismatch?: {
+    printed: number;
+    read: number;
+    documentName: string;
+    pageNumber: number;
+  };
+}
+
+/** A treating provider in the chronology with no bill in the records. */
+export interface UnbilledProvider {
+  provider: string;
+  firstDate: string;
+  lastDate: string;
+  visits: number;
+  chronologyIds: string[];
+}
+
+/** Medical expenses read from the bills in the uploaded records. */
+export interface MedicalSpecials {
+  /** no_bills: no page looked like a bill. */
+  status: 'completed' | 'partial' | 'failed' | 'no_bills';
+  charges: BillingCharge[];
+  providers: ProviderBilling[];
+  /** Sum of billed amounts across providers, duplicates excluded. */
+  totalBilled: number;
+  billPages: Array<{ recordId: string; documentName: string; pages: number[] }>;
+  unbilledProviders: UnbilledProvider[];
+  warnings: string[];
+  generatedAt: string;
+}
+
 export interface MedicalAnalysisResult extends BaseMedicalAnalysisResult {
   causationOpinion: string;
   timelineEvents: TimelineEvent[];
@@ -284,6 +415,10 @@ export interface MedicalAnalysisResult extends BaseMedicalAnalysisResult {
   literatureSearch?: LiteratureSearchSummary;
   /** Present when medical records were uploaded with the case. */
   chronology?: MedicalChronology;
+  /** "Bad facts" the defense is likely to raise. Absent on older reports. */
+  defenseIssues?: DefenseIssuesSummary;
+  /** Bills read from the uploaded records. Absent without records. */
+  medicalSpecials?: MedicalSpecials;
   privateReferences: PrivateReference[];
   crossExamination: CrossExamCategory[];
   researchSources: ResearchSourcesSummary;

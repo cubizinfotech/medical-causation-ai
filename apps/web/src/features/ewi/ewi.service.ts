@@ -1,10 +1,12 @@
 import { apiFetch } from "@/lib/config";
 import { ApiError, parseApiResponse } from "@/features/common/api";
+import { openPdfPage } from "@/features/common/pdf-viewer";
 import type { ExpertInvestigationFormValues } from "./schemas/expert-form.schema";
 import type {
   CreateEwiJobResponse,
   EwiHistoryDetail,
   EwiHistoryListItem,
+  EwiExpertDocumentSummary,
   EwiInvestigationJobRecord,
 } from "./types";
 
@@ -51,6 +53,36 @@ export class EwiClient {
     if (!response.ok) {
       await parseApiResponse<never>(response);
     }
+  }
+
+  /** Uploads the expert's CV (PDF); the server reads its pages first. */
+  async uploadCv(file: File): Promise<EwiExpertDocumentSummary> {
+    const body = new FormData();
+    body.append("file", file);
+    const response = await apiFetch("/ewi/documents/cv", {
+      method: "POST",
+      body,
+    });
+    if (response.status === 413) {
+      throw new ApiError("The file is too large to upload.", 413);
+    }
+    return parseApiResponse<EwiExpertDocumentSummary>(response);
+  }
+
+  /** Removes an uploaded CV that no investigation uses yet. */
+  async deleteDocument(id: string): Promise<void> {
+    const response = await apiFetch(`/ewi/documents/${id}`, {
+      method: "DELETE",
+    });
+    // Already gone (for example, expired) counts as removed.
+    if (!response.ok && response.status !== 404) {
+      await parseApiResponse<never>(response);
+    }
+  }
+
+  /** Opens the uploaded CV at a page (call it from a click handler). */
+  openDocumentPage(id: string, pageNumber: number): Promise<void> {
+    return openPdfPage(`/ewi/documents/${id}/file`, pageNumber, "CV");
   }
 
   async downloadReport(id: string, fileName: string): Promise<void> {

@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import type {
   BaseMedicalAnalysisResult,
+  DefenseIssuesSummary,
   LiteratureSearchSummary,
   MedicalAnalysisRequest,
   MedicalChronology,
   MedicalAnalysisResult,
+  MedicalSpecials,
   ResearchSourcesSummary,
 } from '../types';
 import type { CaseLiteratureResult } from './case-literature.service';
@@ -53,6 +55,8 @@ export class ReportEnrichmentService {
     request: MedicalAnalysisRequest,
     literature: CaseLiteratureResult,
     chronology?: MedicalChronology,
+    defenseIssues?: DefenseIssuesSummary,
+    medicalSpecials?: MedicalSpecials,
   ): MedicalAnalysisResult {
     const publicReferences = literature.references;
 
@@ -115,6 +119,8 @@ export class ReportEnrichmentService {
             })),
           }
         : undefined,
+      ...(defenseIssues ? { defenseIssues } : {}),
+      ...(medicalSpecials ? { medicalSpecials } : {}),
       privateReferences,
       crossExamination,
       researchSources: {

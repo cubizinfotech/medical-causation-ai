@@ -18,7 +18,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ExpertCvUpload } from "@/components/ewi/expert-cv-upload";
 import { ewiClient } from "@/features/ewi/ewi.service";
+import type { EwiExpertDocumentSummary } from "@/features/ewi/types";
 import {
   expertInvestigationSchema,
   type ExpertInvestigationFormValues,
@@ -36,6 +38,8 @@ export function ExpertIntakeForm() {
   const router = useRouter();
   const [starting, setStarting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [cv, setCv] = useState<EwiExpertDocumentSummary | null>(null);
+  const [cvBusy, setCvBusy] = useState(false);
   const {
     register,
     control,
@@ -56,10 +60,11 @@ export function ExpertIntakeForm() {
   const onSubmit = handleSubmit(async (values) => {
     setStarting(true);
     setSubmitError(null);
-    saveExpertForm(values);
+    const request = { ...values, ...(cv ? { cvDocumentId: cv.id } : {}) };
+    saveExpertForm(request);
     clearActiveEwiJob();
     try {
-      const created = await ewiClient.submitJob(values);
+      const created = await ewiClient.submitJob(request);
       saveActiveEwiJob(created);
       router.push("/ewi/investigation");
     } catch (error) {
@@ -203,6 +208,30 @@ export function ExpertIntakeForm() {
               </p>
             )}
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="expert-cv">
+              Expert&apos;s CV{" "}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </Label>
+            <ExpertCvUpload
+              inputId="expert-cv"
+              value={cv}
+              onChange={setCv}
+              onBusyChange={setCvBusy}
+              disabled={starting}
+            />
+            <p className="text-xs text-muted-foreground">
+              PDF. The investigation reads what the CV claims (specialty,
+              licenses, boards, publications, industry ties, expert work) and
+              checks each claim against the NPI Registry, OpenAlex, Open
+              Payments, and court opinions, citing the CV page. Only you can
+              open the CV; its text is sent to the AI provider configured for
+              this site.
+            </p>
+          </div>
         </CardContent>
         <CardFooter className="flex flex-wrap gap-2">
           {submitError ? (
@@ -210,7 +239,7 @@ export function ExpertIntakeForm() {
               {submitError}
             </p>
           ) : null}
-          <Button type="submit" disabled={starting}>
+          <Button type="submit" disabled={starting || cvBusy}>
             {starting ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             ) : null}

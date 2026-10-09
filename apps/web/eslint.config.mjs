@@ -6,11 +6,21 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
+    // Same files as eslint-config-next's react-hooks plugin; .cjs files
+    // (jest.config.cjs) have no plugin to configure.
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
     rules: {
       // Demo/job UIs intentionally sync React state from sessionStorage, sockets, and fetch.
       // Keep as warnings so MCA/EWI flows are not rewritten solely for React Compiler lint.
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/preserve-manual-memoization": "warn",
+    },
+  },
+  {
+    // CommonJS config files (jest.config.cjs) load modules with require().
+    files: ["**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
   globalIgnores([

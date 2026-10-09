@@ -14,6 +14,8 @@ export const MEDICAL_ANALYSIS_PROMPTS = {
   EVIDENCE_EVALUATION: 'evidence-evaluation.prompt.txt',
   JSON_OUTPUT: 'json-output.prompt.txt',
   CHRONOLOGY_EXTRACTION: 'chronology-extraction.prompt.txt',
+  BILLING_EXTRACTION: 'billing-extraction.prompt.txt',
+  DEMAND_LETTER_TREATMENT: 'demand-letter-treatment.prompt.txt',
 } as const;
 
 export const CONFIDENCE_DISCLAIMER =

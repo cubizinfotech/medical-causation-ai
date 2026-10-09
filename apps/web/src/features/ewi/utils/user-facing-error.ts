@@ -1,3 +1,5 @@
+import { ApiError } from "@/features/common/api";
+
 /**
  * Map API / network errors to short attorney-facing messages.
  * Never expose stack traces.
@@ -7,6 +9,12 @@ export function toUserFacingError(error: unknown, fallback: string): string {
 
   if (typeof error === "string" && error.trim()) {
     return sanitize(error);
+  }
+
+  // Validation messages are written for the user ("The uploaded CV was not
+  // found. Upload it again."); keep them as they are.
+  if (error instanceof ApiError && error.status === 400 && error.message) {
+    return sanitize(error.message);
   }
 
   if (error instanceof Error) {

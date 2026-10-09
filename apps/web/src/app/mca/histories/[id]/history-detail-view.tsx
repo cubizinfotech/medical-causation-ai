@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Clock,
+  FileSignature,
   Loader2,
   RotateCcw,
   Trash2,
@@ -333,15 +334,21 @@ export default function HistoryDetailView({ id }: { id: string }) {
       {isCompleted && result ? (
         <div className="space-y-6">
           <Card className="border-primary/30 bg-primary/5">
-            <CardContent className="flex items-start gap-4 p-6">
+            <CardContent className="flex flex-wrap items-start gap-4 p-6">
               <CheckCircle2 className="h-6 w-6 shrink-0 text-primary" />
-              <div>
+              <div className="flex-1">
                 <p className="font-semibold text-primary">Report ready</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Confidence score: {result.confidenceScore.score}% · Submitted{" "}
                   {formatReportDate(history.createdAt)}
                 </p>
               </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/mca/histories/${history.id}/demand-letter`}>
+                  <FileSignature className="h-4 w-4" />
+                  Draft demand letter
+                </Link>
+              </Button>
             </CardContent>
           </Card>
           <MedicalReport result={result} />

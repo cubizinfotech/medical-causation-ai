@@ -3,6 +3,7 @@ import { MedicalAnalysisService } from './medical-analysis.service';
 import type { CaseLiteratureService } from './case-literature.service';
 import type { CaseRecordsService } from '../records/case-records.service';
 import type { ChronologyExtractionService } from '../records/chronology-extraction.service';
+import type { BillingExtractionService } from '../records/billing-extraction.service';
 import type { AiService } from '@ai/services';
 import type { RetrievalService } from '@modules/rag/services';
 import type { AnalysisPromptBuilder } from '../builders';
@@ -157,6 +158,7 @@ describe('MedicalAnalysisService', () => {
       name: 'er.pdf',
       pageCount: 2,
       unreadablePages: [],
+      ocrPages: [],
       pages: [],
     },
   ];
@@ -169,17 +171,27 @@ describe('MedicalAnalysisService', () => {
     generatedAt: '2026-01-01T00:00:00.000Z',
   };
   const loadForAnalysis = jest.fn().mockResolvedValue(loadedRecords);
+  const readScannedPages = jest
+    .fn()
+    .mockResolvedValue({ attempted: 0, read: 0 });
   const caseRecords = {
     loadForAnalysis,
+    readScannedPages,
     chronologySettings: {
       chronologyBatchChars: 12000,
       chronologyPromptChars: 10000,
+      ocrLowConfidence: 60,
     },
   } as unknown as CaseRecordsService;
   const buildChronology = jest.fn().mockResolvedValue(chronology);
   const chronologyExtraction = {
     build: buildChronology,
   } as unknown as ChronologyExtractionService;
+  const specials = { status: 'no_bills', charges: [], providers: [] };
+  const buildSpecials = jest.fn().mockResolvedValue(specials);
+  const billingExtraction = {
+    build: buildSpecials,
+  } as unknown as BillingExtractionService;
   let buildPrompts: jest.Mock;
 
   beforeEach(() => {
@@ -226,6 +238,7 @@ describe('MedicalAnalysisService', () => {
       caseLiterature,
       caseRecords,
       chronologyExtraction,
+      billingExtraction,
     );
   });
 
@@ -259,9 +272,12 @@ describe('MedicalAnalysisService', () => {
       expect.anything(),
       literatureResult,
       undefined,
+      expect.objectContaining({ status: 'limited', issues: [] }),
+      undefined,
     );
-    // No records attached: the chronology steps are skipped.
+    // No records attached: the chronology and bill steps are skipped.
     expect(loadForAnalysis).not.toHaveBeenCalled();
+    expect(buildSpecials).not.toHaveBeenCalled();
     expect(result.confidenceScore.score).toBe(72);
   });
 
@@ -314,23 +330,45 @@ describe('MedicalAnalysisService', () => {
       recordIds: ['record-1'],
     });
 
+    // Scanned pages are read with OCR before the records are loaded.
+    expect(readScannedPages).toHaveBeenCalledWith(
+      ['record-1'],
+      expect.any(Function),
+    );
+    expect(readScannedPages.mock.invocationCallOrder[0]).toBeLessThan(
+      loadForAnalysis.mock.invocationCallOrder[0],
+    );
     expect(loadForAnalysis).toHaveBeenCalledWith(['record-1']);
     expect(buildChronology).toHaveBeenCalledWith(
       loadedRecords,
       12000,
       expect.any(Function),
+      { lowConfidence: 60, error: undefined },
     );
+    // The rule-based defense issues go to the prompt and the report.
+    const issues: unknown = expect.objectContaining({
+      issues: expect.any(Array) as unknown,
+    });
     expect(buildPrompts).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       chronology,
       10000,
+      issues,
     );
     expect(reportEnrichment.enrich).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       literatureResult,
       chronology,
+      issues,
+      specials,
+    );
+    // Bills are read after the chronology, which lists the providers.
+    expect(buildSpecials).toHaveBeenCalledWith(
+      loadedRecords,
+      chronology.events,
+      expect.any(Function),
     );
   });
 });

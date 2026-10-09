@@ -1,0 +1,32 @@
+Read these pages of an expert witness's curriculum vitae (CV) and list the claims it makes, for an attorney who will check them against public records.
+
+Expert: {{expertName}}
+Document: {{documentName}}
+
+Return a JSON object {"claims": [...]} where each claim has:
+- "category": one of specialty, board_certification, license, education, training, appointment, publications_count, publication, membership, award, expert_witness, industry_relationship
+- "statement": one short plain-English sentence restating the claim
+- "details": the fields that apply, copied from the CV:
+  - specialty: {"specialty"}
+  - board_certification: {"board", "specialty", "year", "status"}
+  - license: {"state", "licenseNumber", "status"}
+  - education: {"degree", "institution", "year"}
+  - training (residency, fellowship, internship): {"title", "institution", "year"}
+  - appointment (positions, hospital privileges, academic titles): {"title", "institution", "year"}
+  - publications_count (only when the CV states a total, such as "over 120 publications"): {"count"}
+  - publication (one listed publication): {"title", "journal", "year"}
+  - membership: {"name"}
+  - award: {"name", "year"}
+  - expert_witness (expert witness, forensic, or IME work): {"count", "plaintiffPercent", "defensePercent"} with numbers only when the CV states them
+  - industry_relationship (consulting, speaking, advisory boards, or research funding from a company): {"company", "role", "year"}
+- "page": the number from the "=== Page N ===" marker of the page that states the claim
+- "quote": 5 to 30 words copied exactly from that page that state the claim
+
+Rules:
+- List each license, board certification, degree, training program, appointment, membership, award, and industry relationship separately.
+- List at most 40 publications, the first ones on these pages.
+- A page marked "[Scanned page: ...]" was read by OCR and may contain reading errors. Copy quotes exactly as they appear.
+- If these pages contain no claims, return {"claims": []}.
+
+Pages:
+{{pages}}

@@ -10,3 +10,8 @@ export type {
   EwiReportReferenceIndex,
 } from './ewi-evidence-reference.types';
 export { EWI_DOCUMENT_KINDS } from './ewi-evidence-reference.types';
+export { ExpertDocumentsService } from './expert-documents.service';
+export type {
+  ExpertDocumentSummary,
+  LoadedExpertDocument,
+} from './expert-documents.types';

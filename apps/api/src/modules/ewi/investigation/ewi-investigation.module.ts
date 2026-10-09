@@ -20,6 +20,7 @@ import { EwiInvestigationJobService } from './jobs/ewi-investigation-job.service
 import { EwiInvestigationProcessor } from './jobs/ewi-investigation.processor';
 import { EwiInvestigationGateway } from './gateway/ewi-investigation.gateway';
 import { EwiInvestigationController } from './controllers/ewi-investigation.controller';
+import { ExpertCvService } from '../cv/expert-cv.service';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { EwiInvestigationController } from './controllers/ewi-investigation.cont
     ExpertInvestigationRepository,
     InvestigationHistoryService,
     ExpertInvestigationService,
+    ExpertCvService,
     EwiInvestigationJobService,
     EwiInvestigationProcessor,
     EwiInvestigationGateway,

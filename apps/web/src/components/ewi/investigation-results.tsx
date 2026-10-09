@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { AdmissibilityChallenges } from "@/components/ewi/admissibility-challenges";
+import { CvCheckPanel } from "@/components/ewi/cv-check-panel";
 import { ExpertIdentityCard } from "@/components/ewi/expert-identity-card";
 import {
   Tabs,
@@ -36,6 +37,7 @@ const PUBLICATION_CATEGORIES = new Set([
 ]);
 
 const SOURCE_LABELS: Record<string, string> = {
+  cv_profile: "Uploaded CV",
   npi_registry: "NPI Registry",
   open_payments: "CMS Open Payments",
   openalex: "OpenAlex",
@@ -193,6 +195,9 @@ function InvestigationResultTabs({
   );
 
   const challenges = legal?.challenges ?? [];
+  const cvConflicts =
+    result?.cvCheck?.comparisons.filter((row) => row.label === "conflicting")
+      .length ?? 0;
   const financial = professional?.financial ?? [];
   const paymentTotals = financial.find(isOpenPaymentsTotals);
   const otherFinancial = financial.filter(
@@ -206,6 +211,10 @@ function InvestigationResultTabs({
         <TabsTrigger value="inconsistencies">
           Inconsistencies
           {discrepancies.length > 0 ? ` (${discrepancies.length})` : ""}
+        </TabsTrigger>
+        <TabsTrigger value="cv">
+          CV Check
+          {cvConflicts > 0 ? ` (${cvConflicts})` : ""}
         </TabsTrigger>
         <TabsTrigger value="legal">Legal Research</TabsTrigger>
         <TabsTrigger value="publications">Publications</TabsTrigger>
@@ -358,6 +367,12 @@ function InvestigationResultTabs({
               ))}
             </ul>
           )}
+        </ResultPanel>
+      </TabsContent>
+
+      <TabsContent value="cv">
+        <ResultPanel title="CV check">
+          <CvCheckPanel check={result?.cvCheck} />
         </ResultPanel>
       </TabsContent>
 

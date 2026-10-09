@@ -5,6 +5,9 @@ import type {
 import type { ExpertDiscrepancy } from '../research/discrepancy-analyzer';
 import type { CrossExamQuestion } from '../research/cross-exam-question.generator';
 import type { EwiAnalysisDocument } from '../investigation/analysis/ewi-analysis.types';
+import type { CvCheck, CvComparison } from '../cv/cv.types';
+import { CV_LABEL_TEXT } from '../cv/cv-comparison';
+import type { InconsistencyLabel } from '../research/verification-labels';
 import type { LegalMatter, LegalResearchDossier } from '../research/legal';
 import {
   CHALLENGE_OUTCOME_LABEL,
@@ -161,6 +164,7 @@ export function buildEwiReportDocument(input: {
   onlinePresence?: OnlinePresenceDossier;
   professionalBackground?: ProfessionalBackgroundDossier;
   identity?: ExpertIdentityResolution | null;
+  cvCheck?: CvCheck | null;
 }): ReportDocumentModel {
   const tracker: ClaimTracker = {
     claimed: new Set<number>(),
@@ -714,14 +718,89 @@ function inconsistencyCategoryHint(item: ExpertDiscrepancy): string | null {
   return null;
 }
 
+/** Most important first: conflicts, then gaps, then confirmations. */
+const CV_LABEL_ORDER: InconsistencyLabel[] = [
+  'conflicting',
+  'not_found',
+  'not_verified',
+  'partially_verified',
+  'verified',
+  'unable_to_verify',
+];
+
+function cvComparisonBlocks(row: CvComparison): ReportBlock[] {
+  const blocks: ReportBlock[] = [
+    { text: `[${CV_LABEL_TEXT[row.label]}] ${row.title}`, style: 'subheading' },
+  ];
+  if (row.cv) {
+    blocks.push({
+      text: `CV${row.cv.page ? ` (page ${row.cv.page})` : ''}: “${row.cv.quote ?? row.cv.statement}”`,
+    });
+  }
+  if (row.source) {
+    blocks.push({ text: `${row.source.name}: ${row.source.statement}` });
+  }
+  if (row.note) blocks.push({ text: row.note, style: 'note' });
+  if (row.source?.url) {
+    blocks.push({
+      text: row.source.url,
+      link: row.source.url,
+      style: 'citation',
+    });
+  }
+  return blocks;
+}
+
+function cvCheckBlocks(check: CvCheck): ReportBlock[] {
+  const blocks: ReportBlock[] = [
+    {
+      text: `Uploaded CV: ${check.document.name} (${check.document.pageCount} page${check.document.pageCount === 1 ? '' : 's'}). ${check.claims.length} claim(s) were read, each with its page and an exact quote, and compared with the NPI Registry, OpenAlex, CMS Open Payments, and CourtListener. "Not checked" means no connected source covers the claim; it is not a finding against the expert.`,
+      style: 'note',
+    },
+    ...check.warnings.map((warning) => ({
+      text: warning,
+      style: 'note' as const,
+    })),
+  ];
+  const counts = CV_LABEL_ORDER.map((label) => ({
+    label,
+    count: check.comparisons.filter((row) => row.label === label).length,
+  })).filter((entry) => entry.count > 0);
+  if (counts.length > 0) {
+    blocks.push({
+      text: counts
+        .map((entry) => `${CV_LABEL_TEXT[entry.label]}: ${entry.count}`)
+        .join('; '),
+    });
+  }
+  for (const label of CV_LABEL_ORDER) {
+    for (const row of check.comparisons.filter(
+      (item) => item.label === label,
+    )) {
+      blocks.push(...cvComparisonBlocks(row));
+    }
+  }
+  return blocks;
+}
+
 function cvComparisonSection(
   spec: EwiReportSectionSpec,
   input: {
     discrepancies: ExpertDiscrepancy[];
     analysis?: EwiAnalysisDocument;
+    cvCheck?: CvCheck | null;
   },
   tracker: ClaimTracker,
 ): ReportSectionModel {
+  if (input.cvCheck) {
+    // The CV finding is shown through its comparisons, not again in misc.
+    claimEvidence(tracker, { categories: ['cv'] });
+    return {
+      id: spec.id,
+      title: spec.title,
+      blocks: cvCheckBlocks(input.cvCheck),
+    };
+  }
   const blocks: ReportBlock[] = [];
   const cvItems = claimEvidence(tracker, {
     categories: ['cv', 'profile'],

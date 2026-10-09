@@ -4,6 +4,7 @@ import { ExpertResearchService } from '@integrations/expert-research';
 import type { ResearchProviderSettings } from '@config/config.types';
 import { EwiWordReportService } from '../../report/ewi-word-report.service';
 import { EwiAnalysisService } from '../analysis/ewi-analysis.service';
+import { ExpertCvService } from '../../cv/expert-cv.service';
 import type {
   EwiInvestigationRequest,
   EwiProgressUpdate,
@@ -38,6 +39,7 @@ export class ExpertInvestigationService {
     private readonly analysis: EwiAnalysisService,
     private readonly config: ConfigService,
     private readonly investigations: ExpertInvestigationRepository,
+    private readonly cv: ExpertCvService,
   ) {
     const settings = this.config.get<ResearchProviderSettings>('research');
     const ttlSeconds = Number(process.env.RESEARCH_CACHE_TTL_SECONDS ?? 300);
@@ -59,6 +61,8 @@ export class ExpertInvestigationService {
       analyze: (packet) => this.analysis.interpret(packet),
       readChallengeRulings: (input) =>
         this.analysis.readChallengeRulings(input),
+      readCv: (documentId, onProgress) =>
+        this.cv.extract(documentId, request.expertName, onProgress),
       onProgress: options.onProgress,
       onCheckpoint: options.onCheckpoint,
       shouldContinue:

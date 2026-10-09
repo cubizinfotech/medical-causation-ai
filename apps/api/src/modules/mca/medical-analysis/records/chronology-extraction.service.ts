@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '@ai/services';
+import { retryOnRateLimit } from '@ai/utils';
 import { MEDICAL_ANALYSIS_PROMPTS } from '../constants';
 import { MedicalPromptService } from '../prompts';
 import type { MedicalChronology } from '../types';
@@ -34,12 +35,39 @@ export class ChronologyExtractionService {
     records: LoadedCaseRecord[],
     batchChars: number,
     onProgress?: (done: number, total: number) => Promise<void>,
+    ocr: { lowConfidence?: number; error?: string } = {},
   ): Promise<MedicalChronology> {
     const warnings: string[] = [];
+    if (ocr.error) {
+      warnings.push(`${ocr.error} Scanned pages were not read.`);
+    }
+    const lowConfidence = ocr.lowConfidence ?? 60;
+    const lowPages = new Map(
+      records.map((record) => [
+        record.id,
+        record.pages
+          .filter(
+            (page) =>
+              page.ocrConfidence != null && page.ocrConfidence < lowConfidence,
+          )
+          .map((page) => page.pageNumber),
+      ]),
+    );
     for (const record of records) {
+      if (record.ocrPages.length > 0) {
+        warnings.push(
+          `${record.name}: ${record.ocrPages.length} scanned page(s) were read with OCR (${formatPageList(record.ocrPages)}). Check quotes and codes from these pages against the original.`,
+        );
+      }
+      const low = lowPages.get(record.id) ?? [];
+      if (low.length > 0) {
+        warnings.push(
+          `${record.name}: OCR confidence was low on page(s) ${formatPageList(low)}. Entries from these pages may contain reading errors.`,
+        );
+      }
       if (record.unreadablePages.length > 0) {
         warnings.push(
-          `${record.name}: ${record.unreadablePages.length} of ${record.pageCount} pages have no text layer (scanned or blank) and were not read: ${formatPageList(record.unreadablePages)}.`,
+          `${record.name}: ${record.unreadablePages.length} of ${record.pageCount} pages had no readable text (blank, or scanned and not readable) and were not read: ${formatPageList(record.unreadablePages)}.`,
         );
       }
     }
@@ -55,20 +83,22 @@ export class ChronologyExtractionService {
       const first = batch.pages[0].pageNumber;
       const last = batch.pages[batch.pages.length - 1].pageNumber;
       try {
-        const response = await this.aiService.complete({
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            {
-              role: 'user',
-              content: this.prompts.render(template, {
-                documentName: batch.documentName,
-                pages: formatBatchPages(batch),
-              }),
-            },
-          ],
-          metadata: { responseFormat: 'json' },
-          temperature: 0,
-        });
+        const response = await retryOnRateLimit(() =>
+          this.aiService.complete({
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              {
+                role: 'user',
+                content: this.prompts.render(template, {
+                  documentName: batch.documentName,
+                  pages: formatBatchPages(batch),
+                }),
+              },
+            ],
+            metadata: { responseFormat: 'json' },
+            temperature: 0,
+          }),
+        );
         drafts.push(
           ...validateChronologyEvents(
             parseChronologyResponse(response.content),
@@ -111,6 +141,8 @@ export class ChronologyExtractionService {
         documentName: record.name,
         pageCount: record.pageCount,
         unreadablePages: record.unreadablePages,
+        ocrPages: record.ocrPages,
+        lowConfidencePages: lowPages.get(record.id) ?? [],
       })),
       events,
       pagesProcessed: batches.reduce((sum, b) => sum + b.pages.length, 0),

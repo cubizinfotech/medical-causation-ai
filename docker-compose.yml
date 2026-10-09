@@ -87,6 +87,26 @@ services:
     networks:
       - mca-network
 
+  # HTTPS for the website and API (Let's Encrypt). Needs APP_DOMAIN, API_DOMAIN
+  # and ACME_EMAIL in .env and DNS for both names. See DEPLOYMENT.md, "HTTPS".
+  # Start with: docker compose --profile https up -d caddy
+  caddy:
+    image: caddy:2-alpine
+    container_name: mca-caddy
+    profiles: ["https"]
+    restart: unless-stopped
+    # Host networking: Caddy listens on ports 80 and 443 and reaches the PM2
+    # apps on 127.0.0.1:3000 and 127.0.0.1:3001.
+    network_mode: host
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-}
+      API_DOMAIN: ${API_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
   # Optional free local embeddings/chat. Start with: docker compose --profile local-ai up -d ollama
   ollama:
     image: ollama/ollama:latest
@@ -114,3 +134,8 @@ volumes:
     name: mca-pgadmin-data
   ollama_data:
     name: mca-ollama-data
+  # Certificates and ACME account. Keep it, or Let's Encrypt rate limits apply.
+  caddy_data:
+    name: mca-caddy-data
+  caddy_config:
+    name: mca-caddy-config

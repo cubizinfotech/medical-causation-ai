@@ -83,9 +83,17 @@ export function buildChronologyBatches(
   return batches;
 }
 
+/** Marks pages whose text was read from a scanned image. */
+export const OCR_PAGE_NOTE =
+  '[Scanned page: text read by OCR; it may contain reading errors.]';
+
 export function formatBatchPages(batch: ChronologyBatch): string {
   return batch.pages
-    .map((page) => `=== Page ${page.pageNumber} ===\n${page.text}`)
+    .map((page) =>
+      page.ocrConfidence != null
+        ? `=== Page ${page.pageNumber} ===\n${OCR_PAGE_NOTE}\n${page.text}`
+        : `=== Page ${page.pageNumber} ===\n${page.text}`,
+    )
     .join('\n\n');
 }
 
@@ -148,15 +156,44 @@ export function locateQuote(
 
 const ICD10_PATTERN = /^[A-TV-Z][0-9][0-9A-Z](?:\.?[0-9A-Z]{1,4})?$/i;
 
-/** An ICD-10 code survives only if it is printed on the cited page. */
+/** Characters OCR commonly confuses in printed codes ("506.0X0A" for S06.0X0A). */
+const OCR_LOOKALIKES: Array<[RegExp, string]> = [
+  [/5/g, 'S'],
+  [/0/g, 'O'],
+  [/[1L]/g, 'I'],
+  [/2/g, 'Z'],
+  [/8/g, 'B'],
+  [/6/g, 'G'],
+];
+
+function foldLookalikes(value: string): string {
+  let folded = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  for (const [pattern, letter] of OCR_LOOKALIKES) {
+    folded = folded.replace(pattern, letter);
+  }
+  return folded;
+}
+
+/**
+ * An ICD-10 code survives only if it is printed on the cited page. On a page
+ * read by OCR, a whole printed token may differ by look-alike characters.
+ */
 export function verifiedIcd10(
   code: unknown,
   pageText: string,
+  options: { ocr?: boolean } = {},
 ): string | undefined {
   if (typeof code !== 'string') return undefined;
   const trimmed = code.trim().toUpperCase();
   if (!ICD10_PATTERN.test(trimmed)) return undefined;
-  return compact(pageText).includes(compact(trimmed)) ? trimmed : undefined;
+  if (compact(pageText).includes(compact(trimmed))) return trimmed;
+  if (!options.ocr) return undefined;
+  const target = foldLookalikes(trimmed);
+  return pageText
+    .split(/[\s,;:()[\]{}"']+/)
+    .some((token) => token.length >= 3 && foldLookalikes(token) === target)
+    ? trimmed
+    : undefined;
 }
 
 /** YYYY-MM-DD, YYYY-MM or YYYY; US M/D/YYYY is converted; else "". */
@@ -251,7 +288,9 @@ export function validateChronologyEvents(
                 : { description: dx };
             const description = cleanText(record.description, 200);
             if (!description) return null;
-            const icd10 = verifiedIcd10(record.icd10, page.text);
+            const icd10 = verifiedIcd10(record.icd10, page.text, {
+              ocr: page.ocrConfidence != null,
+            });
             return icd10 ? { description, icd10 } : { description };
           })
           .filter((dx): dx is ChronologyDiagnosis => dx !== null)
@@ -273,6 +312,9 @@ export function validateChronologyEvents(
       batesNumbers: page.batesNumbers,
       quote,
       quoteVerified: quotePage !== null,
+      ...(page.ocrConfidence != null
+        ? { ocrConfidence: page.ocrConfidence }
+        : {}),
     });
   }
   return drafts;

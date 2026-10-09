@@ -19,6 +19,11 @@ export interface ProcessedPage {
   /** Bates numbers detected on this page only (never fabricated). */
   batesNumbers?: string[];
   ocrStatus?: OcrStatus;
+  /**
+   * Set for pages with little text: true when the page also paints an image,
+   * as a scan with a fax or stamp text line does.
+   */
+  hasImages?: boolean;
 }
 
 /**

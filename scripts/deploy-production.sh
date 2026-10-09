@@ -59,6 +59,12 @@ done
 
 docker compose up -d postgres redis
 
+# A running Redis keeps its old settings until restarted. Apply the queue-safe
+# eviction policy from docker/redis/redis.conf now.
+if ! docker exec mca-redis redis-cli CONFIG SET maxmemory-policy noeviction >/dev/null; then
+  echo "Warning: could not set the Redis eviction policy. Run: docker restart mca-redis"
+fi
+
 echo "Waiting for PostgreSQL..."
 healthy=0
 for _ in $(seq 1 30); do

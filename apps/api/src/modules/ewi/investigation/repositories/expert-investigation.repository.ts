@@ -45,6 +45,12 @@ const detailInclude = {
   questions: { orderBy: { number: 'asc' as const } },
   report: true,
   analysis: true,
+  documents: {
+    where: { kind: 'cv' },
+    orderBy: { createdAt: 'desc' as const },
+    take: 1,
+    select: { id: true, originalName: true, pageCount: true },
+  },
 } satisfies Prisma.InvestigationInclude;
 
 type InvestigationDetail = Prisma.InvestigationGetPayload<{
@@ -73,6 +79,8 @@ export interface InvestigationView {
   updatedAt: Date;
   completedAt: Date | null;
   result: EwiInvestigationResult | null;
+  /** The CV uploaded for this investigation (detail views only). */
+  cvDocument?: { id: string; name: string; pageCount: number } | null;
 }
 
 @Injectable()
@@ -420,6 +428,7 @@ export class ExpertInvestigationRepository {
                 } as unknown as Prisma.InputJsonValue),
               sourceStatuses: result.sourceStatuses ?? [],
               identity: result.identity ?? null,
+              cvCheck: result.cvCheck ?? null,
             } as unknown as Prisma.InputJsonValue,
           },
         });
@@ -638,7 +647,13 @@ export class ExpertInvestigationRepository {
   }
 
   private toDetail(row: InvestigationDetail): InvestigationView {
-    const base = this.toListItem(row);
+    const cv = row.documents[0];
+    const base: InvestigationView = {
+      ...this.toListItem(row),
+      cvDocument: cv
+        ? { id: cv.id, name: cv.originalName, pageCount: cv.pageCount }
+        : null,
+    };
     if (
       row.findings.length === 0 &&
       row.questions.length === 0 &&
@@ -685,6 +700,7 @@ export class ExpertInvestigationRepository {
           specialty: row.expert.specialty,
           npi: row.npi ?? null,
           identity: readStoredIdentity(row.analysis?.payload),
+          cvCheck: readStoredCvCheck(row.analysis?.payload),
           evidence,
           discrepancies: row.discrepancies.map((item) => ({
             id: item.id,
@@ -822,6 +838,20 @@ function readStoredIdentity(
   const record = identity as Record<string, unknown>;
   return typeof record.status === 'string' && typeof record.note === 'string'
     ? (identity as NonNullable<EwiInvestigationResult['identity']>)
+    : null;
+}
+
+function readStoredCvCheck(
+  payload: unknown,
+): EwiInvestigationResult['cvCheck'] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const check = (payload as Record<string, unknown>).cvCheck;
+  if (!check || typeof check !== 'object' || Array.isArray(check)) return null;
+  const record = check as Record<string, unknown>;
+  return Array.isArray(record.comparisons) && Array.isArray(record.claims)
+    ? (check as NonNullable<EwiInvestigationResult['cvCheck']>)
     : null;
 }
 

@@ -147,6 +147,9 @@ export default function EwiHistoryDetailPage() {
       expertName: detail.expertName,
       city: detail.city || "",
       specialty: detail.specialty,
+      npi: detail.npi ?? undefined,
+      // The server copies the CV for the new investigation.
+      cvDocumentId: detail.cvDocument?.id,
     });
     clearActiveEwiJob();
     router.push("/ewi/investigation");

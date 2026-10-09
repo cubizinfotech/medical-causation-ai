@@ -5,7 +5,11 @@ import { join } from 'node:path';
 import type { StorageSettings } from '@config/config.types';
 import { targetsFromEvidence } from '../../correspondence/ewi-request-from-evidence';
 import { EwiRequestWorkflowService } from '../../correspondence/ewi-request-workflow.service';
-import { ExpertInvestigationRepository } from '../repositories/expert-investigation.repository';
+import {
+  ExpertInvestigationRepository,
+  type InvestigationView,
+} from '../repositories/expert-investigation.repository';
+import { ExpertDocumentsService } from '../../documents/expert-documents.service';
 import type { CreateExpertInvestigationDto } from '../dto/create-expert-investigation.dto';
 import type { EwiInvestigationResult } from '../jobs/ewi-investigation-job.types';
 
@@ -17,14 +21,31 @@ export class InvestigationHistoryService {
     private readonly repo: ExpertInvestigationRepository,
     private readonly config: ConfigService,
     private readonly requestWorkflow: EwiRequestWorkflowService,
+    private readonly documents: ExpertDocumentsService,
   ) {}
 
-  create(
+  async create(
     jobId: string,
     dto: CreateExpertInvestigationDto,
     ownerUserId: string,
-  ) {
-    return this.repo.create(jobId, dto, ownerUserId);
+  ): Promise<InvestigationView & { cvDocumentId?: string }> {
+    if (dto.cvDocumentId) {
+      await this.documents.assertOwned(ownerUserId, dto.cvDocumentId);
+    }
+    const created = await this.repo.create(jobId, dto, ownerUserId);
+    if (!dto.cvDocumentId) return created;
+    try {
+      // May be a copy when the CV came from an earlier investigation.
+      const cvDocumentId = await this.documents.attachToInvestigation(
+        ownerUserId,
+        dto.cvDocumentId,
+        created.id,
+      );
+      return { ...created, cvDocumentId };
+    } catch (error) {
+      await this.repo.delete(created.id).catch(() => undefined);
+      throw error;
+    }
   }
 
   listHistories(ownerUserId: string) {
@@ -48,6 +69,8 @@ export class InvestigationHistoryService {
 
   async deleteHistory(id: string, ownerUserId: string): Promise<void> {
     await this.getHistory(id, ownerUserId);
+    // Rows go with the investigation; the uploaded files are removed here.
+    await this.documents.deleteFilesForInvestigation(id);
     await this.repo.delete(id);
   }
 

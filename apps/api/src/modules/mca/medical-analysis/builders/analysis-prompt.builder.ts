@@ -4,6 +4,7 @@ import type {
   MedicalAnalysisRequest,
   BuiltAnalysisPrompts,
   AnalysisCitation,
+  DefenseIssuesSummary,
   MedicalChronology,
 } from '../types';
 import { MedicalPromptService } from '../prompts';
@@ -14,6 +15,28 @@ import {
 import { MedicalQueryBuilder } from './medical-query.builder';
 
 const DEFAULT_CHRONOLOGY_PROMPT_CHARS = 10000;
+const MAX_PROMPT_ISSUES = 10;
+
+/**
+ * The rule-based "bad facts" as a short list for the model. Citation ids are
+ * given only for entries that are in the citation catalog.
+ */
+export function formatDefenseIssues(
+  summary: DefenseIssuesSummary | undefined,
+  citable: Set<string>,
+): string {
+  if (!summary || summary.issues.length === 0) return '';
+  const lines = summary.issues.slice(0, MAX_PROMPT_ISSUES).map((issue) => {
+    const ids = issue.evidence
+      .map((item) => item.chronologyId)
+      .filter((id): id is string => Boolean(id && citable.has(id)));
+    return `- [${issue.severity}] ${issue.title}${ids.length > 0 ? ` (${ids.join(', ')})` : ''}`;
+  });
+  return [
+    "Defense issues found by fixed rules in the client's records and intake form. Where relevant, address them in opposingEvidence and limitations; do not state anything about them beyond what the cited records say:",
+    ...lines,
+  ].join('\n');
+}
 
 /** Words from the diagnosis and question, used to keep relevant events. */
 function focusTerms(request: MedicalAnalysisRequest): string[] {
@@ -40,6 +63,7 @@ export class AnalysisPromptBuilder {
     retrieval: RetrievalResult,
     chronology?: MedicalChronology,
     chronologyPromptChars = DEFAULT_CHRONOLOGY_PROMPT_CHARS,
+    defenseIssues?: DefenseIssuesSummary,
   ): Promise<BuiltAnalysisPrompts> {
     const prompts = await this.promptService.loadAll();
 
@@ -61,6 +85,11 @@ export class AnalysisPromptBuilder {
       chronology,
       chronologyPromptChars,
     );
+    const issuesText = formatDefenseIssues(
+      defenseIssues,
+      new Set(records.citations.map((citation) => citation.chunkId)),
+    );
+    if (issuesText) records.text = `${records.text}\n\n${issuesText}`;
     const citationCatalog = [...libraryCitations, ...records.citations];
 
     const catalogText = citationCatalog

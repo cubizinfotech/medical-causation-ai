@@ -20,6 +20,7 @@ Rules:
 - Use only what these pages say. Do not infer diagnoses, dates, codes, or causes.
 - Make one event per date of service and type; combine findings from the same visit.
 - If the pages contain no medical events, return {"events": []}.
+- A page marked "[Scanned page: text read by OCR ...]" was read from an image and may contain reading errors, such as 5 for S or 0 for O. Copy quotes exactly as the text appears. For an ICD-10 code printed on such a page, you may correct an obvious misread of a letter as a digit; never add a code that is not printed.
 
 Pages:
 {{pages}}

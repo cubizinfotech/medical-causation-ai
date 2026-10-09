@@ -1,0 +1,30 @@
+Read the charges on these pages of a client's medical bills for a personal injury attorney's damages summary.
+
+Document: {{documentName}}
+
+The pages look like bills, statements, or account ledgers. Return a JSON object {"charges": [...], "totals": [...]}.
+
+Each charge has:
+- "page": the number from the "=== Page N ===" marker of the page the line is on
+- "provider": the provider or facility the bill is from (letterhead, "Remit to", or "Pay to"). Use the same spelling for every line of the same bill.
+- "dateOfService": the date printed on the line, as printed; "" when the line has no date
+- "description": the service as printed, shortened to a few words
+- "code": the CPT, HCPCS, or revenue code printed on the line, or ""
+- "amount": the charge for the line, copied exactly as printed (digits, commas, decimal point)
+- "quote": the exact text of the line from the page, including the amount
+
+Each total has:
+- "page", "provider", and "quote" as above
+- "kind": total_charges, payments (insurance or patient payments), adjustments (contractual adjustments or write-offs), or balance (balance due)
+- "amount": copied exactly as printed, without a minus sign or parentheses
+
+Rules:
+- One entry per charge line as printed. Do not combine, split, or calculate lines. Never invent a line or an amount.
+- A charge is an amount billed for a service. Payments, adjustments, and balances are totals, not charges.
+- List a total only if the page prints it.
+- If a page is not a bill (for example, a clinical note that mentions a fee), return no entries for it.
+- If the pages contain no charges, return {"charges": [], "totals": []}.
+- A page marked "[Scanned page: text read by OCR ...]" was read from an image and may contain reading errors. Copy the text as it appears.
+
+Pages:
+{{pages}}

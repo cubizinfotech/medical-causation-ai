@@ -12,7 +12,9 @@ import { ReportEnrichmentService } from './services/report-enrichment.service';
 import { CaseLiteratureService } from './services/case-literature.service';
 import { CaseRecordsController } from './records/case-records.controller';
 import { CaseRecordsService } from './records/case-records.service';
+import { PdfPageOcr } from '@modules/document-processing/ocr/pdf-page-ocr';
 import { ChronologyExtractionService } from './records/chronology-extraction.service';
+import { BillingExtractionService } from './records/billing-extraction.service';
 import { AnalysisHistoryService } from './services/analysis-history.service';
 import { MedicalAnalysisService } from './services/medical-analysis.service';
 import { MedicalAnalysisController } from './controllers';
@@ -20,6 +22,8 @@ import { MedicalAnalysisGateway } from './gateway/medical-analysis.gateway';
 import { MedicalAnalysisJobService } from './jobs/medical-analysis-job.service';
 import { MedicalAnalysisProcessor } from './jobs/medical-analysis.processor';
 import { AnalysisCaseRepository } from './repositories/analysis-case.repository';
+import { DemandLetterController } from './demand-letter/demand-letter.controller';
+import { DemandLetterService } from './demand-letter/demand-letter.service';
 
 @Module({
   imports: [
@@ -30,7 +34,11 @@ import { AnalysisCaseRepository } from './repositories/analysis-case.repository'
     AuthModule,
     MedicalLiteratureModule,
   ],
-  controllers: [MedicalAnalysisController, CaseRecordsController],
+  controllers: [
+    MedicalAnalysisController,
+    CaseRecordsController,
+    DemandLetterController,
+  ],
   providers: [
     MedicalPromptService,
     MedicalQueryBuilder,
@@ -40,7 +48,10 @@ import { AnalysisCaseRepository } from './repositories/analysis-case.repository'
     ReportEnrichmentService,
     CaseLiteratureService,
     CaseRecordsService,
+    PdfPageOcr,
     ChronologyExtractionService,
+    BillingExtractionService,
+    DemandLetterService,
     MedicalAnalysisService,
     AnalysisCaseRepository,
     AnalysisHistoryService,

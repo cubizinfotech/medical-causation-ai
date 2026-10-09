@@ -7,7 +7,10 @@ import {
   type ExpertResearchProviderId,
   type ExpertResearchQuery,
   type ExpertResearchSourceResult,
+  type PublicationLookupResult,
 } from '@integrations/expert-research';
+import { compareCv, cvDiscrepancies } from '../../cv/cv-comparison';
+import type { CvCheck, CvExtraction } from '../../cv/cv.types';
 import { DiscrepancyAnalyzer } from '../../research/discrepancy-analyzer';
 import type { VerificationAttempt } from '../../research/inconsistency-analyzer';
 import {
@@ -80,6 +83,11 @@ export interface InvestigationResearchPort {
     query: ExpertResearchQuery,
     providerIds: readonly ExpertResearchProviderId[],
   ): Promise<ExpertResearchSourceResult[]>;
+  /** Checks CV publication titles against a publication index. Optional. */
+  lookupPublications?(
+    expertName: string,
+    titles: string[],
+  ): Promise<PublicationLookupResult[]>;
 }
 
 export interface InvestigationWorkflowCheckpoint {
@@ -93,6 +101,11 @@ export interface InvestigationWorkflowDependencies {
   research: InvestigationResearchPort;
   report: Pick<EwiWordReportService, 'build'>;
   analyze?: (packet: AnalysisPacket) => Promise<EwiAnalysisRecord>;
+  /** Reads the claims in the uploaded CV (AI). Optional. */
+  readCv?: (
+    documentId: string,
+    onProgress: (message: string) => Promise<void>,
+  ) => Promise<CvExtraction | null>;
   /** Reads Daubert/Frye rulings from opinion excerpts (AI). Optional. */
   readChallengeRulings?: (input: {
     expertName: string;
@@ -242,6 +255,7 @@ export async function executeInvestigationWorkflow(
   let legalResearch: LegalResearchDossier | undefined;
   let onlinePresence: OnlinePresenceDossier | undefined;
   let professionalBackground: ProfessionalBackgroundDossier | undefined;
+  let cvCheck: CvCheck | null | undefined;
 
   const ensureAnalysis = async (): Promise<EwiAnalysisRecord> => {
     if (analysisRecord) return analysisRecord;
@@ -324,6 +338,7 @@ export async function executeInvestigationWorkflow(
         sleep,
         collectedProviders,
         cache,
+        (message) => report(dependencies, stage, progress, message),
       );
       for (const result of results) {
         collectedProviders.add(result.sourceId);
@@ -365,10 +380,16 @@ export async function executeInvestigationWorkflow(
     }
 
     if (stage.kind === 'discrepancy') {
-      const found = analyzer.analyze(
+      cvCheck = await buildCvCheck(
+        request,
         evidence,
-        verificationAttempts(sourceResults),
+        sourceResults,
+        dependencies,
       );
+      const found = [
+        ...analyzer.analyze(evidence, verificationAttempts(sourceResults)),
+        ...(cvCheck ? cvDiscrepancies(cvCheck) : []),
+      ];
       const cvNotes = found.filter(
         (item) =>
           /cv/i.test(item.title) ||
@@ -492,10 +513,18 @@ export async function executeInvestigationWorkflow(
       evidence,
       stageNotes,
     });
-  const discrepancies = analyzer.analyze(
-    evidence,
-    verificationAttempts(sourceResults),
-  );
+  if (cvCheck === undefined) {
+    cvCheck = await buildCvCheck(
+      request,
+      evidence,
+      sourceResults,
+      dependencies,
+    );
+  }
+  const discrepancies = [
+    ...analyzer.analyze(evidence, verificationAttempts(sourceResults)),
+    ...(cvCheck ? cvDiscrepancies(cvCheck) : []),
+  ];
   legalResearch =
     legalResearch ??
     buildLegalResearchDossier({
@@ -541,6 +570,7 @@ export async function executeInvestigationWorkflow(
     onlinePresence,
     professionalBackground,
     identity,
+    cvCheck,
   });
 
   const sourceStatuses: EwiSourceAttemptStatus[] = sourceResults.map(
@@ -565,6 +595,7 @@ export async function executeInvestigationWorkflow(
     specialty: request.specialty,
     npi: request.npi ?? null,
     identity,
+    cvCheck: cvCheck ?? null,
     evidence,
     discrepancies,
     questions,
@@ -606,6 +637,7 @@ async function runResearchStage(
   sleep: (ms: number) => Promise<void>,
   alreadyCollected: ReadonlySet<string>,
   cache: PublicResearchCache | undefined,
+  notify?: (message: string) => Promise<void>,
 ): Promise<ExpertResearchSourceResult[]> {
   if (stage.providers.length === 0) return [];
 
@@ -613,7 +645,22 @@ async function runResearchStage(
   const pending = new Set<ExpertResearchProviderId>();
   const finished = new Map<string, ExpertResearchSourceResult>();
 
+  // The uploaded CV is this investigation's own document: read it here, and
+  // never take it from the shared research cache.
+  if (
+    stage.providers.includes('cv_profile') &&
+    !alreadyCollected.has('cv_profile') &&
+    request.cvDocumentId &&
+    dependencies.readCv
+  ) {
+    finished.set(
+      'cv_profile',
+      await readCvSource(request, dependencies, notify),
+    );
+  }
+
   for (const providerId of stage.providers) {
+    if (finished.has(providerId)) continue;
     if (alreadyCollected.has(providerId)) {
       const skip = failedResult(
         providerId,
@@ -786,6 +833,114 @@ export function identityFromResearch(
     };
   }
   return null;
+}
+
+/** The uploaded CV as the "CV and profile" source result. */
+async function readCvSource(
+  request: EwiInvestigationRequest,
+  dependencies: InvestigationWorkflowDependencies,
+  notify?: (message: string) => Promise<void>,
+): Promise<ExpertResearchSourceResult> {
+  const retrievedAt = new Date().toISOString();
+  try {
+    const extraction = await dependencies.readCv!(
+      request.cvDocumentId!,
+      notify ?? (() => Promise.resolve()),
+    );
+    if (!extraction) {
+      return {
+        sourceId: 'cv_profile',
+        status: 'unavailable',
+        outcome: 'unavailable',
+        access: 'public',
+        message: 'The uploaded CV was not found. Nothing was read.',
+        retrievedAt,
+        items: [],
+      };
+    }
+    const { document, claims } = extraction;
+    const item: ExpertEvidenceItem = {
+      sourceId: 'cv_profile',
+      category: 'cv',
+      title: `Expert CV: ${document.name}`,
+      summary: `${claims.length} claim(s) read from the uploaded CV (${document.pageCount} page${document.pageCount === 1 ? '' : 's'}). Each claim keeps its page and an exact quote.`,
+      simulated: false,
+      access: 'public',
+      informationStatus: 'unverified',
+      identityMatch: 'matched',
+      retrievedAt,
+      source: {
+        providerId: 'cv_profile',
+        name: 'Uploaded CV',
+        retrievedAt,
+        access: 'public',
+      },
+      raw: {
+        identity: { name: request.expertName, verifiedBy: 'source_match' },
+        cvExtraction: extraction,
+      },
+    };
+    return {
+      sourceId: 'cv_profile',
+      status: claims.length > 0 ? 'ok' : 'no_result',
+      outcome: claims.length > 0 ? 'success' : 'no_result',
+      access: 'public',
+      message: [
+        `Read ${claims.length} claim(s) from the uploaded CV.`,
+        ...extraction.warnings,
+      ].join(' '),
+      retrievedAt,
+      items: [item],
+    };
+  } catch (error) {
+    return {
+      sourceId: 'cv_profile',
+      status: 'error',
+      outcome: 'api_failure',
+      access: 'public',
+      message: `The uploaded CV could not be read: ${error instanceof Error ? error.message : 'unknown error'}`,
+      retrievedAt,
+      items: [],
+    };
+  }
+}
+
+/** Compares the CV's claims with the collected sources, or null without a CV. */
+async function buildCvCheck(
+  request: EwiInvestigationRequest,
+  evidence: ExpertEvidenceItem[],
+  sourceResults: ExpertResearchSourceResult[],
+  dependencies: InvestigationWorkflowDependencies,
+): Promise<CvCheck | null> {
+  const item = evidence.find(
+    (candidate) =>
+      candidate.sourceId === 'cv_profile' && candidate.raw?.cvExtraction,
+  );
+  if (!item) return null;
+  const extraction = item.raw!.cvExtraction as CvExtraction;
+  const titles = extraction.claims
+    .filter((claim) => claim.category === 'publication' && claim.details.title)
+    .map((claim) => claim.details.title!);
+  let publications: PublicationLookupResult[] = [];
+  if (titles.length > 0 && dependencies.research.lookupPublications) {
+    try {
+      publications = await dependencies.research.lookupPublications(
+        request.expertName,
+        titles,
+      );
+    } catch (error) {
+      dependencies.logger?.warn(
+        `CV publication lookup failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    }
+  }
+  return compareCv({
+    extraction,
+    evidence,
+    sourceResults,
+    identity: identityFromResearch(request, sourceResults, evidence),
+    publications,
+  });
 }
 
 function verificationAttempts(

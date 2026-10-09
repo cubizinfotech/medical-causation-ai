@@ -64,6 +64,26 @@ export const PROMPT_REGISTRY: PromptTemplateMetadata[] = [
       'Asks the model to phrase a summary, conclusions, and questions from collected EWI findings.',
   },
   {
+    id: 'ewi/cv-claims-system',
+    name: 'EWI CV Claims System',
+    category: 'ewi',
+    filename: 'ewi/cv-claims.system.prompt.txt',
+    version: '1.0.0',
+    variables: [],
+    description:
+      'Rules for reading an expert CV into quoted claims. Nothing may be inferred.',
+  },
+  {
+    id: 'ewi/cv-claims',
+    name: 'EWI CV Claims',
+    category: 'ewi',
+    filename: 'ewi/cv-claims.prompt.txt',
+    version: '1.0.0',
+    variables: ['expertName', 'documentName', 'pages'],
+    description:
+      'Asks the model for the claims on CV pages, each with its page and an exact quote.',
+  },
+  {
     id: 'ewi/challenge-rulings-system',
     name: 'EWI Challenge Rulings System',
     category: 'ewi',

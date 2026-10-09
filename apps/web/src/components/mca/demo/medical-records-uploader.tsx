@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   FileText,
   Loader2,
+  ScanText,
   ShieldCheck,
   Upload,
   X,
@@ -36,7 +37,8 @@ interface MedicalRecordsUploaderProps {
 
 /**
  * Uploads the client's medical records (PDF) as soon as they are chosen.
- * The server reads each file's pages and reports scanned pages it cannot read.
+ * The server reads each file's pages and reports scanned pages, which are
+ * read with OCR when the analysis runs (if OCR is on for the server).
  */
 export function MedicalRecordsUploader({
   records,
@@ -221,6 +223,18 @@ export function MedicalRecordsUploader({
                   </Button>
                 </div>
               </div>
+              {record.ocrPendingPages && record.ocrPendingPages.length > 0 ? (
+                <p className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+                  <ScanText
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
+                    aria-hidden
+                  />
+                  {record.ocrPendingPages.length} scanned{" "}
+                  {record.ocrPendingPages.length === 1 ? "page" : "pages"} (
+                  {formatPageList(record.ocrPendingPages)}) will be read with
+                  OCR when the analysis runs, about 1–2 seconds per page.
+                </p>
+              ) : null}
               {record.unreadablePages.length > 0 ? (
                 <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300">
                   <AlertTriangle
@@ -230,7 +244,6 @@ export function MedicalRecordsUploader({
                   {record.unreadablePages.length} scanned or blank{" "}
                   {record.unreadablePages.length === 1 ? "page" : "pages"} will
                   be skipped ({formatPageList(record.unreadablePages)}).
-                  Scanned pages cannot be read yet.
                 </p>
               ) : null}
             </li>

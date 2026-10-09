@@ -147,8 +147,11 @@ The published port is `127.0.0.1:5432`. It is not reachable from the public inte
 
 Redis is `mca-redis` (`redis:7-alpine`) with append-only persistence on the volume `mca-redis-data`. The API uses it for BullMQ (medical analysis and expert-witness jobs) and for cached job state. Keep a single `mca-api` process so those workers are not duplicated.
 
+The eviction policy must be `noeviction` ([docker/redis/redis.conf](./docker/redis/redis.conf)). With an LRU policy, Redis can delete queued jobs when memory is full. The deploy script applies the setting to the running container; to check it:
+
 ```bash
 docker exec mca-redis redis-cli ping
+docker exec mca-redis redis-cli CONFIG GET maxmemory-policy   # noeviction
 ```
 
 A healthy reply is `PONG`.
@@ -340,9 +343,11 @@ That reads `KNOWLEDGE_BASE_PATH` and stores embeddings in PostgreSQL. Do not sta
 
 Records that attorneys upload on the MCA case form are stored in `CASE_RECORDS_PATH` (default `/var/www/medical-causation-ai/data/case-records`), with their page text in PostgreSQL. The folder is ignored by Git, so deploys never touch it. These are patient records:
 
-- Back up the folder together with the database. A database backup without the files, or the files without the database, cannot be restored on its own.
-- Serve the site over HTTPS before real records are uploaded; the IP demo sends them unencrypted.
+- Back up the folder together with the database. A database backup without the files, or the files without the database, cannot be restored on its own. `scripts/backup.sh` does both; see [22. Backups](#22-backups).
+- Serve the site over HTTPS before real records are uploaded; the IP demo sends them unencrypted. See [21. HTTPS with a domain](#21-https-with-a-domain).
 - The chronology sends record text to the configured `AI_PROVIDER`. Use a provider the firm has approved for patient data.
+
+Expert CVs uploaded on the EWI intake form follow the same rules in `EWI_DOCUMENTS_PATH` (default `data/ewi-documents`): owner-only, deleted with the investigation, and included in `scripts/backup.sh`.
 
 ## 17. Disk and Docker cleanup
 
@@ -407,7 +412,7 @@ pm2 save
 curl -fsS http://127.0.0.1:3001/health
 ```
 
-`prisma migrate deploy` does not reverse migrations. If the bad deploy already applied a migration, the old code must still work with that schema, or you restore a database backup. This server does not have backups installed. Do not drop `medical_causation_ai` to “undo” a deploy.
+`prisma migrate deploy` does not reverse migrations. If the bad deploy already applied a migration, the old code must still work with that schema, or you restore a database backup made before the deploy (see [22. Backups](#22-backups)). Do not drop `medical_causation_ai` to “undo” a deploy.
 
 Return to `main` when you are ready to deploy forward again: `git checkout main`.
 
@@ -467,3 +472,97 @@ Leave these off on the public server until you decide otherwise:
 - `RESEARCH_PROVIDER=mock` until you choose to use the live public sources (NPI Registry, Open Payments, OpenAlex, CourtListener); paid research vendors are still not connected
 - `EMAIL_DELIVERY_ENABLED=false` until a real sender is approved
 - `AUTH_ENABLED=true` and a long `JWT_SECRET` before the site is shared beyond a private demo
+
+## 21. HTTPS with a domain
+
+Required before real medical records are uploaded. Over the IP address, everything, including uploaded records and sign-in tokens, travels unencrypted.
+
+Caddy runs in Docker in front of the two PM2 apps, gets Let's Encrypt certificates, renews them, and redirects HTTP to HTTPS. The configuration is [docker/caddy/Caddyfile](./docker/caddy/Caddyfile).
+
+1. Point two DNS names at the server (A records to `157.230.156.87`), for example `app.example.com` for the website and `api.example.com` for the API. Wait until `ping app.example.com` shows the server IP.
+2. Allow web traffic. With ufw (`sudo ufw status`):
+
+   ```bash
+   sudo ufw allow 80/tcp
+   sudo ufw allow 443/tcp
+   ```
+
+   With a DigitalOcean cloud firewall, add the same rules there.
+3. In `.env`:
+
+   ```env
+   APP_DOMAIN=app.example.com
+   API_DOMAIN=api.example.com
+   ACME_EMAIL=you@example.com
+   FRONTEND_URL=https://app.example.com
+   NEXT_PUBLIC_API_URL=https://api.example.com
+   API_PUBLIC_URL=https://api.example.com
+   ```
+
+4. Start Caddy, rebuild the website (`NEXT_PUBLIC_API_URL` is built into the browser bundle), and restart:
+
+   ```bash
+   cd /var/www/medical-causation-ai
+   docker compose --profile https up -d caddy
+   docker logs -f mca-caddy        # wait for "certificate obtained successfully", then Ctrl+C
+   npm run build:web
+   pm2 restart ecosystem.config.js --update-env
+   ```
+
+5. Open `https://app.example.com`, sign in, and start an investigation. Live progress uses a WebSocket, which Caddy passes through.
+6. Close the plain-HTTP ports so nobody can bypass HTTPS:
+
+   ```bash
+   sudo ufw deny 3000/tcp
+   sudo ufw deny 3001/tcp
+   ```
+
+   The deploy script checks health on `127.0.0.1`, so it keeps working.
+
+Keep the `mca-caddy-data` volume. It holds the certificates; deleting it forces new ones and can hit Let's Encrypt rate limits. `docker compose up -d postgres redis` in the deploy script does not touch Caddy.
+
+## 22. Backups
+
+`scripts/backup.sh` saves the database and the files that belong to it: uploaded medical records (`CASE_RECORDS_PATH`), uploaded expert CVs (`EWI_DOCUMENTS_PATH`), `knowledge-base/uploads`, and generated EWI reports. Each run creates `/var/backups/medical-causation-ai/<UTC time>/` with `database.dump`, `files.tar.gz`, and `SHA256SUMS`. The dump is checked before it is kept; a failed run keeps nothing. Backups older than 14 days are removed (`BACKUP_KEEP_DAYS`). Books and articles are not included unless `BACKUP_WITH_LIBRARY=1`; their originals are on the laptop.
+
+Once, as the deploy user:
+
+```bash
+sudo mkdir -p /var/backups/medical-causation-ai
+sudo chown "$USER":"$USER" /var/backups/medical-causation-ai
+cd /var/www/medical-causation-ai
+bash scripts/backup.sh
+```
+
+Every night at 02:30 (`crontab -e`):
+
+```cron
+30 2 * * * cd /var/www/medical-causation-ai && bash scripts/backup.sh >> logs/backup.log 2>&1
+```
+
+A backup on the same server is lost with the server. Also keep an off-server copy: turn on DigitalOcean droplet backups, or install `rclone`, set up an encrypted remote (`rclone config`, type `crypt`) and add `BACKUP_RCLONE_REMOTE=<remote>:<folder>` in front of the cron command. These files contain patient records; never copy them unencrypted.
+
+**Check a backup without touching live data** (restores into a scratch database, then deletes it):
+
+```bash
+cd /var/www/medical-causation-ai
+B=/var/backups/medical-causation-ai/<UTC time>
+U=$(grep '^POSTGRES_USER=' .env | cut -d= -f2-)
+(cd "$B" && sha256sum -c SHA256SUMS)
+docker exec mca-postgres createdb -U "$U" restore_check
+docker exec -i mca-postgres pg_restore -U "$U" -d restore_check --no-owner < "$B/database.dump"
+docker exec mca-postgres dropdb -U "$U" restore_check
+```
+
+**Restore** (replaces the current database and files):
+
+```bash
+cd /var/www/medical-causation-ai
+B=/var/backups/medical-causation-ai/<UTC time>
+U=$(grep '^POSTGRES_USER=' .env | cut -d= -f2-)
+D=$(grep '^POSTGRES_DB=' .env | cut -d= -f2-)
+pm2 stop mca-api mca-web
+docker exec -i mca-postgres pg_restore -U "$U" -d "$D" --clean --if-exists --no-owner < "$B/database.dump"
+tar -xzf "$B/files.tar.gz" -C /var/www/medical-causation-ai
+pm2 start ecosystem.config.js
+```

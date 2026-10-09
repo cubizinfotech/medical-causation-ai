@@ -116,6 +116,16 @@ export class OpenAlexClient {
     return { works: body.results ?? [], count: body.meta?.count ?? 0 };
   }
 
+  /** Works whose title and text best match a search phrase. */
+  async searchWorks(text: string, perPage = 5): Promise<OpenAlexWork[]> {
+    const body = await this.get<ListResponse<OpenAlexWork>>('works', {
+      search: text,
+      per_page: String(perPage),
+      select: WORK_FIELDS,
+    });
+    return body.results ?? [];
+  }
+
   private get<T>(path: string, params: Record<string, string>): Promise<T> {
     const url = new URL(
       `${(this.options.baseUrl ?? OPENALEX_API).replace(/\/$/, '')}/${path}`,

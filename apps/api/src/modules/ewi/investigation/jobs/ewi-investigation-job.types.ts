@@ -8,6 +8,7 @@ import type { EwiAnalysisRecord } from '../analysis/ewi-analysis.types';
 import type { LegalResearchDossier } from '../../research/legal';
 import type { OnlinePresenceDossier } from '../../research/online-presence';
 import type { ProfessionalBackgroundDossier } from '../../research/professional-background';
+import type { CvCheck } from '../../cv/cv.types';
 import type {
   EwiJobStatus,
   EwiJobStep,
@@ -24,6 +25,8 @@ export interface EwiInvestigationRequest {
   specialty: string;
   /** Optional National Provider Identifier supplied by the attorney. */
   npi?: string;
+  /** Optional uploaded CV of the expert. */
+  cvDocumentId?: string;
 }
 
 export interface EwiSourceAttemptStatus {
@@ -47,6 +50,8 @@ export interface EwiInvestigationResult {
   npi?: string | null;
   /** How the expert was identified in the NPI Registry. Null when not checked. */
   identity?: ExpertIdentityResolution | null;
+  /** Claims in the uploaded CV compared with the sources. Null without a CV. */
+  cvCheck?: CvCheck | null;
   evidence: ExpertEvidenceItem[];
   discrepancies: ExpertDiscrepancy[];
   questions: CrossExamQuestion[];

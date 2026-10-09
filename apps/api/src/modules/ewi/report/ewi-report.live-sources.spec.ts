@@ -64,6 +64,81 @@ const payments = (title: string, date: string): ExpertEvidenceItem => ({
   raw: { professionalKind: 'open_payments', date },
 });
 
+describe('EWI report CV comparison', () => {
+  it('lists conflicts first with the CV quote and the source', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Smith',
+      city: 'Phoenix',
+      specialty: 'Neurology',
+      evidence: [
+        {
+          sourceId: 'cv_profile',
+          category: 'cv',
+          title: 'Expert CV: smith-cv.pdf',
+          summary: '2 claim(s) read from the uploaded CV.',
+          identityMatch: 'matched',
+        },
+      ],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-09T00:00:00.000Z',
+      cvCheck: {
+        document: {
+          id: 'doc-1',
+          name: 'smith-cv.pdf',
+          pageCount: 4,
+          unreadablePages: [],
+          ocrPages: [],
+        },
+        status: 'completed',
+        claims: [],
+        warnings: [],
+        comparisons: [
+          {
+            id: 'cvc-1',
+            topic: 'education',
+            label: 'unable_to_verify',
+            severity: 'low',
+            title: 'MD, Harvard Medical School, 1998',
+            cv: { statement: 'MD, Harvard Medical School, 1998', page: 1 },
+            source: null,
+            note: 'No education source is connected.',
+          },
+          {
+            id: 'cvc-2',
+            topic: 'publication',
+            label: 'conflicting',
+            severity: 'high',
+            title:
+              'Publication found, but the expert is not listed as an author: Spine study',
+            cv: {
+              statement: 'Spine study',
+              page: 3,
+              quote: 'Spine study. Spine 2012.',
+            },
+            source: {
+              name: 'OpenAlex',
+              statement: 'Spine study (2012). Authors: Ann Lee.',
+              url: 'https://doi.org/2',
+            },
+            note: 'Check the published author list.',
+          },
+        ],
+      },
+    });
+    const text = sectionText(document, 'cv-comparison');
+    expect(text).toMatch(/Uploaded CV: smith-cv\.pdf \(4 pages\)/);
+    expect(text).toMatch(/Conflicts: 1; Not checked: 1/);
+    expect(text.indexOf('[Conflicts]')).toBeLessThan(
+      text.indexOf('[Not checked]'),
+    );
+    expect(text).toContain('CV (page 3): “Spine study. Spine 2012.”');
+    expect(text).toContain('OpenAlex: Spine study (2012). Authors: Ann Lee.');
+    // The CV finding is not repeated under miscellaneous findings.
+    expect(sectionText(document, 'misc')).not.toContain('Expert CV');
+  });
+});
+
 describe('EWI report with live sources', () => {
   const document = buildEwiReportDocument({
     expertName: 'Jane Smith',

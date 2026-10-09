@@ -12,6 +12,7 @@ import type { LegalResearchDossier } from '../research/legal';
 import type { OnlinePresenceDossier } from '../research/online-presence';
 import type { ProfessionalBackgroundDossier } from '../research/professional-background';
 import { buildEwiReportDocument } from './ewi-report.template';
+import type { CvCheck } from '../cv/cv.types';
 
 export interface EwiReportInput {
   expertName: string;
@@ -27,6 +28,7 @@ export interface EwiReportInput {
   onlinePresence?: OnlinePresenceDossier;
   professionalBackground?: ProfessionalBackgroundDossier;
   identity?: ExpertIdentityResolution | null;
+  cvCheck?: CvCheck | null;
 }
 
 export interface EwiReportOutput extends ReportArtifact {

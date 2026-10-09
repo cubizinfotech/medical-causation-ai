@@ -99,6 +99,9 @@ export class EwiInvestigationJobService
           city: dto.city.trim(),
           specialty: dto.specialty.trim(),
           ...(dto.npi ? { npi: dto.npi } : {}),
+          ...(investigation.cvDocumentId
+            ? { cvDocumentId: investigation.cvDocumentId }
+            : {}),
         },
       },
       {

@@ -41,6 +41,8 @@ export const expertInvestigationSchema = z.object({
       (value) => value === undefined || isValidNpi(value),
       "This is not a valid NPI. Check the digits for a typo.",
     ),
+  /** Set by the CV upload, not typed in. */
+  cvDocumentId: z.string().uuid().optional(),
 });
 
 export type ExpertInvestigationFormValues = z.infer<

@@ -144,6 +144,70 @@ export interface EwiIdentityResolution {
   simulated?: boolean;
 }
 
+/** The expert's CV, uploaded before the investigation starts. */
+export interface EwiExpertDocumentSummary {
+  id: string;
+  kind: "cv";
+  name: string;
+  sizeBytes: number;
+  pageCount: number;
+  /** Pages with usable text now. */
+  readablePages: number;
+  /** Pages that will not be read: blank, or scanned when OCR is off. */
+  unreadablePages: number[];
+  /** Scanned pages read with OCR when the investigation runs. */
+  ocrPendingPages: number[];
+  createdAt: string;
+}
+
+export type EwiCvLabel =
+  | "verified"
+  | "partially_verified"
+  | "conflicting"
+  | "not_verified"
+  | "not_found"
+  | "unable_to_verify";
+
+/** One statement the CV makes, quoted from its page. */
+export interface EwiCvClaim {
+  id: string;
+  category: string;
+  statement: string;
+  page: number;
+  quote: string;
+}
+
+/** A CV statement set against what a public source shows. */
+export interface EwiCvComparison {
+  id: string;
+  topic: string;
+  label: EwiCvLabel;
+  severity: "high" | "medium" | "low";
+  title: string;
+  cv: {
+    claimId?: string;
+    statement: string;
+    page?: number;
+    quote?: string;
+  } | null;
+  source: { name: string; statement: string; url?: string } | null;
+  note: string;
+}
+
+export interface EwiCvCheck {
+  document: {
+    id: string;
+    name: string;
+    pageCount: number;
+    unreadablePages: number[];
+    ocrPages: number[];
+  };
+  status: "completed" | "partial" | "failed";
+  claims: EwiCvClaim[];
+  comparisons: EwiCvComparison[];
+  warnings: string[];
+}
+
 export interface EwiLegalResearch {
   matters: EwiLegalMatter[];
   orders: Array<{
@@ -277,6 +341,8 @@ export interface EwiInvestigationResult {
   specialty: string;
   npi?: string | null;
   identity?: EwiIdentityResolution | null;
+  /** Present when the expert's CV was uploaded. */
+  cvCheck?: EwiCvCheck | null;
   evidence: EwiEvidenceItem[];
   discrepancies: EwiDiscrepancy[];
   questions: EwiCrossExamQuestion[];
@@ -364,6 +430,8 @@ export interface EwiHistoryListItem {
 
 export interface EwiHistoryDetail extends EwiHistoryListItem {
   notes: string | null;
+  /** The CV uploaded for this investigation, reused by Run again. */
+  cvDocument?: { id: string; name: string; pageCount: number } | null;
   result: EwiInvestigationResult | null;
   reportMimeType: string | null;
 }

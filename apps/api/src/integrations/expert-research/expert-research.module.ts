@@ -4,6 +4,7 @@ import type { ResearchProviderSettings } from '@config/config.types';
 import {
   createCatalogProviders,
   createExpertResearchRuntime,
+  createPublicationLookup,
   ExpertResearchService,
 } from './expert-research.service';
 
@@ -11,14 +12,15 @@ import {
   providers: [
     {
       provide: ExpertResearchService,
-      useFactory: (config: ConfigService) =>
-        new ExpertResearchService(
-          createCatalogProviders(
-            createExpertResearchRuntime(
-              config.get<ResearchProviderSettings>('research'),
-            ),
-          ),
-        ),
+      useFactory: (config: ConfigService) => {
+        const runtime = createExpertResearchRuntime(
+          config.get<ResearchProviderSettings>('research'),
+        );
+        return new ExpertResearchService(
+          createCatalogProviders(runtime),
+          createPublicationLookup(runtime),
+        );
+      },
       inject: [ConfigService],
     },
   ],

@@ -10,6 +10,11 @@ import type {
 import { CatalogExpertResearchProvider } from './providers/catalog-expert-research.provider';
 import { EXPERT_RESEARCH_CATALOG } from './providers/provider-catalog';
 import { createLiveSourceProviders } from './live/live-sources';
+import { OpenAlexClient } from './live/openalex.client';
+import {
+  PublicationTitleLookup,
+  type PublicationLookupResult,
+} from './live/publication-lookup';
 import { applyIdentityMatch } from './providers/identity-match';
 import { applyPublicEvidenceGate } from './providers/public-affiliation';
 import { markConflicts } from './providers/information-status';
@@ -61,9 +66,42 @@ export function createCatalogProviders(
   );
 }
 
+/** OpenAlex title checks for CV publications; null outside live mode. */
+export function createPublicationLookup(
+  runtime: ProviderRuntimeOptions,
+): PublicationTitleLookup | null {
+  if (runtime.mode !== 'live') return null;
+  const live = runtime.live ?? { timeoutMs: runtime.timeoutMs };
+  return new PublicationTitleLookup(
+    new OpenAlexClient({
+      timeoutMs: live.timeoutMs,
+      fetchImpl: live.fetchImpl,
+      apiKey: live.openAlexApiKey,
+      mailto: live.openAlexMailto,
+    }),
+  );
+}
+
 @Injectable()
 export class ExpertResearchService {
-  constructor(private readonly providers: IExpertResearchProvider[]) {}
+  constructor(
+    private readonly providers: IExpertResearchProvider[],
+    private readonly publicationLookup: PublicationTitleLookup | null = null,
+  ) {}
+
+  /**
+   * Checks publication titles (from an uploaded CV) against OpenAlex.
+   * Outside live mode every title comes back unavailable; nothing is guessed.
+   */
+  async lookupPublications(
+    expertName: string,
+    titles: string[],
+  ): Promise<PublicationLookupResult[]> {
+    if (!this.publicationLookup) {
+      return titles.map((title) => ({ title, status: 'unavailable' as const }));
+    }
+    return this.publicationLookup.lookup(expertName, titles);
+  }
 
   listProviders(): ProviderDefinition[] {
     return this.providers.map((provider) => provider.definition);

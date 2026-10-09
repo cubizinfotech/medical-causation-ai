@@ -3,6 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
   Validate,
@@ -48,4 +49,9 @@ export class CreateExpertInvestigationDto {
   )
   @Validate(NpiConstraint)
   npi?: string;
+
+  /** Optional. The expert's CV, uploaded first with POST /ewi/documents/cv. */
+  @IsOptional()
+  @IsUUID()
+  cvDocumentId?: string;
 }

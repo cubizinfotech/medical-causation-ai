@@ -1,0 +1,20 @@
+Write the "Injuries and Treatment" section of a personal injury demand letter to an insurance claims representative.
+
+Client: {{clientName}}
+Date of the incident: {{dateOfLoss}}
+
+These entries come from the client's medical records. Each entry starts with its id (rec-N):
+{{chronology}}
+
+Write 2 to 6 short paragraphs in date order: the first treatment after the incident, what was found, the course of treatment, and where treatment stood at the latest entry.
+
+Rules:
+- Use only these entries. Do not add diagnoses, tests, treatments, providers, dates, or outcomes that the entries do not state. Do not predict future care, permanence, or prognosis unless an entry states it.
+- Describe how treatment relates to the incident in the entries' own words (for example, "after the collision"). Do not say the incident caused, or is related to, an injury unless an entry says so.
+- End every sentence with the id of each entry it relies on, in square brackets, for example [rec-3] or [rec-3][rec-5].
+- No dollar amounts.
+- Refer to the client as {{clientName}} the first time, then by name or as "our client". Do not use Mr., Ms., or Mrs.
+- Write dates like "August 14, 2024".
+- Plain, factual, professional language. No exaggeration and no legal conclusions.
+
+Return a JSON object {"paragraphs": ["...", "..."]}.

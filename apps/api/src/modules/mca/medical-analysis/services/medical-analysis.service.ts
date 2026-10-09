@@ -6,7 +6,10 @@ import type {
   MedicalAnalysisRequest,
   MedicalAnalysisResult,
   MedicalChronology,
+  MedicalSpecials,
 } from '../types';
+import type { LoadedCaseRecord } from '../records/case-record.types';
+import { findDefenseIssues } from '../records/defense-issues';
 import {
   ANALYSIS_JOB_STEPS,
   ANALYSIS_JOB_STEP_LABELS,
@@ -18,6 +21,7 @@ import { ReportEnrichmentService } from './report-enrichment.service';
 import { CaseLiteratureService } from './case-literature.service';
 import { CaseRecordsService } from '../records/case-records.service';
 import { ChronologyExtractionService } from '../records/chronology-extraction.service';
+import { BillingExtractionService } from '../records/billing-extraction.service';
 import { parseMedicalAnalysisJson, AnalysisResponseParseError } from '../utils';
 import { AnalysisSafetyException } from '../exceptions';
 import type { MedicalAnalysisLlmOutput } from '../types';
@@ -45,6 +49,7 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
     private readonly caseLiterature: CaseLiteratureService,
     private readonly caseRecords: CaseRecordsService,
     private readonly chronologyExtraction: ChronologyExtractionService,
+    private readonly billingExtraction: BillingExtractionService,
   ) {}
 
   async analyze(
@@ -71,7 +76,11 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
 
     await report(ANALYSIS_JOB_STEPS.INTAKE, 10, 'Preparing medical case…');
 
-    const chronology = await this.buildChronology(request, report);
+    const { chronology, records } = await this.buildChronology(request, report);
+    const medicalSpecials = await this.readBills(records, chronology, report);
+    // "Bad facts" the defense may raise: fixed rules over the records and
+    // intake, so the analysis can address them and the report lists them.
+    const defenseIssues = findDefenseIssues({ request, chronology, records });
 
     const retrievalRequest = this.queryBuilder.buildRetrievalRequest(request);
 
@@ -96,6 +105,7 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       retrieval,
       chronology,
       this.caseRecords.chronologySettings.chronologyPromptChars,
+      defenseIssues,
     );
     const citationMap = new Map(
       builtPrompts.citationCatalog.map((c) => [c.chunkId, c]),
@@ -146,6 +156,8 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       request,
       literature,
       chronology,
+      defenseIssues,
+      medicalSpecials,
     );
 
     await report(
@@ -170,14 +182,28 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       progress: number,
       message: string,
     ) => Promise<void>,
-  ): Promise<MedicalChronology | undefined> {
-    if (!request.recordIds?.length) return undefined;
+  ): Promise<{ chronology?: MedicalChronology; records: LoadedCaseRecord[] }> {
+    if (!request.recordIds?.length) return { records: [] };
 
     await report(
       ANALYSIS_JOB_STEPS.RECORDS,
       14,
       'Reading uploaded medical records…',
     );
+    const scanned = await this.caseRecords.readScannedPages(
+      request.recordIds,
+      (done, total) =>
+        report(
+          ANALYSIS_JOB_STEPS.RECORDS,
+          14 + Math.round((done / total) * 2),
+          `Reading scanned pages with OCR (${done} of ${total})…`,
+        ),
+    );
+    if (scanned.attempted > 0) {
+      this.logger.log(
+        `OCR read ${scanned.read} of ${scanned.attempted} scanned page(s)`,
+      );
+    }
     const records = await this.caseRecords.loadForAnalysis(request.recordIds);
 
     await report(
@@ -194,11 +220,43 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
           16 + Math.round((done / total) * 18),
           `Building the cited medical chronology (${done} of ${total} sections read)…`,
         ),
+      {
+        lowConfidence: this.caseRecords.chronologySettings.ocrLowConfidence,
+        error: scanned.error,
+      },
     );
     this.logger.log(
       `Chronology: ${chronology.events.length} events from ${chronology.pagesProcessed} pages (${chronology.status})`,
     );
-    return chronology;
+    return { chronology, records };
+  }
+
+  /** Reads the pages that look like bills into a cited ledger (34–37%). */
+  private async readBills(
+    records: LoadedCaseRecord[],
+    chronology: MedicalChronology | undefined,
+    report: (
+      step: AnalysisJobStep,
+      progress: number,
+      message: string,
+    ) => Promise<void>,
+  ): Promise<MedicalSpecials | undefined> {
+    if (records.length === 0) return undefined;
+    await report(ANALYSIS_JOB_STEPS.CHRONOLOGY, 34, 'Reading medical bills…');
+    const specials = await this.billingExtraction.build(
+      records,
+      chronology?.events ?? [],
+      (done, total) =>
+        report(
+          ANALYSIS_JOB_STEPS.CHRONOLOGY,
+          34 + Math.round((done / total) * 3),
+          `Reading medical bills (${done} of ${total} sections)…`,
+        ),
+    );
+    this.logger.log(
+      `Bills: ${specials.charges.length} charges from ${specials.providers.length} providers (${specials.status})`,
+    );
+    return specials;
   }
 
   private async completeWithCitationValidation(params: {

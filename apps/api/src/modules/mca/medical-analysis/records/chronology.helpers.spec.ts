@@ -1,7 +1,9 @@
 import {
   buildChronologyBatches,
   finalizeChronology,
+  formatBatchPages,
   formatChronologyForPrompt,
+  OCR_PAGE_NOTE,
   normalizeEventDate,
   parseChronologyResponse,
   validateChronologyEvents,
@@ -189,6 +191,7 @@ describe('chronology helpers', () => {
       name: `${id}.pdf`,
       pageCount: texts.length,
       unreadablePages: [],
+      ocrPages: [],
       pages: texts.map((text, i) => ({
         pageNumber: i + 1,
         text,
@@ -211,5 +214,56 @@ describe('chronology helpers', () => {
 
   it('formats page lists as ranges', () => {
     expect(formatPageList([9, 1, 2, 3, 7, 10])).toBe('1–3, 7, 9–10');
+  });
+
+  describe('pages read with OCR', () => {
+    const scanned =
+      'EMERGENCY DEPARTMENT NOTE. Assessment: Concussion without loss of consciousness (506.0X0A). Cervical strain (S13.4XXA).';
+
+    it('accepts a printed code that OCR misread, on OCR pages only', () => {
+      expect(verifiedIcd10('S06.0X0A', scanned, { ocr: true })).toBe(
+        'S06.0X0A',
+      );
+      expect(verifiedIcd10('S06.0X0A', scanned)).toBeUndefined();
+      // Look-alikes still have to be the same printed code.
+      expect(verifiedIcd10('S06.1X0A', scanned, { ocr: true })).toBeUndefined();
+      expect(verifiedIcd10('S13.4XXA', scanned, { ocr: true })).toBe(
+        'S13.4XXA',
+      );
+    });
+
+    it('marks scanned pages for the model and tags their events', () => {
+      const ocrBatch: ChronologyBatch = {
+        recordId: 'record-2',
+        documentName: 'fax.pdf',
+        pages: [
+          { pageNumber: 1, text: scanned, batesNumbers: [], ocrConfidence: 74 },
+          { pageNumber: 2, text: page4, batesNumbers: [] },
+        ],
+      };
+      const prompt = formatBatchPages(ocrBatch);
+      expect(prompt).toContain(`=== Page 1 ===\n${OCR_PAGE_NOTE}\n`);
+      expect(prompt).toContain(`=== Page 2 ===\nDischarge instructions`);
+
+      const [event] = validateChronologyEvents(
+        [
+          {
+            date: '2024-08-14',
+            type: 'emergency',
+            summary: 'Concussion without loss of consciousness.',
+            diagnoses: [{ description: 'Concussion', icd10: 'S06.0X0A' }],
+            page: 1,
+            quote: 'Concussion without loss of consciousness',
+          },
+        ],
+        ocrBatch,
+      );
+      expect(event).toMatchObject({
+        pageNumber: 1,
+        quoteVerified: true,
+        ocrConfidence: 74,
+        diagnoses: [{ description: 'Concussion', icd10: 'S06.0X0A' }],
+      });
+    });
   });
 });

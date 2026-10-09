@@ -128,6 +128,25 @@ export interface CaseRecordsSettings {
   chronologyPromptChars: number;
   /** Unattached uploads are deleted after this many hours. */
   stagedTtlHours: number;
+  /** Read scanned pages with OCR (Tesseract, on this server) during the analysis. */
+  ocrEnabled: boolean;
+  /** Render resolution for OCR. */
+  ocrDpi: number;
+  /** Pages read with a lower OCR confidence (0–100) are flagged for checking. */
+  ocrLowConfidence: number;
+}
+
+/** Documents attorneys upload for EWI investigations (the expert's CV). */
+export interface EwiDocumentsSettings {
+  storagePath: string;
+  maxFileSizeBytes: number;
+  maxPages: number;
+  /** Unattached uploads are deleted after this many hours. */
+  stagedTtlHours: number;
+  ocrEnabled: boolean;
+  ocrDpi: number;
+  /** Characters of CV text per extraction call. */
+  batchChars: number;
 }
 
 export type EmailProviderName = 'console' | 'smtp' | 'transactional';
@@ -257,6 +276,7 @@ export interface RootConfig {
   research: ResearchProviderSettings;
   literature: LiteratureSearchSettings;
   caseRecords: CaseRecordsSettings;
+  ewiDocuments: EwiDocumentsSettings;
   features: FeatureFlags;
   indexing: IndexingConfigSettings;
   rag: RagConfigSettings;

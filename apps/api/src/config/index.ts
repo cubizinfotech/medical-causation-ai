@@ -18,6 +18,7 @@ export { jobsConfig } from './jobs.config';
 export { researchConfig } from './research.config';
 export { literatureConfig } from './literature.config';
 export { caseRecordsConfig } from './case-records.config';
+export { ewiDocumentsConfig } from './ewi-documents.config';
 export type {
   RootConfig,
   AppSettings,

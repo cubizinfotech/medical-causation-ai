@@ -7,6 +7,9 @@ import {
 import type { ProcessedPage } from '../types';
 import { countWords } from '../utils';
 
+/** Pages with less text than this are checked for images (likely scans). */
+const IMAGE_CHECK_MAX_CHARS = 300;
+
 /**
  * Extract text page-by-page from PDF files using pdfjs-dist.
  * Handles large medical books by processing one page at a time.
@@ -51,11 +54,24 @@ export class PdfParser implements IDocumentParser {
           .replace(/\s+/g, ' ')
           .trim();
 
+        let hasImages: boolean | undefined;
+        if (pageText.length < IMAGE_CHECK_MAX_CHARS) {
+          const operators = await page.getOperatorList();
+          hasImages = operators.fnArray.some(
+            (op) =>
+              op === pdfjs.OPS.paintImageXObject ||
+              op === pdfjs.OPS.paintInlineImageXObject ||
+              op === pdfjs.OPS.paintImageXObjectRepeat ||
+              op === pdfjs.OPS.paintImageMaskXObject,
+          );
+        }
+
         pages.push({
           pageNumber: pageNum,
           text: pageText,
           wordCount: countWords(pageText),
           charCount: pageText.length,
+          ...(hasImages !== undefined ? { hasImages } : {}),
         });
       }
 

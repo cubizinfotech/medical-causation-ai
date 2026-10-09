@@ -13,8 +13,10 @@ import {
   Globe,
   Loader2,
   Printer,
+  Receipt,
   Scale,
   Shield,
+  ShieldAlert,
   Stethoscope,
 } from "lucide-react";
 import type { MedicalAnalysisResult } from "@/features/mca/medical-analysis/types";
@@ -29,6 +31,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ReportTermsSection } from "@/components/mca/report/report-terms-section";
 import { PublicLiteratureSection } from "@/components/mca/report/public-literature-section";
 import { MedicalChronologySection } from "@/components/mca/report/medical-chronology-section";
+import { DefenseIssuesSection } from "@/components/mca/report/defense-issues-section";
+import { MedicalSpecialsSection } from "@/components/mca/report/medical-specials-section";
 import { RecordPageLink } from "@/components/mca/report/record-page-link";
 import { formatReportDate } from "@/utils/format-date";
 
@@ -251,6 +255,18 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
         {result.chronology ? (
           <SectionCard icon={Stethoscope} title="Medical Chronology">
             <MedicalChronologySection chronology={result.chronology} />
+          </SectionCard>
+        ) : null}
+
+        {result.defenseIssues ? (
+          <SectionCard icon={ShieldAlert} title="Defense Issues (Bad Facts)">
+            <DefenseIssuesSection summary={result.defenseIssues} />
+          </SectionCard>
+        ) : null}
+
+        {result.medicalSpecials ? (
+          <SectionCard icon={Receipt} title="Medical Bills (Specials)">
+            <MedicalSpecialsSection specials={result.medicalSpecials} />
           </SectionCard>
         ) : null}
 

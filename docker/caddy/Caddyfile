@@ -1,0 +1,33 @@
+# HTTPS in front of the PM2 apps. Caddy gets and renews Let's Encrypt
+# certificates automatically and redirects HTTP to HTTPS.
+# Domains come from .env (APP_DOMAIN, API_DOMAIN, ACME_EMAIL). Both DNS names
+# must point at this server before Caddy starts. See DEPLOYMENT.md, "HTTPS".
+{
+	email {$ACME_EMAIL}
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# Website (Next.js, PM2 app mca-web)
+{$APP_DOMAIN} {
+	import common
+	reverse_proxy 127.0.0.1:3000
+}
+
+# API and WebSocket progress updates (NestJS, PM2 app mca-api)
+{$API_DOMAIN} {
+	import common
+	# Medical record uploads can be large.
+	request_body {
+		max_size 100MB
+	}
+	reverse_proxy 127.0.0.1:3001
+}

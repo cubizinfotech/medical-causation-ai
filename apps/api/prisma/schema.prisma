@@ -145,19 +145,23 @@ model AnalysisCase {
 /// A client medical record (PDF) uploaded for an MCA case. Staged (caseId
 /// null) until an analysis is started; staged uploads expire after a day.
 model CaseRecord {
-  id              String           @id @default(uuid()) @db.Uuid
-  ownerUserId     String           @map("owner_user_id") @db.Uuid
-  caseId          String?          @map("case_id") @db.Uuid
-  originalName    String           @map("original_name")
-  mimeType        String           @map("mime_type")
-  byteSize        Int              @map("byte_size")
+  id              String    @id @default(uuid()) @db.Uuid
+  ownerUserId     String    @map("owner_user_id") @db.Uuid
+  caseId          String?   @map("case_id") @db.Uuid
+  originalName    String    @map("original_name")
+  mimeType        String    @map("mime_type")
+  byteSize        Int       @map("byte_size")
   sha256          String
   /// Path relative to the case-records storage root. Never the original name.
-  storageKey      String           @map("storage_key")
-  pageCount       Int              @map("page_count")
-  /// Pages without a text layer (scanned or blank); not read until OCR exists.
-  unreadablePages Int[]            @map("unreadable_pages")
-  createdAt       DateTime         @default(now()) @map("created_at")
+  storageKey      String    @map("storage_key")
+  pageCount       Int       @map("page_count")
+  /// Pages with no usable text: scanned pages before OCR, or blank pages.
+  unreadablePages Int[]     @map("unreadable_pages")
+  /// Pages whose text was read by OCR from the scanned image.
+  ocrPages        Int[]     @default([]) @map("ocr_pages")
+  /// Set once OCR has run, so it is not repeated for the same file.
+  ocrCompletedAt  DateTime? @map("ocr_completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   case  AnalysisCase?    @relation(fields: [caseId], references: [id], onDelete: Cascade)
   pages CaseRecordPage[]
@@ -170,10 +174,12 @@ model CaseRecord {
 
 /// Extracted text of one PDF page, used to build and verify the chronology.
 model CaseRecordPage {
-  recordId     String   @map("record_id") @db.Uuid
-  pageNumber   Int      @map("page_number")
-  text         String
-  batesNumbers String[] @map("bates_numbers")
+  recordId      String   @map("record_id") @db.Uuid
+  pageNumber    Int      @map("page_number")
+  text          String
+  batesNumbers  String[] @map("bates_numbers")
+  /// OCR confidence (0–100) when the text was read from a scanned image.
+  ocrConfidence Int?     @map("ocr_confidence")
 
   record CaseRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
 
@@ -290,26 +296,26 @@ model Expert {
 }
 
 model Investigation {
-  id            String              @id @default(uuid()) @db.Uuid
-  expertId      String              @map("expert_id") @db.Uuid
-  jobId         String              @unique @map("job_id")
-  status        InvestigationStatus @default(pending)
-  currentStage  String?             @map("current_stage")
-  stageLabel    String?             @map("stage_label")
-  progress      Int                 @default(0)
-  message       String?
-  errorMessage  String?             @map("error_message")
-  notes         String?
+  id           String              @id @default(uuid()) @db.Uuid
+  expertId     String              @map("expert_id") @db.Uuid
+  jobId        String              @unique @map("job_id")
+  status       InvestigationStatus @default(pending)
+  currentStage String?             @map("current_stage")
+  stageLabel   String?             @map("stage_label")
+  progress     Int                 @default(0)
+  message      String?
+  errorMessage String?             @map("error_message")
+  notes        String?
   /// Optional NPI supplied by the attorney to confirm the expert.
-  npi           String?             @db.VarChar(10)
-  startedAt     DateTime?           @map("started_at")
-  completedAt   DateTime?           @map("completed_at")
-  cancelledAt   DateTime?           @map("cancelled_at")
-  createdAt     DateTime            @default(now()) @map("created_at")
-  updatedAt     DateTime            @updatedAt @map("updated_at")
-  ownerUserId   String?             @map("owner_user_id") @db.Uuid
+  npi          String?             @db.VarChar(10)
+  startedAt    DateTime?           @map("started_at")
+  completedAt  DateTime?           @map("completed_at")
+  cancelledAt  DateTime?           @map("cancelled_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+  ownerUserId  String?             @map("owner_user_id") @db.Uuid
 
-  expert        Expert              @relation(fields: [expertId], references: [id])
+  expert        Expert                 @relation(fields: [expertId], references: [id])
   profile       ExpertProfile?
   sources       ResearchSource[]
   findings      ResearchFinding[]
@@ -319,6 +325,7 @@ model Investigation {
   analysis      InvestigationAnalysis?
   events        InvestigationEvent[]
   requests      InvestigationRequest[]
+  documents     ExpertDocument[]
 
   @@index([status])
   @@index([expertId])
@@ -403,33 +410,33 @@ model ResearchFinding {
 }
 
 model Discrepancy {
-  id                 String              @id @default(uuid()) @db.Uuid
-  investigationId    String              @map("investigation_id") @db.Uuid
+  id                 String             @id @default(uuid()) @db.Uuid
+  investigationId    String             @map("investigation_id") @db.Uuid
   severity           String
   title              String
   description        String
-  relatedUrls        String[]            @default([]) @map("related_urls")
-  sourceType         String?             @map("source_type")
-  sourceName         String?             @map("source_name")
-  sourceUrl          String?             @map("source_url")
-  retrievedAt        DateTime?           @map("retrieved_at")
-  relevantDates      DateTime[]          @default([]) @map("relevant_dates")
-  evidenceStatus     EvidenceStatus      @default(recorded) @map("evidence_status")
-  verificationStatus VerificationStatus  @default(unverified) @map("verification_status")
-  label              InconsistencyLabel  @default(not_verified)
+  relatedUrls        String[]           @default([]) @map("related_urls")
+  sourceType         String?            @map("source_type")
+  sourceName         String?            @map("source_name")
+  sourceUrl          String?            @map("source_url")
+  retrievedAt        DateTime?          @map("retrieved_at")
+  relevantDates      DateTime[]         @default([]) @map("relevant_dates")
+  evidenceStatus     EvidenceStatus     @default(recorded) @map("evidence_status")
+  verificationStatus VerificationStatus @default(unverified) @map("verification_status")
+  label              InconsistencyLabel @default(not_verified)
   field              String?
-  previousValue      String?             @map("previous_value") @db.Text
-  currentValue       String?             @map("current_value") @db.Text
-  changeText         String?             @map("change_text") @db.Text
-  cvDate             String?             @map("cv_date")
-  cvSource           String?             @map("cv_source")
-  supportingSource   String?             @map("supporting_source")
-  priority           Int                 @default(100)
+  previousValue      String?            @map("previous_value") @db.Text
+  currentValue       String?            @map("current_value") @db.Text
+  changeText         String?            @map("change_text") @db.Text
+  cvDate             String?            @map("cv_date")
+  cvSource           String?            @map("cv_source")
+  supportingSource   String?            @map("supporting_source")
+  priority           Int                @default(100)
   /// Source statements compared for this inconsistency.
   evidence           Json?
-  restricted         Boolean             @default(false)
+  restricted         Boolean            @default(false)
   notes              String?
-  createdAt          DateTime            @default(now()) @map("created_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
 
   investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
 
@@ -533,31 +540,74 @@ enum InvestigationRequestStatus {
 /// Prepared or sent FOIA / university / outreach request for an investigation.
 /// Recipient addresses and credentials are never hardcoded; they come from
 /// configuration or per-request input. Passwords are never stored here.
+/// A document the attorney uploads for an investigation (the expert's CV).
+/// Files live outside the web root; rows are scoped to the uploading user.
+model ExpertDocument {
+  id              String    @id @default(uuid()) @db.Uuid
+  ownerUserId     String    @map("owner_user_id") @db.Uuid
+  investigationId String?   @map("investigation_id") @db.Uuid
+  /// "cv"
+  kind            String
+  originalName    String    @map("original_name")
+  byteSize        Int       @map("byte_size")
+  sha256          String
+  /// Path relative to the EWI documents root. Never the original name.
+  storageKey      String    @map("storage_key")
+  pageCount       Int       @map("page_count")
+  /// Pages with no usable text: scanned pages before OCR, or blank pages.
+  unreadablePages Int[]     @map("unreadable_pages")
+  ocrPages        Int[]     @default([]) @map("ocr_pages")
+  ocrCompletedAt  DateTime? @map("ocr_completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  investigation Investigation?       @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  pages         ExpertDocumentPage[]
+
+  @@index([ownerUserId, createdAt(sort: Desc)])
+  @@index([investigationId])
+  @@map("expert_documents")
+  @@schema("ewi")
+}
+
+/// Text of one page of an expert document.
+model ExpertDocumentPage {
+  documentId    String @map("document_id") @db.Uuid
+  pageNumber    Int    @map("page_number")
+  text          String
+  ocrConfidence Int?   @map("ocr_confidence")
+
+  document ExpertDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, pageNumber])
+  @@map("expert_document_pages")
+  @@schema("ewi")
+}
+
 model InvestigationRequest {
-  id                 String                       @id @default(uuid()) @db.Uuid
-  investigationId    String                       @map("investigation_id") @db.Uuid
-  requestType        InvestigationRequestType     @map("request_type")
-  status             InvestigationRequestStatus   @default(draft)
-  organizationName   String                       @map("organization_name")
-  recipientEmail     String?                      @map("recipient_email")
-  recipientName      String?                      @map("recipient_name")
-  subject            String
-  bodyText           String                       @map("body_text") @db.Text
-  templateId         String                       @map("template_id")
-  caseReference      String                       @map("case_reference")
-  followUpAt         DateTime?                    @map("follow_up_at")
-  parentRequestId    String?                      @map("parent_request_id") @db.Uuid
-  approvedAt         DateTime?                    @map("approved_at")
-  approvedBy         String?                      @map("approved_by")
-  sentAt             DateTime?                    @map("sent_at")
-  provider           String?
-  providerMessageId  String?                      @map("provider_message_id")
-  delivered          Boolean                      @default(false)
-  errorMessage       String?                      @map("error_message") @db.Text
+  id                String                     @id @default(uuid()) @db.Uuid
+  investigationId   String                     @map("investigation_id") @db.Uuid
+  requestType       InvestigationRequestType   @map("request_type")
+  status            InvestigationRequestStatus @default(draft)
+  organizationName  String                     @map("organization_name")
+  recipientEmail    String?                    @map("recipient_email")
+  recipientName     String?                    @map("recipient_name")
+  subject           String
+  bodyText          String                     @map("body_text") @db.Text
+  templateId        String                     @map("template_id")
+  caseReference     String                     @map("case_reference")
+  followUpAt        DateTime?                  @map("follow_up_at")
+  parentRequestId   String?                    @map("parent_request_id") @db.Uuid
+  approvedAt        DateTime?                  @map("approved_at")
+  approvedBy        String?                    @map("approved_by")
+  sentAt            DateTime?                  @map("sent_at")
+  provider          String?
+  providerMessageId String?                    @map("provider_message_id")
+  delivered         Boolean                    @default(false)
+  errorMessage      String?                    @map("error_message") @db.Text
   /// Structured generation fields. No credentials.
-  metadata           Json?
-  createdAt          DateTime                     @default(now()) @map("created_at")
-  updatedAt          DateTime                     @updatedAt @map("updated_at")
+  metadata          Json?
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
 
   investigation Investigation          @relation(fields: [investigationId], references: [id], onDelete: Cascade)
   parentRequest InvestigationRequest?  @relation("RequestFollowUps", fields: [parentRequestId], references: [id], onDelete: SetNull)

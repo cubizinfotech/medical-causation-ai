@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { CaseRecordsSettings } from './config.types';
 
 /** The monorepo root: the nearest package.json that declares workspaces. */
-function findRepositoryRoot(start = process.cwd()): string {
+export function findRepositoryRoot(start = process.cwd()): string {
   let dir = start;
   for (let i = 0; i < 4; i++) {
     const manifest = join(dir, 'package.json');
@@ -41,5 +41,8 @@ export const caseRecordsConfig = (): CaseRecordsSettings => {
     chronologyBatchChars: Number(process.env.CHRONOLOGY_BATCH_CHARS ?? 12000),
     chronologyPromptChars: Number(process.env.CHRONOLOGY_PROMPT_CHARS ?? 10000),
     stagedTtlHours: Number(process.env.MCA_RECORDS_STAGED_TTL_HOURS ?? 24),
+    ocrEnabled: process.env.MCA_RECORDS_OCR !== 'false',
+    ocrDpi: Number(process.env.MCA_RECORDS_OCR_DPI ?? 200),
+    ocrLowConfidence: Number(process.env.MCA_RECORDS_OCR_LOW_CONFIDENCE ?? 60),
   };
 };
