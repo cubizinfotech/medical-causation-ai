@@ -131,4 +131,27 @@ if [[ "$web_code" != "200" && "$web_code" != "304" ]]; then
   exit 1
 fi
 
+# Caddy serves the site on port 80 by IP (CADDYFILE=Caddyfile.ip) or with
+# HTTPS for a domain (APP_DOMAIN). Recreated so a changed setting applies;
+# certificates stay in the mca-caddy-data volume.
+env_setting() { grep -E "^$1=" .env | tail -n 1 | cut -d= -f2- | tr -d '\r"'; }
+if [[ -n "$(env_setting CADDYFILE)" || -n "$(env_setting APP_DOMAIN)" ]]; then
+  docker compose --profile https up -d --force-recreate caddy
+  if [[ "$(env_setting CADDYFILE)" == "Caddyfile.ip" ]]; then
+    proxied=0
+    for _ in $(seq 1 15); do
+      if curl -fsS "http://127.0.0.1/api/health" >/dev/null; then
+        proxied=1
+        break
+      fi
+      sleep 2
+    done
+    if [[ "$proxied" != "1" ]]; then
+      echo "Caddy check failed (port 80). See: docker logs mca-caddy"
+      exit 1
+    fi
+    echo "Site on port 80: OK"
+  fi
+fi
+
 echo "Deploy finished."

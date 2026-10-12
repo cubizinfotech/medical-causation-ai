@@ -109,7 +109,8 @@ services:
       API_DOMAIN: ${API_DOMAIN:-}
       ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
-      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Caddyfile (HTTPS with domains) or Caddyfile.ip (port 80 on the IP, no domain yet)
+      - ./docker/caddy/${CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
 

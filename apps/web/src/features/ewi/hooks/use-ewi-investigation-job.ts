@@ -6,7 +6,7 @@ import { io, type Socket } from "socket.io-client";
 import { ewiClient } from "@/features/ewi/ewi.service";
 import { ewiKeys } from "@/features/ewi/query-keys";
 import { getAccessToken } from "@/lib/config";
-import { ewiSocketUrl } from "@/lib/config/socket";
+import { ewiSocket } from "@/lib/config/socket";
 import type { ExpertInvestigationFormValues } from "@/features/ewi/schemas/expert-form.schema";
 import type {
   CreateEwiJobResponse,
@@ -88,7 +88,9 @@ export function useEwiInvestigationJob() {
   useEffect(() => {
     if (!jobId) return;
 
-    const socket: Socket = io(ewiSocketUrl(), {
+    const target = ewiSocket();
+    const socket: Socket = io(target.url, {
+      path: target.path,
       transports: ["websocket", "polling"],
       autoConnect: true,
       auth: { token: getAccessToken() ?? undefined },

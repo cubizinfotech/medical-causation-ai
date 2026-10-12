@@ -357,7 +357,7 @@ That reads `KNOWLEDGE_BASE_PATH` and stores embeddings in PostgreSQL. Do not sta
 Records that attorneys upload on the MCA case form are stored in `CASE_RECORDS_PATH` (default `/var/www/medical-causation-ai/data/case-records`), with their page text in PostgreSQL. The folder is ignored by Git, so deploys never touch it. These are patient records:
 
 - Back up the folder together with the database. A database backup without the files, or the files without the database, cannot be restored on its own. `scripts/backup.sh` does both; see [22. Backups](#22-backups).
-- Serve the site over HTTPS before real records are uploaded; the IP demo sends them unencrypted. See [21. HTTPS with a domain](#21-https-with-a-domain).
+- Serve the site over HTTPS before real records are uploaded; the IP demo sends them unencrypted. See [21. Port 80 without a domain, then HTTPS with a domain](#21-port-80-without-a-domain-then-https-with-a-domain).
 - The chronology sends record text to the configured `AI_PROVIDER`. Use a provider the firm has approved for patient data.
 
 Expert CVs uploaded on the EWI intake form follow the same rules in `EWI_DOCUMENTS_PATH` (default `data/ewi-documents`): owner-only, deleted with the investigation, and included in `scripts/backup.sh`.
@@ -493,7 +493,26 @@ Leave these off on the public server until you decide otherwise:
 
 Login is always required; there is no switch to turn it off.
 
-## 21. HTTPS with a domain
+## 21. Port 80 without a domain, then HTTPS with a domain
+
+### Port 80 on the IP (no domain yet)
+
+Serves the whole site on port 80, so a firewall only needs ports 22, 80, and 443 open. Caddy answers on port 80 and passes the website (`/`) to port 3000 and the API (`/api`, prefix removed) to port 3001, including the WebSocket progress updates. The configuration is [docker/caddy/Caddyfile.ip](./docker/caddy/Caddyfile.ip). This is still plain HTTP: use a domain with HTTPS (below) before uploading real patient records.
+
+1. In `.env` (`.env.live` already has these):
+
+   ```env
+   NEXT_PUBLIC_API_URL=http://157.230.156.87/api
+   FRONTEND_URL=http://157.230.156.87
+   API_PUBLIC_URL=http://157.230.156.87/api
+   BIND_HOST=127.0.0.1
+   CADDYFILE=Caddyfile.ip
+   ```
+
+2. Run `bash scripts/deploy-production.sh`. It rebuilds the website for the new API address, restarts PM2 with the apps listening only on 127.0.0.1, starts Caddy, and checks `http://127.0.0.1/api/health`.
+3. Open `http://157.230.156.87` (no port). Ports 3000 and 3001 are no longer reachable from outside; remove any firewall rules for them.
+
+### HTTPS with a domain
 
 Required before real medical records are uploaded. Over the IP address, everything, including uploaded records and sign-in tokens, travels unencrypted.
 
@@ -508,7 +527,7 @@ Caddy runs in Docker in front of the two PM2 apps, gets Let's Encrypt certificat
    ```
 
    With a DigitalOcean cloud firewall, add the same rules there.
-3. In `.env`:
+3. In `.env` (remove `CADDYFILE` or leave it empty):
 
    ```env
    APP_DOMAIN=app.example.com

@@ -13,8 +13,8 @@
  * Do not commit that file.
  *
  * BIND_HOST in .env decides who can reach ports 3000 and 3001:
- *   0.0.0.0    anyone (only while the site is served on the IP over HTTP)
- *   127.0.0.1  only Caddy on this server (use this once HTTPS is on)
+ *   0.0.0.0    anyone (only without Caddy, on ports 3000 and 3001)
+ *   127.0.0.1  only Caddy on this server (port 80 by IP, or HTTPS)
  */
 const fs = require('fs');
 const path = require('path');
