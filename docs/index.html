@@ -165,21 +165,17 @@
 
     <section>
       <h2>Demo users and roles</h2>
-      <p>Login can stay off for a local tour. When login is turned on, these demonstration accounts can be created on a developer machine. They are not production users.</p>
+      <p>Every page with case data needs a signed-in user. <code>npm run seed:demo-users</code> creates these two default accounts. On a server it needs <code>ALLOW_DEMO_SEED=true</code> and a strong <code>DEMO_USER_PASSWORD</code>; other people are added with <code>npm run user:create</code>.</p>
       <table>
         <thead>
           <tr><th>Role</th><th>Email</th><th>What they can open</th></tr>
         </thead>
         <tbody>
-          <tr><td>Super Admin</td><td>super-admin@example.com</td><td>Both products and the user list</td></tr>
-          <tr><td>Admin</td><td>admin@example.com</td><td>Both products and the user list</td></tr>
-          <tr><td>Attorney</td><td>attorney@example.com</td><td>Both products</td></tr>
-          <tr><td>Paralegal</td><td>paralegal@example.com</td><td>Both products</td></tr>
-          <tr><td>Medical Expert</td><td>medical-expert@example.com</td><td>Both products</td></tr>
-          <tr><td>User</td><td>normal-user@example.com</td><td>Both products</td></tr>
+          <tr><td>Attorney</td><td>gopalhingu123@gmail.com</td><td>Both products</td></tr>
+          <tr><td>Attorney</td><td>dcs@dorothyclaysims.com</td><td>Both products</td></tr>
         </tbody>
       </table>
-      <p class="note" style="margin-top: 0.75rem;">The shared local password is <code>password</code>. Use it only on a local demo. Do not create these accounts on a production server.</p>
+      <p class="note" style="margin-top: 0.75rem;">The local password is <code>password</code>. On a server, set a strong <code>DEMO_USER_PASSWORD</code> before seeding.</p>
     </section>
 
     <section>

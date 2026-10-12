@@ -34,7 +34,7 @@ import type { LlmCompletionResponse } from '@ai/types';
 @Injectable()
 export class MedicalAnalysisService implements IMedicalAnalysisService {
   private readonly logger = new Logger(MedicalAnalysisService.name);
-  private static readonly MAX_COMPLETION_ATTEMPTS = 5;
+  private static readonly MAX_COMPLETION_ATTEMPTS = 3;
   private static readonly JSON_RETRY_INSTRUCTION =
     '\n\nCORRECTION: Your previous response was not valid JSON. Return ONLY a single raw JSON object matching the schema. Do not include markdown fences, explanations, or reasoning tags.';
 
@@ -76,7 +76,11 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
 
     await report(ANALYSIS_JOB_STEPS.INTAKE, 10, 'Preparing medical case…');
 
-    const { chronology, records } = await this.buildChronology(request, report);
+    const { chronology, records } = await this.buildChronology(
+      request,
+      options?.caseId,
+      report,
+    );
     const medicalSpecials = await this.readBills(records, chronology, report);
     // "Bad facts" the defense may raise: fixed rules over the records and
     // intake, so the analysis can address them and the report lists them.
@@ -177,13 +181,15 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
   /** Reads uploaded records into a cited chronology (steps 15–34%). */
   private async buildChronology(
     request: MedicalAnalysisRequest,
+    caseId: string | undefined,
     report: (
       step: AnalysisJobStep,
       progress: number,
       message: string,
     ) => Promise<void>,
   ): Promise<{ chronology?: MedicalChronology; records: LoadedCaseRecord[] }> {
-    if (!request.recordIds?.length) return { records: [] };
+    // Records are read only through the case they are attached to.
+    if (!request.recordIds?.length || !caseId) return { records: [] };
 
     await report(
       ANALYSIS_JOB_STEPS.RECORDS,
@@ -191,6 +197,7 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       'Reading uploaded medical records…',
     );
     const scanned = await this.caseRecords.readScannedPages(
+      caseId,
       request.recordIds,
       (done, total) =>
         report(
@@ -204,7 +211,10 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
         `OCR read ${scanned.read} of ${scanned.attempted} scanned page(s)`,
       );
     }
-    const records = await this.caseRecords.loadForAnalysis(request.recordIds);
+    const records = await this.caseRecords.loadForAnalysis(
+      caseId,
+      request.recordIds,
+    );
 
     await report(
       ANALYSIS_JOB_STEPS.CHRONOLOGY,
@@ -268,6 +278,8 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
     llmOutput: MedicalAnalysisLlmOutput;
     llmResponse: LlmCompletionResponse;
   }> {
+    // A retry sends the original prompt plus only the latest correction,
+    // so it never costs more than the first attempt.
     let userPrompt = params.userPrompt;
 
     for (
@@ -289,7 +301,8 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
           this.logger.warn(
             `Empty LLM response on attempt ${attempt + 1}, retrying`,
           );
-          userPrompt += MedicalAnalysisService.JSON_RETRY_INSTRUCTION;
+          userPrompt =
+            params.userPrompt + MedicalAnalysisService.JSON_RETRY_INSTRUCTION;
           continue;
         }
         throw new AnalysisResponseParseError('LLM returned an empty response');
@@ -306,7 +319,8 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
           this.logger.warn(
             `JSON parse failed on attempt ${attempt + 1}: ${error.message}`,
           );
-          userPrompt += MedicalAnalysisService.JSON_RETRY_INSTRUCTION;
+          userPrompt =
+            params.userPrompt + MedicalAnalysisService.JSON_RETRY_INSTRUCTION;
           continue;
         }
         throw error;
@@ -339,7 +353,8 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
           this.logger.warn(
             'Citation validation failed — retrying with corrected chunkId constraints',
           );
-          userPrompt +=
+          userPrompt =
+            params.userPrompt +
             '\n\nCORRECTION: Your previous response referenced invalid chunkIds. Return corrected JSON using ONLY these exact chunkIds:\n' +
             [...params.allowedChunkIds].join('\n');
           continue;

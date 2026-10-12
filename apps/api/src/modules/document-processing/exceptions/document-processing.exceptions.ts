@@ -35,6 +35,19 @@ export class DocumentTooLargeException extends DocumentProcessingException {
   }
 }
 
+export class TooManyPagesException extends DocumentProcessingException {
+  constructor(
+    filename: string,
+    readonly pageCount: number,
+    readonly maxPages: number,
+  ) {
+    super(
+      `Document "${filename}" has ${pageCount} pages; the limit is ${maxPages}`,
+      'TOO_MANY_PAGES',
+    );
+  }
+}
+
 export class ParsingFailedException extends DocumentProcessingException {
   constructor(filename: string, reason: string) {
     super(`Failed to parse "${filename}": ${reason}`, 'PARSING_FAILED');

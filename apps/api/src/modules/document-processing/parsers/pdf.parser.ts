@@ -3,6 +3,7 @@ import type { IDocumentParser, ParserInput, ParserOutput } from '../interfaces';
 import {
   DocumentCorruptedException,
   ParsingFailedException,
+  TooManyPagesException,
 } from '../exceptions';
 import type { ProcessedPage } from '../types';
 import { countWords } from '../utils';
@@ -24,6 +25,7 @@ export class PdfParser implements IDocumentParser {
 
   async parse(input: ParserInput): Promise<ParserOutput> {
     const warnings: string[] = [];
+    let pdf: { destroy(): Promise<void> } | undefined;
 
     try {
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -35,12 +37,20 @@ export class PdfParser implements IDocumentParser {
         disableFontFace: true,
       });
 
-      const pdf = await loadingTask.promise;
-      const pageCount = pdf.numPages;
+      const document = await loadingTask.promise;
+      pdf = document;
+      const pageCount = document.numPages;
+      if (input.maxPages !== undefined && pageCount > input.maxPages) {
+        throw new TooManyPagesException(
+          input.filename,
+          pageCount,
+          input.maxPages,
+        );
+      }
       const pages: ProcessedPage[] = [];
 
       for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-        const page = await pdf.getPage(pageNum);
+        const page = await document.getPage(pageNum);
         const textContent = await page.getTextContent();
 
         const pageText = textContent.items
@@ -95,7 +105,7 @@ export class PdfParser implements IDocumentParser {
       let author: string | undefined;
       let title: string | undefined;
       try {
-        const meta = await pdf.getMetadata();
+        const meta = await document.getMetadata();
         const info = meta?.info as Record<string, string> | undefined;
         if (info) {
           author = info.Author ?? info.Creator;
@@ -117,11 +127,15 @@ export class PdfParser implements IDocumentParser {
         needsOcr,
       };
     } catch (error) {
+      if (error instanceof TooManyPagesException) throw error;
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('Invalid PDF')) {
         throw new DocumentCorruptedException(input.filename, message);
       }
       throw new ParsingFailedException(input.filename, message);
+    } finally {
+      // pdf.js keeps the whole document in memory until destroyed.
+      await pdf?.destroy().catch(() => undefined);
     }
   }
 }

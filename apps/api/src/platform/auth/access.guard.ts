@@ -9,7 +9,7 @@ import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import type { PlatformRole } from '../users/user.types';
 import { IS_PUBLIC_KEY, ROLES_KEY } from './auth.decorators';
-import { AuthService } from './auth.service';
+import { AuthService, readBearer } from './auth.service';
 import type { AuthUserRef } from './auth.types';
 
 @Injectable()
@@ -53,10 +53,4 @@ export class AccessGuard implements CanActivate {
     }
     return true;
   }
-}
-
-function readBearer(header: string | undefined): string | null {
-  if (!header?.startsWith('Bearer ')) return null;
-  const token = header.slice('Bearer '.length).trim();
-  return token || null;
 }

@@ -1,6 +1,6 @@
 import { ClipboardList } from "lucide-react";
 import { PageContainer } from "@/components/layout";
-import { CaseForm } from "@/components/demo";
+import { CaseForm } from "@/components/mca/demo";
 import { Badge } from "@/components/ui/badge";
 
 export default function CasePage() {

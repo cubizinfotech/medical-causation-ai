@@ -1,43 +1,74 @@
-# Push to main deploys the droplet over SSH.
-# The server runs scripts/deploy-production.sh (PM2 for the apps, Docker for Postgres and Redis).
-# This workflow does not build or push application images.
+# Every push and pull request is checked (lint, types, tests, build).
+# A push to main that passes the checks deploys the droplet over SSH;
+# the server runs scripts/deploy-production.sh (PM2 for the apps, Docker for
+# Postgres and Redis). This workflow does not build or push images.
 #
 # Repository secrets (Settings → Secrets and variables → Actions):
-#   DEPLOY_HOST     droplet IP or hostname
-#   DEPLOY_USER     SSH user (the existing deploy user)
-#   DEPLOY_SSH_KEY  private key, pasted with its line breaks
+#   DEPLOY_HOST         droplet IP or hostname
+#   DEPLOY_USER         SSH user (the existing deploy user)
+#   DEPLOY_SSH_KEY      private key, pasted with its line breaks
+#   DEPLOY_KNOWN_HOSTS  output of `ssh-keyscan -t ed25519 <DEPLOY_HOST>`, so
+#                       the runner only talks to the real server
 # Do not store the production .env or passwords in GitHub.
 
-name: Deploy production
+name: Check and deploy
 
 on:
   push:
     branches: [main]
+  pull_request:
 
 concurrency:
-  group: production-deploy
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  check:
+    name: Lint, types, tests, build
+    runs-on: ubuntu-latest
+    env:
+      # Only for `prisma generate` and the build; no database is contacted.
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm test --workspace=web
+      - run: npm run build
+
   deploy:
     name: SSH deploy
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     steps:
       - name: Deploy on the droplet
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
-          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
-            echo "Set GitHub Actions secrets DEPLOY_HOST, DEPLOY_USER, and DEPLOY_SSH_KEY."
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "Set GitHub Actions secrets DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, and DEPLOY_KNOWN_HOSTS."
             exit 1
           fi
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_deploy \
-            -o StrictHostKeyChecking=accept-new \
+            -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=20 \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             'if [ -d /var/www/medical-causation-ai/.git ]; then export MCA_ROOT=/var/www/medical-causation-ai; elif [ -d "$HOME/medical-causation-ai/.git" ]; then export MCA_ROOT="$HOME/medical-causation-ai"; else echo "Clone the repository to /var/www/medical-causation-ai"; exit 1; fi; bash "$MCA_ROOT/scripts/deploy-production.sh"'

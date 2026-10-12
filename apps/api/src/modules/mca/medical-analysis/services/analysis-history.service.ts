@@ -77,9 +77,7 @@ export class AnalysisHistoryService {
 
   async listHistories(ownerUserId: string): Promise<AnalysisHistoryListItem[]> {
     const rows = await this.repository.listOwned(ownerUserId);
-    const reconciled = await Promise.all(
-      rows.map((row) => this.reconcileRow(row)),
-    );
+    const reconciled = await this.reconcileRows(rows);
     return reconciled.map((row) => this.toListItem(row));
   }
 
@@ -91,7 +89,7 @@ export class AnalysisHistoryService {
     if (!row) {
       throw new NotFoundException(`Analysis history "${id}" not found`);
     }
-    const reconciled = await this.reconcileRow(row);
+    const [reconciled] = await this.reconcileRows([row]);
     return this.toDetail(reconciled);
   }
 
@@ -100,6 +98,11 @@ export class AnalysisHistoryService {
     if (!row) {
       throw new NotFoundException(`Analysis job "${jobId}" not found`);
     }
+  }
+
+  /** Removes a case that never started (its job was not queued). */
+  async discardCase(id: string): Promise<void> {
+    await this.repository.delete(id).catch(() => undefined);
   }
 
   async deleteHistory(id: string, ownerUserId: string): Promise<void> {
@@ -116,26 +119,42 @@ export class AnalysisHistoryService {
 
   async reconcileStaleCases(): Promise<number> {
     const rows = await this.repository.listRecent(200);
-    let updated = 0;
-
-    for (const row of rows) {
-      const before = row.status;
-      const after = (await this.reconcileRow(row)).status;
-      if (before !== after) {
-        updated++;
-      }
-    }
-
-    return updated;
+    const reconciled = await this.reconcileRows(rows);
+    return reconciled.filter((row, index) => row.status !== rows[index].status)
+      .length;
   }
 
-  private async reconcileRow(row: AnalysisCase): Promise<AnalysisCase> {
-    if (row.status !== 'queued' && row.status !== 'running') {
-      return row;
-    }
+  /**
+   * Brings queued/running rows up to date with their Redis job records
+   * (one Redis call for all of them). Only rows that changed are written.
+   */
+  private async reconcileRows(rows: AnalysisCase[]): Promise<AnalysisCase[]> {
+    const active = rows.filter(
+      (row) => row.status === 'queued' || row.status === 'running',
+    );
+    if (active.length === 0) return rows;
+    const records = await this.jobService.loadRecords(
+      active.map((row) => row.jobId),
+    );
+    return Promise.all(
+      rows.map((row) =>
+        active.includes(row)
+          ? this.reconcileRow(row, records.get(row.jobId))
+          : Promise.resolve(row),
+      ),
+    );
+  }
 
-    const record = await this.jobService.tryGetJob(row.jobId);
+  private async reconcileRow(
+    row: AnalysisCase,
+    record: MedicalAnalysisJobRecord | undefined,
+  ): Promise<AnalysisCase> {
     if (record) {
+      const unchanged =
+        this.repository.mapStatus(record.status) === row.status &&
+        record.progress === row.progress &&
+        (record.message ?? null) === row.message;
+      if (unchanged) return row;
       await this.syncFromJobRecord(record);
       return (await this.repository.findById(row.id)) ?? row;
     }

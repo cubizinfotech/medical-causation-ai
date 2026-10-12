@@ -1,8 +1,7 @@
 import type { AuthSettings } from './config.types';
 
+/** Every product API requires a signed-in user. JWT_SECRET must be set. */
 export const authConfig = (): AuthSettings => ({
-  enabled:
-    process.env.FEATURE_AUTH === 'true' || process.env.AUTH_ENABLED === 'true',
   jwtSecret: process.env.JWT_SECRET ?? '',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '12h',
 });

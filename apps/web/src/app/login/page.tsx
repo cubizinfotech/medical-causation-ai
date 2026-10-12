@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageContainer } from "@/components/layout";
 import { useAuth } from "@/features/auth/auth-session";
+import { safeNextPath } from "@/features/auth/safe-next-path";
 
 function LoginForm() {
   const { login, user, ready } = useAuth();
@@ -21,8 +22,7 @@ function LoginForm() {
 
   useEffect(() => {
     if (!ready || !user) return;
-    const next = params.get("next");
-    router.replace(next && next.startsWith("/") ? next : "/");
+    router.replace(safeNextPath(params.get("next")));
   }, [params, ready, router, user]);
 
   const onSubmit = async (event: FormEvent) => {
@@ -31,8 +31,7 @@ function LoginForm() {
     setError(null);
     try {
       await login(email, password);
-      const next = params.get("next");
-      router.push(next && next.startsWith("/") ? next : "/");
+      router.push(safeNextPath(params.get("next")));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

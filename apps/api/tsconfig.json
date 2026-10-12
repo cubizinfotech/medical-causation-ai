@@ -22,19 +22,13 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
     "paths": {
-      "@/*": ["src/*"],
-      "@common/*": ["src/common/*"],
       "@config/*": ["src/config/*"],
       "@database/*": ["src/database/*"],
       "@modules/*": ["src/modules/*"],
       "@ai/*": ["src/ai/*"],
       "@platform/*": ["src/platform/*"],
-      "@medical/*": ["src/medical/*"],
       "@integrations/*": ["src/integrations/*"],
-      "@shared/*": ["src/shared/*"],
-      "@queues/*": ["src/queues/*"],
-      "@redis/*": ["src/redis/*"],
-      "@utils/*": ["src/utils/*"]
+      "@redis/*": ["src/redis/*"]
     }
   }
 }

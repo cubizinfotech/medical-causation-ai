@@ -11,13 +11,13 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout";
-import { LoadingCard, ProgressTimeline } from "@/components/demo";
+import { LoadingCard, ProgressTimeline } from "@/components/mca/demo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ANALYSIS_PROGRESS_STEPS } from "@/features/demo/constants";
-import { useMedicalAnalysisJob } from "@/features/demo/hooks/use-medical-analysis-job";
+import { ANALYSIS_PROGRESS_STEPS } from "@/features/mca/demo/constants";
+import { useMedicalAnalysisJob } from "@/features/mca/demo/hooks/use-medical-analysis-job";
 import {
   loadCaseForm,
   loadActiveAnalysis,
@@ -26,8 +26,8 @@ import {
   clearActiveAnalysis,
   loadCaseRecords,
   clearCaseRecords,
-} from "@/features/demo/storage/case-storage";
-import type { CaseFormValues } from "@/features/demo/schemas/case-form.schema";
+} from "@/features/mca/demo/storage/case-storage";
+import type { CaseFormValues } from "@/features/mca/demo/schemas/case-form.schema";
 
 function formatElapsed(ms: number): string {
   const seconds = Math.floor(ms / 1000);

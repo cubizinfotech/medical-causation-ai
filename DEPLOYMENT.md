@@ -12,13 +12,13 @@ Preferred checkout path: `/var/www/medical-causation-ai`. The deploy script also
 
 | Process | How it runs | Address |
 |---------|-------------|---------|
-| `mca-web` | PM2, `npm run start:web` | `0.0.0.0:3000` |
-| `mca-api` | PM2, `npm run start:api` | `0.0.0.0:3001` |
+| `mca-web` | PM2, `npm run start:web` | `BIND_HOST:3000` |
+| `mca-api` | PM2, `npm run start:api` | `BIND_HOST:3001` |
 | `mca-postgres` | Docker, volume `mca-postgres-data` | `127.0.0.1:5432` |
 | `mca-redis` | Docker, volume `mca-redis-data` | `127.0.0.1:6379` |
 | `mca-pgadmin` | Docker, optional profile `tools` | `127.0.0.1:5050` |
 
-Public firewall ports for the current IP demo: `22`, `3000`, `3001`. Leave `5432`, `6379`, and `5050` closed. pgAdmin is reached through an SSH tunnel, not the public internet.
+`BIND_HOST` in `.env` is `0.0.0.0` while the site is served on the IP (anyone can reach ports 3000/3001) and `127.0.0.1` once HTTPS is on (only Caddy can). Public firewall ports for the current IP demo: `22`, `3000`, `3001`; with HTTPS: `22`, `80`, `443`. Leave `5432`, `6379`, and `5050` closed. pgAdmin is reached through an SSH tunnel, not the public internet.
 
 PM2 keeps the API and web running after you log out of SSH. `pm2 startup` plus `pm2 save` starts them again after a reboot. Docker `restart: unless-stopped` does the same for Postgres and Redis.
 
@@ -63,6 +63,8 @@ Do not commit `.env`, `.env.live`, or files inside `knowledge-base/books`, `arti
 
 ## 5. Environment
 
+Start from the production template kept on the laptop, `.env.live` (it already holds the server values, see below), or from `.env.example`:
+
 ```bash
 cd /var/www/medical-causation-ai
 cp .env.example .env
@@ -79,24 +81,32 @@ FRONTEND_URL=http://157.230.156.87:3000
 NEXT_PUBLIC_API_URL=http://157.230.156.87:3001
 API_PUBLIC_URL=http://157.230.156.87:3001
 
+BIND_HOST=0.0.0.0
+
+# openssl rand -hex 32 — the API and the deploy script refuse a shorter one
+JWT_SECRET=
+JWT_EXPIRES_IN=12h
+JOB_DAILY_LIMIT_PER_USER=50
+
 POSTGRES_USER=mca_user
 POSTGRES_PASSWORD=choose-a-long-password
 POSTGRES_DB=medical_causation_ai
-POSTGRES_HOST=127.0.0.1
 POSTGRES_PORT=5432
 DATABASE_URL=postgresql://mca_user:choose-a-long-password@127.0.0.1:5432/medical_causation_ai
 
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
+# openssl rand -hex 24 — the Redis container and the API both use it
 REDIS_PASSWORD=
-REDIS_URL=redis://127.0.0.1:6379/0
 
 KNOWLEDGE_BASE_PATH=./knowledge-base
 ```
 
 `NEXT_PUBLIC_API_URL` is copied into the browser bundle at **build** time. Set it before `npm run build:web`. Changing it later requires that build again, then `pm2 restart mca-web`. A restart alone does not update it.
 
-Use `127.0.0.1` for Postgres and Redis. The names `postgres` and `redis` work only inside containers on the Compose network (`docker-compose.dev.yml`). BullMQ reads `REDIS_HOST` and `REDIS_PORT`. The Redis client reads `REDIS_URL`. Keep those on `127.0.0.1`.
+Use `127.0.0.1` for Postgres and Redis. The names `postgres` and `redis` work only inside containers on the Compose network (`docker-compose.dev.yml`). The API builds the Redis address from `REDIS_HOST`, `REDIS_PORT`, and `REDIS_PASSWORD` (or `REDIS_URL` when set).
+
+Setting `REDIS_PASSWORD` for the first time: the next `docker compose up -d redis` (the deploy script runs it) recreates the Redis container with the password. Queued jobs survive because the data volume is kept; the deploy then restarts the API with the same password.
 
 `KNOWLEDGE_BASE_PATH=./knowledge-base` is the repository folder. PM2’s API working directory is `apps/api`, and the API resolves that relative path against the repository root. Do not set `/knowledge-base` unless you are running the local development containers.
 
@@ -109,7 +119,7 @@ RESEARCH_PROVIDER=live
 COURTLISTENER_API_TOKEN=
 ```
 
-A laptop file named `.env.live` can be copied up instead. Rename it to `.env` on the server and change `DATABASE_URL`, `REDIS_URL`, and `REDIS_HOST` to `127.0.0.1` if they still use a Docker hostname. Set `NODE_ENV=production`.
+The laptop file `.env.live` is the ready-made production `.env` (same values, grouped and explained). Copy it up as `.env`:
 
 ```powershell
 scp .env.live deploy@157.230.156.87:/var/www/medical-causation-ai/.env
@@ -150,13 +160,13 @@ Redis is `mca-redis` (`redis:7-alpine`) with append-only persistence on the volu
 The eviction policy must be `noeviction` ([docker/redis/redis.conf](./docker/redis/redis.conf)). With an LRU policy, Redis can delete queued jobs when memory is full. The deploy script applies the setting to the running container; to check it:
 
 ```bash
-docker exec mca-redis redis-cli ping
-docker exec mca-redis redis-cli CONFIG GET maxmemory-policy   # noeviction
+docker exec mca-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping'
+docker exec mca-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning CONFIG GET maxmemory-policy'   # noeviction
 ```
 
 A healthy reply is `PONG`.
 
-The container listens on all of its own interfaces so Docker can forward the port. Compose publishes that port on `127.0.0.1:6379` only. Do not publish `6379` on `0.0.0.0`.
+The container listens on all of its own interfaces so Docker can forward the port. Compose publishes that port on `127.0.0.1:6379` only, and the container requires `REDIS_PASSWORD` when it is set. Do not publish `6379` on `0.0.0.0`.
 
 ## 8. pgAdmin (optional)
 
@@ -192,9 +202,9 @@ The process file is `ecosystem.config.js`:
 | App | Working directory | Command |
 |-----|-------------------|---------|
 | `mca-api` | `apps/api` | `node dist/src/main.js` (`npm run start:api`) |
-| `mca-web` | `apps/web` | `next start --hostname 0.0.0.0 --port 3000` (`npm run start:web`) |
+| `mca-web` | `apps/web` | `next start --hostname <BIND_HOST> --port 3000` |
 
-Both use `NODE_ENV=production`, restart after a crash, and write logs under `logs/`. `instances` is `1`.
+Both use `NODE_ENV=production`, listen on `BIND_HOST` from `.env`, restart after a crash, and write logs under `logs/`. `instances` is `1`: the API process also runs the job workers, and its rate-limit counters live in memory.
 
 ## 10. Build and migrate
 
@@ -250,13 +260,13 @@ On the server:
 bash scripts/deploy-production.sh
 ```
 
-The script stops on errors. It pulls `main` (fast-forward only), refuses to run if tracked files are dirty, starts Postgres and Redis, removes leftover `mca-api` and `mca-web` containers if they still exist, installs, builds, migrates, reloads PM2, and checks health. It does not delete `mca-postgres`, `mca-redis`, or their volumes.
+The script stops on errors. It pulls `main` (fast-forward only), refuses to run if tracked files are dirty, starts Postgres and Redis, removes leftover `mca-api` and `mca-web` containers if they still exist, refuses a `JWT_SECRET` shorter than 32 characters, installs, builds, migrates, reloads PM2, and checks health. It does not delete `mca-postgres`, `mca-redis`, or their volumes.
 
 ## 13. GitHub automatic deployment
 
 Workflow: `.github/workflows/deploy-production.yml`.
 
-A push to `main` SSHes into the droplet and runs `scripts/deploy-production.sh`. It does not build Docker images for the API or web.
+Every push and pull request first runs the checks: lint, type check, API and website tests, and the build. Only a push to `main` that passes them SSHes into the droplet and runs `scripts/deploy-production.sh`. It does not build Docker images for the API or web.
 
 Repository secrets:
 
@@ -265,6 +275,7 @@ Repository secrets:
 | `DEPLOY_HOST` | Droplet IP or hostname |
 | `DEPLOY_USER` | SSH user that owns the checkout and PM2 |
 | `DEPLOY_SSH_KEY` | Private key, including line breaks |
+| `DEPLOY_KNOWN_HOSTS` | Output of `ssh-keyscan -t ed25519 <DEPLOY_HOST>` (compare the fingerprint with the one shown on the server). The deploy connects only to that exact host key. |
 
 The production `.env` stays on the server. Do not put it in GitHub.
 
@@ -468,10 +479,17 @@ npm run dev:web
 
 Leave these off on the public server until you decide otherwise:
 
-- `npm run seed:demo-users` refuses to run when `NODE_ENV=production`
+- Demo accounts: `npm run seed:demo-users` refuses `NODE_ENV=production` unless `ALLOW_DEMO_SEED=true` and `DEMO_USER_PASSWORD` (12+ characters) are set. Create real people instead:
+
+  ```bash
+  npm run user:create -- jane@firm.example attorney "Jane Doe"
+  ```
+
+  It prints a random password once (or uses `NEW_USER_PASSWORD`). An existing email is never changed.
 - `RESEARCH_PROVIDER=mock` until you choose to use the live public sources (NPI Registry, Open Payments, OpenAlex, CourtListener); paid research vendors are still not connected
 - `EMAIL_DELIVERY_ENABLED=false` until a real sender is approved
-- `AUTH_ENABLED=true` and a long `JWT_SECRET` before the site is shared beyond a private demo
+
+Login is always required; there is no switch to turn it off.
 
 ## 21. HTTPS with a domain
 
@@ -497,9 +515,10 @@ Caddy runs in Docker in front of the two PM2 apps, gets Let's Encrypt certificat
    FRONTEND_URL=https://app.example.com
    NEXT_PUBLIC_API_URL=https://api.example.com
    API_PUBLIC_URL=https://api.example.com
+   BIND_HOST=127.0.0.1
    ```
 
-4. Start Caddy, rebuild the website (`NEXT_PUBLIC_API_URL` is built into the browser bundle), and restart:
+4. Start Caddy, rebuild the website (`NEXT_PUBLIC_API_URL` is built into the browser bundle), and restart (`--update-env` picks up `BIND_HOST`):
 
    ```bash
    cd /var/www/medical-causation-ai
@@ -510,7 +529,7 @@ Caddy runs in Docker in front of the two PM2 apps, gets Let's Encrypt certificat
    ```
 
 5. Open `https://app.example.com`, sign in, and start an investigation. Live progress uses a WebSocket, which Caddy passes through.
-6. Close the plain-HTTP ports so nobody can bypass HTTPS:
+6. Close the plain-HTTP ports as well (with `BIND_HOST=127.0.0.1` they are already unreachable from outside; this is a second lock):
 
    ```bash
    sudo ufw deny 3000/tcp
@@ -519,11 +538,20 @@ Caddy runs in Docker in front of the two PM2 apps, gets Let's Encrypt certificat
 
    The deploy script checks health on `127.0.0.1`, so it keeps working.
 
+Caddy adds HSTS, `X-Frame-Options: DENY`, `nosniff`, and a referrer policy to every response. The API adds its own strict headers (helmet), and the website sends a frame-blocking Content-Security-Policy.
+
 Keep the `mca-caddy-data` volume. It holds the certificates; deleting it forces new ones and can hit Let's Encrypt rate limits. `docker compose up -d postgres redis` in the deploy script does not touch Caddy.
 
 ## 22. Backups
 
-`scripts/backup.sh` saves the database and the files that belong to it: uploaded medical records (`CASE_RECORDS_PATH`), uploaded expert CVs (`EWI_DOCUMENTS_PATH`), `knowledge-base/uploads`, and generated EWI reports. Each run creates `/var/backups/medical-causation-ai/<UTC time>/` with `database.dump`, `files.tar.gz`, and `SHA256SUMS`. The dump is checked before it is kept; a failed run keeps nothing. Backups older than 14 days are removed (`BACKUP_KEEP_DAYS`). Books and articles are not included unless `BACKUP_WITH_LIBRARY=1`; their originals are on the laptop.
+`scripts/backup.sh` saves the database and the files that belong to it: uploaded medical records (`CASE_RECORDS_PATH`), uploaded expert CVs (`EWI_DOCUMENTS_PATH`), `knowledge-base/uploads`, and generated EWI reports. Each run creates `/var/backups/medical-causation-ai/<UTC time>/` with `database.dump`, `files.tar.gz` (both ending in `.gpg` when encrypted), and `SHA256SUMS`. The dump is checked before it is kept; a failed run keeps nothing. Backups older than 14 days are removed (`BACKUP_KEEP_DAYS`). Books and articles are not included unless `BACKUP_WITH_LIBRARY=1`; their originals are on the laptop.
+
+**Encryption (do this first).** Backups hold patient records. Choose one:
+
+- A GPG public key (best: the private key never sits on the server). Import it with `gpg --import public-key.asc`, then set `BACKUP_GPG_RECIPIENT=<key id or email>`.
+- A passphrase file: `openssl rand -base64 32 > ~/.mca-backup-passphrase && chmod 600 ~/.mca-backup-passphrase`, then set `BACKUP_PASSPHRASE_FILE=$HOME/.mca-backup-passphrase`. Keep a copy of the passphrase somewhere else, or the backups cannot be opened.
+
+Install gpg once: `sudo apt install -y gnupg`. Without either setting, backups stay unencrypted, on this server only, and are never copied off it.
 
 Once, as the deploy user:
 
@@ -537,10 +565,20 @@ bash scripts/backup.sh
 Every night at 02:30 (`crontab -e`):
 
 ```cron
-30 2 * * * cd /var/www/medical-causation-ai && bash scripts/backup.sh >> logs/backup.log 2>&1
+30 2 * * * cd /var/www/medical-causation-ai && BACKUP_PASSPHRASE_FILE=/home/deploy/.mca-backup-passphrase bash scripts/backup.sh >> logs/backup.log 2>&1
 ```
 
-A backup on the same server is lost with the server. Also keep an off-server copy: turn on DigitalOcean droplet backups, or install `rclone`, set up an encrypted remote (`rclone config`, type `crypt`) and add `BACKUP_RCLONE_REMOTE=<remote>:<folder>` in front of the cron command. These files contain patient records; never copy them unencrypted.
+A backup on the same server is lost with the server. Also keep an off-server copy: turn on DigitalOcean droplet backups, or install `rclone` and add `BACKUP_RCLONE_REMOTE=<remote>:<folder>` in front of the cron command. The script copies only encrypted backups.
+
+**Decrypt first** when the backup is encrypted; the commands below expect plain files:
+
+```bash
+B=/var/backups/medical-causation-ai/<UTC time>
+(cd "$B" && sha256sum -c SHA256SUMS)
+for f in "$B"/*.gpg; do gpg --batch --pinentry-mode loopback --passphrase-file ~/.mca-backup-passphrase --output "${f%.gpg}" --decrypt "$f"; done
+```
+
+With a GPG key, run `gpg --decrypt` on the machine that holds the private key (without the passphrase options). Delete the decrypted copies when you are done.
 
 **Check a backup without touching live data** (restores into a scratch database, then deletes it):
 

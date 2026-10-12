@@ -15,7 +15,7 @@ import { PageContainer } from "@/components/layout";
 import {
   HOW_IT_WORKS_STEPS,
   LANDING_CAPABILITIES,
-} from "@/features/demo/constants";
+} from "@/features/mca/demo/constants";
 import { appMetadata } from "@/lib/config";
 
 const capabilityIcons = [Brain, Globe, FileText, Gavel];

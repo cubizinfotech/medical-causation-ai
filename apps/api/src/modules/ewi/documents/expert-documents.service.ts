@@ -10,8 +10,12 @@ import type { ExpertDocument } from '@prisma/client';
 import { PrismaService } from '@database/prisma.service';
 import type { EwiDocumentsSettings } from '@config/config.types';
 import { ewiDocumentsConfig } from '@config/ewi-documents.config';
-import { PdfParser } from '@modules/document-processing/parsers/pdf.parser';
 import { PdfPageOcr } from '@modules/document-processing/ocr/pdf-page-ocr';
+import {
+  MIN_READABLE_PAGE_CHARS,
+  assertPdfUpload,
+  readPdfUpload,
+} from '@modules/document-processing/utils/pdf-upload.util';
 import { LocalFileStorage } from '@platform/storage/local-file-storage';
 import type {
   ExpertDocumentKind,
@@ -20,19 +24,8 @@ import type {
   UploadedExpertFile,
 } from './expert-documents.types';
 
-/** Pages with less text than this are treated as scanned or blank. */
-const MIN_READABLE_PAGE_CHARS = 30;
-/** Low-text pages that also show an image are read with OCR. */
-const OCR_IMAGE_PAGE_MAX_CHARS = 300;
 /** Staged uploads one user may hold before starting an investigation. */
 const MAX_STAGED_PER_USER = 20;
-
-function displayName(original: string): string {
-  const base = original.split(/[\\/]/).pop() ?? 'document.pdf';
-  // eslint-disable-next-line no-control-regex
-  const cleaned = base.replace(/[\u0000-\u001f\u007f]/g, '').trim();
-  return (cleaned || 'document.pdf').slice(0, 200);
-}
 
 /**
  * Documents an attorney uploads for an investigation (the opposing expert's
@@ -64,20 +57,13 @@ export class ExpertDocumentsService {
     file: UploadedExpertFile | undefined,
     kind: ExpertDocumentKind = 'cv',
   ): Promise<ExpertDocumentSummary> {
-    if (!file?.buffer?.length) {
-      throw new BadRequestException('Choose a PDF file to upload.');
-    }
-    if (file.size > this.settings.maxFileSizeBytes) {
-      throw new BadRequestException(
-        `The file is too large. The limit is ${Math.round(this.settings.maxFileSizeBytes / 1024 / 1024)} MB.`,
-      );
-    }
-    // Check the bytes, not just the name or the browser's content type.
-    if (file.buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
-      throw new BadRequestException('Only PDF files can be uploaded.');
-    }
-
-    void this.cleanupStaged().catch(() => undefined);
+    const rules = {
+      maxFileSizeBytes: this.settings.maxFileSizeBytes,
+      maxPages: this.settings.maxPages,
+      ocrEnabled: this.settings.ocrEnabled,
+      label: 'PDF files',
+    };
+    assertPdfUpload(file, rules);
 
     const sha256 = createHash('sha256').update(file.buffer).digest('hex');
     const duplicate = await this.prisma.expertDocument.findFirst({
@@ -85,80 +71,38 @@ export class ExpertDocumentsService {
     });
     if (duplicate) return this.toSummary(duplicate);
 
-    const staged = await this.prisma.expertDocument.count({
-      where: { ownerUserId, investigationId: null },
-    });
-    if (staged >= MAX_STAGED_PER_USER) {
-      throw new BadRequestException(
-        'Too many documents are waiting. Start an investigation or remove some first.',
-      );
-    }
-
-    const name = displayName(file.originalname);
-    let pages: Array<{ pageNumber: number; text: string; hasImages?: boolean }>;
-    try {
-      const parsed = await new PdfParser().parse({
-        filePath: '',
-        buffer: file.buffer,
-        filename: name,
-        extension: 'pdf',
-        fileSize: file.size,
-        createdAt: new Date(),
-        modifiedAt: new Date(),
-      });
-      pages = parsed.pages;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new BadRequestException(
-        /password/i.test(message)
-          ? 'This PDF is password-protected. Remove the password and upload it again.'
-          : 'This file could not be read as a PDF. It may be damaged.',
-      );
-    }
-    if (pages.length > this.settings.maxPages) {
-      throw new BadRequestException(
-        `This PDF has ${pages.length} pages. The limit is ${this.settings.maxPages} pages.`,
-      );
-    }
-    const unreadablePages = pages
-      .filter((page) => {
-        const length = page.text.trim().length;
-        if (length < MIN_READABLE_PAGE_CHARS) return true;
-        return (
-          this.settings.ocrEnabled &&
-          page.hasImages === true &&
-          length < OCR_IMAGE_PAGE_MAX_CHARS
-        );
-      })
-      .map((page) => page.pageNumber);
-    if (unreadablePages.length === pages.length && !this.settings.ocrEnabled) {
-      throw new BadRequestException(
-        'No readable text was found. This looks like a scanned PDF, and reading scanned pages (OCR) is turned off on this server.',
-      );
-    }
+    // Checked before parsing too, so a user at the limit costs no PDF work.
+    await this.assertStagedCapacity(ownerUserId);
+    const { name, pages, unreadablePages } = await readPdfUpload(file, rules);
 
     const id = randomUUID();
     const storageKey = this.storage.keyFor(ownerUserId, id);
     await this.storage.write(storageKey, file.buffer);
     try {
-      const document = await this.prisma.expertDocument.create({
-        data: {
-          id,
-          ownerUserId,
-          kind,
-          originalName: name,
-          byteSize: file.size,
-          sha256,
-          storageKey,
-          pageCount: pages.length,
-          unreadablePages,
-          pages: {
-            create: pages.map((page) => ({
-              pageNumber: page.pageNumber,
-              text: page.text,
-            })),
+      const document = await this.prisma.$transaction(async (tx) => {
+        // One upload at a time per user, so parallel uploads cannot pass
+        // the staged limit together.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ownerUserId}))`;
+        await this.assertStagedCapacity(ownerUserId, tx);
+        return tx.expertDocument.create({
+          data: {
+            id,
+            ownerUserId,
+            kind,
+            originalName: name,
+            byteSize: file.size,
+            sha256,
+            storageKey,
+            pageCount: pages.length,
+            unreadablePages,
+            pages: {
+              create: pages.map((page) => ({
+                pageNumber: page.pageNumber,
+                text: page.text,
+              })),
+            },
           },
-        },
+        });
       });
       return this.toSummary(document);
     } catch (error) {
@@ -388,6 +332,20 @@ export class ExpertDocumentsService {
       await this.storage.remove(document.storageKey);
     }
     return stale.length;
+  }
+
+  private async assertStagedCapacity(
+    ownerUserId: string,
+    db: Pick<PrismaService, 'expertDocument'> = this.prisma,
+  ): Promise<void> {
+    const staged = await db.expertDocument.count({
+      where: { ownerUserId, investigationId: null },
+    });
+    if (staged >= MAX_STAGED_PER_USER) {
+      throw new BadRequestException(
+        'Too many documents are waiting. Start an investigation or remove some first.',
+      );
+    }
   }
 
   private async findOwned(

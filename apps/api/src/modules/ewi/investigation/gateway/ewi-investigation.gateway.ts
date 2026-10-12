@@ -13,10 +13,8 @@ import type { AuthUserRef } from '@platform/auth/auth.types';
 import type { EwiInvestigationJobRecord } from '../jobs/ewi-investigation-job.types';
 import { ExpertInvestigationRepository } from '../repositories/expert-investigation.repository';
 
-@WebSocketGateway({
-  namespace: '/ewi',
-  cors: { origin: true, credentials: true },
-})
+// CORS comes from SocketIoAdapter (the configured website origins).
+@WebSocketGateway({ namespace: '/ewi' })
 export class EwiInvestigationGateway implements OnGatewayConnection {
   private readonly logger = new Logger(EwiInvestigationGateway.name);
 

@@ -41,7 +41,13 @@ npm run pm2:start
 npm run pm2:save
 ```
 
-Set `NEXT_PUBLIC_API_URL` in `.env` before `npm run build:web`. The current demo value is `http://157.230.156.87:3001`. Postgres and Redis in that file use `127.0.0.1`, not the Docker names `postgres` and `redis`.
+The server `.env` is the laptop's `.env.live`. Set `NEXT_PUBLIC_API_URL` in it before `npm run build:web` (the current demo value is `http://157.230.156.87:3001`). Postgres and Redis use `127.0.0.1`, not the Docker names `postgres` and `redis`. `JWT_SECRET` (32+ characters) and `REDIS_PASSWORD` must be set.
+
+Create the first real sign-in:
+
+```bash
+npm run user:create -- jane@firm.example attorney "Jane Doe"
+```
 
 ## Later deploys
 
@@ -49,7 +55,7 @@ Set `NEXT_PUBLIC_API_URL` in `.env` before `npm run build:web`. The current demo
 bash /var/www/medical-causation-ai/scripts/deploy-production.sh
 ```
 
-A push to `main` runs that script over SSH when `DEPLOY_HOST`, `DEPLOY_USER`, and `DEPLOY_SSH_KEY` are set in GitHub Actions. The workflow does not build application images.
+A push to `main` runs that script over SSH after lint, type check, tests, and build pass, when `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, and `DEPLOY_KNOWN_HOSTS` are set in GitHub Actions. The workflow does not build application images.
 
 ## Checks
 
@@ -59,7 +65,7 @@ curl -fsS http://127.0.0.1:3001/health
 curl -fsS http://127.0.0.1:3001/health/ready
 curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000
 docker exec mca-postgres pg_isready -U mca_user -d medical_causation_ai
-docker exec mca-redis redis-cli ping
+docker exec mca-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping'
 ```
 
 ## Cleanup that leaves the database in place

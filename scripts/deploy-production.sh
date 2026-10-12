@@ -61,7 +61,7 @@ docker compose up -d postgres redis
 
 # A running Redis keeps its old settings until restarted. Apply the queue-safe
 # eviction policy from docker/redis/redis.conf now.
-if ! docker exec mca-redis redis-cli CONFIG SET maxmemory-policy noeviction >/dev/null; then
+if ! docker exec mca-redis sh -c 'redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} CONFIG SET maxmemory-policy noeviction' >/dev/null; then
   echo "Warning: could not set the Redis eviction policy. Run: docker restart mca-redis"
 fi
 
@@ -81,6 +81,11 @@ if [[ "$healthy" != "1" ]]; then
 fi
 
 mkdir -p logs
+
+if ! grep -qE '^JWT_SECRET=.{32,}' .env; then
+  echo "JWT_SECRET in .env must be at least 32 characters. Generate one with: openssl rand -hex 32"
+  exit 1
+fi
 
 npm ci
 npm run prisma:generate

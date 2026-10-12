@@ -297,8 +297,8 @@ export default function ProfilePage() {
   const [sessionExpiry] = useState(readSessionExpiry);
   const [editing, setEditing] = useState(false);
 
-  const signOut = () => {
-    logout();
+  const signOut = async () => {
+    await logout();
     router.push("/login");
   };
 
@@ -417,7 +417,7 @@ export default function ProfilePage() {
                   <Pencil className="h-4 w-4" aria-hidden />
                   Edit profile
                 </Button>
-                <Button variant="outline" onClick={signOut}>
+                <Button variant="outline" onClick={() => void signOut()}>
                   <LogOut className="h-4 w-4" aria-hidden />
                   Sign out
                 </Button>

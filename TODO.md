@@ -12,7 +12,11 @@
 - [x] EWI check of an uploaded CV against those sources
 - [x] Backup script (`scripts/backup.sh`) and HTTPS setup with Caddy (`DEPLOYMENT.md` sections 21 and 22)
 - [x] Cancel and retry for an EWI investigation
-- [x] Shared login and roles, off unless `AUTH_ENABLED=true`
+- [x] Shared login and roles (always on), sign-out that ends the session on the server, 12-hour sessions
+- [x] Rate limits (login, job starts, uploads), a daily job limit per user, and an audit log of access to case data
+- [x] Security headers on the API (helmet), the website, and Caddy; WebSocket and CORS limited to the website address
+- [x] Encrypted backups (`BACKUP_GPG_RECIPIENT` or `BACKUP_PASSPHRASE_FILE`)
+- [x] CI: lint, type check, tests, and build before every deploy
 - [x] Email logged on the server until delivery is explicitly enabled
 - [x] Docker for PostgreSQL, Redis, and pgAdmin
 - [x] Server steps, demo steps, and product flows in `DEPLOYMENT.md`, `DEMO_GUIDE.md`, `docs/how-it-works.md`, and `docs/index.html`
@@ -22,11 +26,12 @@
 - [ ] Copy the local knowledge-base documents to the droplet and run `npm run reembed:kb:full` there (files are gitignored; steps are in `DEPLOYMENT.md`)
 - [ ] Paid databases and other research sources for EWI (credentials, subscriptions, and legal access); four free public sources are live
 - [ ] EWI request and email screens (the API exists; the website does not)
-- [ ] Law-firm separation so one firm cannot see another firm’s cases
-- [ ] Turn authentication on for any public site, with real users (do not seed the demo password)
+- [ ] Sharing cases inside one law firm (today each case is visible only to the user who created it)
+- [ ] Create the real users on the server with `npm run user:create` (never seed demo accounts there)
 - [ ] Production email to real organizations
 - [ ] Point a domain at the droplet and start HTTPS (`DEPLOYMENT.md` section 21); the demo is IP and HTTP until then
-- [ ] Schedule `scripts/backup.sh` with cron and add an off-server copy (`DEPLOYMENT.md` section 22)
-- [ ] CI pipeline
+- [ ] Schedule `scripts/backup.sh` with cron, with encryption configured, and add an off-server copy (`DEPLOYMENT.md` section 22)
+- [ ] Add `DEPLOY_KNOWN_HOSTS` to the GitHub secrets (deploys stop without it)
+- [ ] After HTTPS is on, set `BIND_HOST=127.0.0.1` in the server `.env`
 
 EWI runs on sample data by default, or on four free public sources with `RESEARCH_PROVIDER=live`. It is not complete opposing-expert research until the paid sources, access, and firm-separation items are done.

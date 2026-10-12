@@ -30,6 +30,7 @@
     "prisma:migrate": "npm run prisma:migrate --workspace=api",
     "prisma:generate": "npm run prisma:generate --workspace=api",
     "seed:demo-users": "npm run seed:demo-users --workspace=api",
+    "user:create": "npm run user:create --workspace=api --",
     "docker:up": "docker compose up -d postgres redis",
     "docker:down": "docker compose down",
     "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up",

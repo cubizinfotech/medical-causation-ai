@@ -3,8 +3,6 @@ import { aiConfig } from './ai.config';
 import { appConfig } from './app.config';
 import { databaseConfig } from './database.config';
 import { embeddingConfig } from './embedding.config';
-import { featureFlagsConfig } from './feature-flags.config';
-import { loggingConfig } from './logging.config';
 import { promptConfig } from './prompt.config';
 import { redisConfig } from './redis.config';
 import { storageConfig } from './storage.config';
@@ -31,7 +29,6 @@ export const configuration = (): RootConfig => ({
   token: tokenConfig(),
   storage: storageConfig(),
   ocr: ocrConfig(),
-  logging: loggingConfig(),
   email: emailConfig(),
   ewiRequest: ewiRequestConfig(),
   auth: authConfig(),
@@ -40,7 +37,6 @@ export const configuration = (): RootConfig => ({
   literature: literatureConfig(),
   caseRecords: caseRecordsConfig(),
   ewiDocuments: ewiDocumentsConfig(),
-  features: featureFlagsConfig(),
   indexing: indexingConfig(),
   rag: ragConfig(),
 });

@@ -11,7 +11,6 @@ import type {
   EmailSendResult,
   IEmailService,
 } from './email.types';
-import { PLATFORM_LOG_CONTEXT } from '../logging/logging.constants';
 
 /**
  * Sends mail through the configured adapter.
@@ -20,7 +19,7 @@ import { PLATFORM_LOG_CONTEXT } from '../logging/logging.constants';
  */
 @Injectable()
 export class EmailService implements IEmailService {
-  private readonly logger = new Logger(PLATFORM_LOG_CONTEXT.EMAIL);
+  private readonly logger = new Logger('Email');
 
   constructor(
     private readonly configService: ConfigService,

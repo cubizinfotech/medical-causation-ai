@@ -238,7 +238,8 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 ## Things to know
 
 - **Research data.** With `RESEARCH_PROVIDER=mock`, every finding comes from fixtures. With `live`, the NPI Registry, Open Payments, OpenAlex, and CourtListener are real; every other source is unavailable until an adapter is built (see [TODO.md](../TODO.md)). Open Payments covers payments from drug and device makers only, not legal or expert-witness fees.
-- **A synchronous endpoint exists**: `POST /ewi/investigate`. It is turned off unless `EWI_ALLOW_SYNC_INVESTIGATE=true` and is meant for tests and tools only.
+- **Deleting an investigation** removes its database rows, the uploaded CV, the Word report file, and the queued or running job. A running job notices and stops.
+- **Limits.** A user can start 10 jobs a minute and `JOB_DAILY_LIMIT_PER_USER` (default 50) analyses plus investigations per day.
 - **The request and email workflow** (FOIA, university, and follow-up letters under `/ewi/requests`) exists in the API but has no screens yet, and it is turned off by default (`EWI_REQUEST_WORKFLOW_ENABLED=false`).
 - **One job at a time.** EWI has its own queue and worker, separate from MCA, but each runs one job at a time.
 

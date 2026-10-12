@@ -113,10 +113,10 @@ Before the controller runs:
 
 Then `enqueue()`:
 
-1. Creates a `jobId` (UUID). If `recordIds` were sent, checks first that they all belong to this user, are not already used by another analysis, and stay within the file and page limits; otherwise nothing is created.
-2. Inserts a row in **`cases.analysis_cases`** owned by the logged-in user, with status `queued`, and attaches the records to it. This row is the permanent record and the one the history pages read.
-3. Writes a fast-changing **job record** to Redis at `analysis:job:{jobId}` (status, step, progress, message). It expires after `JOB_STATE_TTL_SECONDS` / `ANALYSIS_JOB_TTL_SECONDS`.
-4. Adds the job to the **BullMQ queue `medical-analysis`** in Redis. `attempts: 1` means a failed job is not retried automatically.
+1. Checks the user's daily job limit (`JOB_DAILY_LIMIT_PER_USER`), then creates a `jobId` (UUID). If `recordIds` were sent, checks first that they all belong to this user, are not already used by another analysis, and stay within the file and page limits; otherwise nothing is created.
+2. Inserts a row in **`cases.analysis_cases`** owned by the logged-in user, with status `queued`, and attaches the records to it. If another analysis took one of the records in the meantime, the new row is removed and the request fails. This row is the permanent record and the one the history pages read.
+3. Writes a fast-changing **job record** to Redis at `analysis:job:{jobId}` (status, step, progress, message). It expires after `JOB_STATE_TTL_SECONDS`. Updates to it are atomic, so concurrent writes never lose each other.
+4. Adds the job (`jobId`, `caseId`, request) to the **BullMQ queue `medical-analysis`** in Redis. `attempts: 1` means a failed job is not retried automatically, and a job that stalls is failed rather than run twice. The worker reads uploaded records only through `caseId`.
 5. Returns **HTTP 202** with `{ caseId, jobId, status: "queued" }`.
 
 The HTTP request ends here, after a fraction of a second. The analysis itself can take a minute or more, so it never runs inside the request.
@@ -265,7 +265,7 @@ The form starts from the case (date of loss, the accident description as the fac
 - **Record text goes to the AI provider.** Building the chronology sends the page text to whichever `AI_PROVIDER` is configured. Use a provider the firm has approved for patient records, and serve the site over HTTPS before uploading real records.
 - **The bills summary reads only what is printed.** Bills that were not uploaded are missing from it, so it lists the treating providers with no bill to request. Amounts read from OCR pages should be checked against the original.
 - **The demand letter is a draft.** Its treatment section is checked against the chronology, but the attorney must review every statement, and time-limited or policy-limits demands follow state-specific rules.
-- **A synchronous endpoint exists**: `POST /medical-analysis/analyze` runs the whole analysis inside one request. The website does not use it. It is useful for scripts and testing.
+- **Limits.** A user can start 10 analyses a minute, upload 30 files a minute, and start `JOB_DAILY_LIMIT_PER_USER` (default 50) analyses plus investigations per day. A failed AI answer is retried at most twice.
 - **One job at a time.** Worker concurrency is 1, and PM2 runs a single API instance, so a second analysis waits in the queue.
 
 ## File map

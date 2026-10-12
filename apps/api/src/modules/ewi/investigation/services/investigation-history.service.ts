@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { join, relative, resolve } from 'node:path';
 import type { StorageSettings } from '@config/config.types';
 import { targetsFromEvidence } from '../../correspondence/ewi-request-from-evidence';
 import { EwiRequestWorkflowService } from '../../correspondence/ewi-request-workflow.service';
@@ -67,11 +67,19 @@ export class InvestigationHistoryService {
     }
   }
 
-  async deleteHistory(id: string, ownerUserId: string): Promise<void> {
-    await this.getHistory(id, ownerUserId);
-    // Rows go with the investigation; the uploaded files are removed here.
+  /** Deletes the investigation, its uploaded files, and its Word report. */
+  async deleteHistory(
+    id: string,
+    ownerUserId: string,
+  ): Promise<{ jobId: string }> {
+    const row = await this.getHistory(id, ownerUserId);
+    // Rows go with the investigation; the files are removed here.
     await this.documents.deleteFilesForInvestigation(id);
+    if (row.reportStorageKey) {
+      await rm(this.reportPath(row.reportStorageKey), { force: true });
+    }
     await this.repo.delete(id);
+    return { jobId: row.jobId };
   }
 
   async cancel(id: string, ownerUserId: string) {
@@ -83,9 +91,10 @@ export class InvestigationHistoryService {
     return this.repo.cancelByJobId(jobId);
   }
 
+  /** True when the investigation was cancelled or deleted: the job should stop. */
   async isCancelledByJobId(jobId: string): Promise<boolean> {
     const row = await this.repo.findByJobId(jobId);
-    return row?.status === 'cancelled';
+    return !row || row.status === 'cancelled';
   }
 
   async getReport(
@@ -100,7 +109,7 @@ export class InvestigationHistoryService {
     if (!row.reportStorageKey || !row.reportFileName || !row.reportMimeType) {
       throw new NotFoundException(`Report for investigation "${id}" not found`);
     }
-    const buffer = await readFile(row.reportStorageKey);
+    const buffer = await readFile(this.reportPath(row.reportStorageKey));
     return {
       fileName: row.reportFileName,
       mimeType: row.reportMimeType,
@@ -126,6 +135,8 @@ export class InvestigationHistoryService {
       templateVersion?: string;
     },
   ) {
+    // Deleted while the job ran: write no orphan report file.
+    if (!(await this.repo.findByJobId(jobId))) return null;
     const directory = join(this.reportsDirectory(), 'investigations');
     await mkdir(directory, { recursive: true });
     const storageKey = join(directory, `${jobId}.docx`);
@@ -176,6 +187,17 @@ export class InvestigationHistoryService {
         `EWI request prepare skipped for investigation=${investigationId}: ${message}`,
       );
     }
+  }
+
+  /** Reports are read and deleted only inside the reports folder. */
+  private reportPath(storageKey: string): string {
+    const root = resolve(this.reportsDirectory());
+    const path = resolve(storageKey);
+    const rel = relative(root, path);
+    if (!rel || rel.startsWith('..') || resolve(root, rel) !== path) {
+      throw new NotFoundException('Report file not found');
+    }
+    return path;
   }
 
   private reportsDirectory(): string {

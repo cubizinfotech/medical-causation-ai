@@ -675,3 +675,20 @@ model UserRole {
   @@map("user_roles")
   @@schema("platform")
 }
+
+/// Who viewed, downloaded, or deleted case data, and sign-ins. Append-only.
+model AuditEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  product      String
+  action       String
+  actorId      String?  @map("actor_id") @db.Uuid
+  resourceType String?  @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  metadata     Json?
+  occurredAt   DateTime @default(now()) @map("occurred_at")
+
+  @@index([actorId, occurredAt(sort: Desc)])
+  @@index([resourceType, resourceId])
+  @@map("audit_events")
+  @@schema("platform")
+}

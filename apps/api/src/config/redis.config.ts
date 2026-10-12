@@ -41,6 +41,5 @@ export const redisConfig = (): RedisSettings => {
     password: parsed ? parsed.password : fallbackPassword,
     db: parsed?.db ?? fallbackDb,
     keyPrefix: process.env.REDIS_KEY_PREFIX ?? 'mca:',
-    ttlSeconds: Number(process.env.REDIS_TTL_SECONDS ?? 3600),
   };
 };

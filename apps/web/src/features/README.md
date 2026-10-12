@@ -2,9 +2,9 @@
 
 | Path | Product |
 |------|---------|
-| `features/common` | Shared API helpers |
-| `features/mca` | MCA — medical-analysis, demo intake, report export |
-| `features/ewi` | EWI — investigation client, schemas, job hook |
-| `features/auth` | Login session |
+| `features/auth` | Sign-in session, safe redirect after login, profile |
+| `features/common` | Shared API response parsing and formatting |
+| `features/mca` | MCA: case form and storage, analysis client, records, report export, demand letter |
+| `features/ewi` | EWI: investigation client, schemas, job hook |
 
-`features/demo` and `features/medical-analysis` re-export the MCA modules. Pages may import either path.
+Pages import from these folders directly (for example `@/features/mca/demo/constants`). MCA and EWI never import each other.

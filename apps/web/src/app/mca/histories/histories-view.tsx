@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Progress } from "@/components/ui/progress";
-import { medicalAnalysisClient } from "@/features/medical-analysis/medical-analysis.service";
+import { medicalAnalysisClient } from "@/features/mca/medical-analysis/medical-analysis.service";
 import { formatReportDate } from "@/utils/format-date";
-import type { AnalysisHistoryListItem } from "@/features/medical-analysis/history.types";
+import type { AnalysisHistoryListItem } from "@/features/mca/medical-analysis/history.types";
 
 function formatDate(iso: string): string {
   return formatReportDate(iso);

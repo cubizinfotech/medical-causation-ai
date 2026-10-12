@@ -25,7 +25,8 @@
     "reembed:kb:full": "ts-node -r tsconfig-paths/register scripts/run-indexing.ts --reembed-only --replace-embeddings",
     "prisma:migrate": "node scripts/prisma-with-env.cjs migrate deploy",
     "prisma:migrate:dev": "node scripts/prisma-with-env.cjs migrate dev",
-    "seed:demo-users": "ts-node -r tsconfig-paths/register scripts/seed-demo-users.ts"
+    "seed:demo-users": "ts-node -r tsconfig-paths/register scripts/seed-demo-users.ts",
+    "user:create": "ts-node -r tsconfig-paths/register scripts/create-user.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",
@@ -35,9 +36,9 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.2",
-    "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-socket.io": "^11.1.28",
+    "@nestjs/throttler": "^6.7.1",
     "@nestjs/websockets": "^11.1.28",
     "@prisma/client": "^6.19.3",
     "@tesseract.js-data/eng": "^1.0.0",
@@ -46,11 +47,10 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "docx": "^9.7.1",
+    "helmet": "^8.3.0",
     "ioredis": "^5.11.1",
     "mammoth": "^1.12.0",
     "nodemailer": "^10.0.10",
-    "passport": "^0.7.0",
-    "passport-jwt": "^4.0.1",
     "pdfjs-dist": "^5.6.205",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -68,7 +68,6 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "@types/nodemailer": "^8.0.2",
-    "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
@@ -107,17 +106,12 @@
     ],
     "moduleNameMapper": {
       "^@config/(.*)$": "<rootDir>/config/$1",
-      "^@common/(.*)$": "<rootDir>/common/$1",
       "^@database/(.*)$": "<rootDir>/database/$1",
       "^@modules/(.*)$": "<rootDir>/modules/$1",
       "^@ai/(.*)$": "<rootDir>/ai/$1",
       "^@platform/(.*)$": "<rootDir>/platform/$1",
-      "^@medical/(.*)$": "<rootDir>/medical/$1",
       "^@integrations/(.*)$": "<rootDir>/integrations/$1",
-      "^@shared/(.*)$": "<rootDir>/shared/$1",
-      "^@queues/(.*)$": "<rootDir>/queues/$1",
-      "^@redis/(.*)$": "<rootDir>/redis/$1",
-      "^@utils/(.*)$": "<rootDir>/utils/$1"
+      "^@redis/(.*)$": "<rootDir>/redis/$1"
     }
   }
 }

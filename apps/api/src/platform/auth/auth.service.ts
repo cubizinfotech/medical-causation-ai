@@ -5,8 +5,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { randomUUID } from 'node:crypto';
 import type { AuthSettings } from '@config/config.types';
 import type { Socket } from 'socket.io';
+import { RedisService } from '@redis/redis.service';
+import { AuditService } from '../audit/audit.service';
 import { UsersService } from '../users/users.service';
 import type { PlatformUser } from '../users/user.types';
 import type {
@@ -14,28 +17,31 @@ import type {
   AuthUserRef,
   IAuthService,
 } from './auth.types';
-import { verifyPassword } from './password';
+import { hashPassword, verifyPassword } from './password';
+
+/** Shorter secrets can be brute-forced offline from one captured token. */
+export const MIN_JWT_SECRET_LENGTH = 32;
 
 @Injectable()
 export class AuthService implements IAuthService, OnModuleInit {
+  /** Checked when the email is unknown, so response time does not reveal accounts. */
+  private unknownUserHash?: Promise<string>;
+
   constructor(
     private readonly config: ConfigService,
     private readonly users: UsersService,
     private readonly jwt: JwtService,
+    private readonly redis: RedisService,
+    private readonly audit: AuditService,
   ) {}
 
   onModuleInit(): void {
-    const auth = this.settings();
-    if (process.env.NODE_ENV === 'production' && !auth.jwtSecret) {
-      throw new Error('JWT_SECRET is required.');
+    const { jwtSecret } = this.settings();
+    if (jwtSecret.length < MIN_JWT_SECRET_LENGTH) {
+      throw new Error(
+        `JWT_SECRET must be set to at least ${MIN_JWT_SECRET_LENGTH} random characters (for example: openssl rand -hex 32).`,
+      );
     }
-    if (auth.enabled && !auth.jwtSecret) {
-      throw new Error('JWT_SECRET is required when AUTH_ENABLED is true.');
-    }
-  }
-
-  status(): { enabled: boolean } {
-    return { enabled: this.settings().enabled };
   }
 
   async login(
@@ -45,16 +51,19 @@ export class AuthService implements IAuthService, OnModuleInit {
     accessToken: string;
     user: AuthUserRef;
   }> {
-    const auth = this.settings();
-    if (!auth.jwtSecret) {
-      throw new UnauthorizedException('Authentication is not configured.');
-    }
     const record = await this.users.findByEmail(email);
-    if (!record) {
-      throw new UnauthorizedException('Invalid email or password.');
-    }
-    const matches = await verifyPassword(password, record.passwordHash);
-    if (!matches) {
+    const matches = await verifyPassword(
+      password,
+      record?.passwordHash ??
+        (await (this.unknownUserHash ??= hashPassword(randomUUID()))),
+    );
+    if (!record || !matches) {
+      void this.audit.record({
+        product: 'platform',
+        action: 'auth.login_failed',
+        actorId: record?.id,
+        metadata: { email: email.trim().toLowerCase() },
+      });
       throw new UnauthorizedException('Invalid email or password.');
     }
     const user = toRef(record);
@@ -63,20 +72,40 @@ export class AuthService implements IAuthService, OnModuleInit {
       email: user.email,
       roles: user.roles,
     };
-    const accessToken = await this.jwt.signAsync(payload);
+    const accessToken = await this.jwt.signAsync(payload, {
+      jwtid: randomUUID(),
+    });
+    void this.audit.record({
+      product: 'platform',
+      action: 'auth.login',
+      actorId: user.id,
+    });
     return { accessToken, user };
   }
 
+  /** Ends this token now instead of when it expires. */
+  async logout(token: string): Promise<void> {
+    const payload = await this.verify(token);
+    if (!payload?.jti || !payload.exp) return;
+    const ttl = payload.exp - Math.floor(Date.now() / 1000);
+    if (ttl > 0) {
+      await this.redis.getClient().set(revokedKey(payload.jti), '1', 'EX', ttl);
+    }
+    void this.audit.record({
+      product: 'platform',
+      action: 'auth.logout',
+      actorId: payload.sub,
+    });
+  }
+
   async validateAccessToken(token: string): Promise<AuthUserRef | null> {
-    const auth = this.settings();
-    if (!auth.jwtSecret) return null;
-    try {
-      const payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
-      const user = await this.users.findById(payload.sub);
-      return user ? toRef(user) : null;
-    } catch {
+    const payload = await this.verify(token);
+    if (!payload?.jti) return null;
+    if (await this.redis.getClient().exists(revokedKey(payload.jti))) {
       return null;
     }
+    const user = await this.users.findById(payload.sub);
+    return user ? toRef(user) : null;
   }
 
   /** Job updates require the same signed-in user as the HTTP APIs. */
@@ -90,15 +119,26 @@ export class AuthService implements IAuthService, OnModuleInit {
     return true;
   }
 
+  private async verify(token: string): Promise<AccessTokenPayload | null> {
+    try {
+      return await this.jwt.verifyAsync<AccessTokenPayload>(token);
+    } catch {
+      return null;
+    }
+  }
+
   private settings(): AuthSettings {
     return (
       this.config.get<AuthSettings>('auth') ?? {
-        enabled: false,
         jwtSecret: '',
-        jwtExpiresIn: '7d',
+        jwtExpiresIn: '12h',
       }
     );
   }
+}
+
+function revokedKey(jti: string): string {
+  return `auth:revoked:${jti}`;
 }
 
 function toRef(user: PlatformUser): AuthUserRef {
@@ -111,14 +151,17 @@ function toRef(user: PlatformUser): AuthUserRef {
   };
 }
 
+export function readBearer(header: string | undefined): string | null {
+  if (!header?.startsWith('Bearer ')) return null;
+  const token = header.slice('Bearer '.length).trim();
+  return token || null;
+}
+
 function readSocketToken(client: Socket): string | null {
   const auth = client.handshake.auth as { token?: unknown } | undefined;
   if (typeof auth?.token === 'string' && auth.token.trim()) {
     return auth.token.trim();
   }
   const header = client.handshake.headers.authorization;
-  if (typeof header === 'string' && header.startsWith('Bearer ')) {
-    return header.slice('Bearer '.length).trim();
-  }
-  return null;
+  return typeof header === 'string' ? readBearer(header) : null;
 }

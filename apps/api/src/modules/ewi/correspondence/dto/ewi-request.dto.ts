@@ -130,13 +130,6 @@ export class PrepareEwiRequestDto {
   targets!: PrepareEwiRequestTargetDto[];
 }
 
-export class ApproveEwiRequestDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  approvedBy?: string;
-}
-
 export class ManualReviewEwiRequestDto {
   @IsEmail()
   @MaxLength(320)
@@ -146,11 +139,6 @@ export class ManualReviewEwiRequestDto {
   @IsString()
   @MaxLength(200)
   recipientName?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  approvedBy?: string;
 
   @IsOptional()
   @IsBoolean()

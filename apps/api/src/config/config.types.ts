@@ -29,7 +29,6 @@ export interface RedisSettings {
   password: string;
   db: number;
   keyPrefix: string;
-  ttlSeconds: number;
 }
 
 export interface AIProviderSettings {
@@ -83,21 +82,6 @@ export interface StorageSettings {
   knowledgeBaseMaxFileSizeMb: number;
   knowledgeBaseMaxFileSizeBytes: number;
   uploadDir: string;
-}
-
-export interface LoggingSettings {
-  level: string;
-  prettyPrint: boolean;
-}
-
-export interface FeatureFlags {
-  enableAiProcessing: boolean;
-  enableRag: boolean;
-  enableLiteratureSearch: boolean;
-  enableMca: boolean;
-  enableEwi: boolean;
-  enableEmail: boolean;
-  enableAuth: boolean;
 }
 
 /** Public medical literature search (PubMed, with Europe PMC abstracts). */
@@ -199,16 +183,19 @@ export interface EwiRequestWorkflowSettings {
 }
 
 export interface AuthSettings {
-  enabled: boolean;
   jwtSecret: string;
   jwtExpiresIn: string;
 }
 
 export interface JobsSettings {
+  /** How long job progress records stay in Redis. */
   stateTtlSeconds: number;
+  /** Jobs one API process runs at the same time, per product. */
   concurrency: number;
-  mcaQueuePrefix: string;
-  ewiQueuePrefix: string;
+  /** A job whose lock is not renewed for this long counts as stalled. */
+  lockDurationMs: number;
+  /** Analyses plus investigations one user may start in 24 hours (0 = no limit). */
+  dailyLimitPerUser: number;
 }
 
 export interface ResearchProviderSettings {
@@ -268,7 +255,6 @@ export interface RootConfig {
   token: import('./ai-config.types').TokenConfigSettings;
   storage: StorageSettings;
   ocr: OcrSettings;
-  logging: LoggingSettings;
   email: EmailSettings;
   ewiRequest: EwiRequestWorkflowSettings;
   auth: AuthSettings;
@@ -277,7 +263,6 @@ export interface RootConfig {
   literature: LiteratureSearchSettings;
   caseRecords: CaseRecordsSettings;
   ewiDocuments: EwiDocumentsSettings;
-  features: FeatureFlags;
   indexing: IndexingConfigSettings;
   rag: RagConfigSettings;
 }

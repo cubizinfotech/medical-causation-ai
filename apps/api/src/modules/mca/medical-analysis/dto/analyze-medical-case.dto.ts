@@ -22,6 +22,7 @@ export class AnalyzeMedicalCaseDto {
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(40)
   accidentDate!: string;
 
   @IsString()

@@ -12,7 +12,13 @@
 #   BACKUP_KEEP_DAYS        days to keep local backups (default 14)
 #   BACKUP_WITH_LIBRARY     1 = include knowledge-base books and articles
 #   BACKUP_RCLONE_REMOTE    rclone destination for an off-server copy, e.g. "spaces:mca-backups"
+#   BACKUP_GPG_RECIPIENT    encrypt to this GPG public key (recommended; the
+#                           private key stays off the server)
+#   BACKUP_PASSPHRASE_FILE  or encrypt with the passphrase in this file (chmod 600)
 #   POSTGRES_CONTAINER      database container (default mca-postgres)
+#
+# Backups hold patient records. Without one of the two encryption settings
+# they stay on this server only and are never copied off it.
 set -euo pipefail
 
 ROOT="${MCA_ROOT:-/var/www/medical-causation-ai}"
@@ -116,15 +122,45 @@ else
   echo "No file folders found yet; database only."
 fi
 
+# 3. Encryption at rest. Plain files are removed once encrypted.
+encrypted=0
+encrypt() {
+  local file="$1"
+  if [[ -n "${BACKUP_GPG_RECIPIENT:-}" ]]; then
+    gpg --batch --yes --trust-model always --encrypt \
+      --recipient "$BACKUP_GPG_RECIPIENT" --output "$file.gpg" "$file"
+  else
+    gpg --batch --yes --symmetric --cipher-algo AES256 \
+      --pinentry-mode loopback --passphrase-file "$BACKUP_PASSPHRASE_FILE" \
+      --output "$file.gpg" "$file"
+  fi
+  rm -f "$file"
+}
+if [[ -n "${BACKUP_GPG_RECIPIENT:-}" || -n "${BACKUP_PASSPHRASE_FILE:-}" ]]; then
+  if ! command -v gpg >/dev/null 2>&1; then
+    echo "Encryption is configured but gpg is not installed (apt install gnupg)."
+    exit 1
+  fi
+  for file in "$work"/database.dump "$work"/files.tar.gz; do
+    [[ -f "$file" ]] && encrypt "$file"
+  done
+  encrypted=1
+  echo "Backup encrypted."
+else
+  echo "Warning: backup is NOT encrypted. Set BACKUP_GPG_RECIPIENT or BACKUP_PASSPHRASE_FILE."
+fi
+
 (cd "$work" && sha256sum ./* > SHA256SUMS)
 mv "$work" "$final"
 echo "Backup written to $final"
 du -sh "$final" | cut -f1 | sed 's/^/Size: /'
 
-# 3. Optional off-server copy. A backup on the same server does not survive
-#    losing the server. Use an encrypted rclone remote for patient data.
+# 4. Optional off-server copy. A backup on the same server does not survive
+#    losing the server. Only encrypted backups leave it.
 if [[ -n "${BACKUP_RCLONE_REMOTE:-}" ]]; then
-  if command -v rclone >/dev/null 2>&1; then
+  if [[ "$encrypted" != "1" ]]; then
+    echo "Warning: not copying an unencrypted backup off the server. Configure encryption first."
+  elif command -v rclone >/dev/null 2>&1; then
     rclone copy "$final" "$BACKUP_RCLONE_REMOTE/$stamp"
     echo "Copied to $BACKUP_RCLONE_REMOTE/$stamp"
   else
@@ -132,7 +168,7 @@ if [[ -n "${BACKUP_RCLONE_REMOTE:-}" ]]; then
   fi
 fi
 
-# 4. Remove local backups older than BACKUP_KEEP_DAYS. Only folders this
+# 5. Remove local backups older than BACKUP_KEEP_DAYS. Only folders this
 #    script created (named like 20261009T023000Z) are considered.
 find "$DEST" -mindepth 1 -maxdepth 1 -type d -name '20[0-9][0-9][0-1][0-9][0-3][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z' \
   -mtime +"$KEEP_DAYS" -print -exec rm -rf {} + | sed 's/^/Removed old backup: /'

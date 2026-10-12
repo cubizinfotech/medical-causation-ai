@@ -12,6 +12,8 @@ export interface ParserInput {
   fileSize: number;
   createdAt: Date;
   modifiedAt: Date;
+  /** Stop before reading text when the document has more pages (PDF only). */
+  maxPages?: number;
 }
 
 /**

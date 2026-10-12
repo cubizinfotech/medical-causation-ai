@@ -17,6 +17,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import type { AuthUserRef } from '@platform/auth/auth.types';
 import { requireRequestUser } from '@platform/auth/request-user';
+import { AuditService } from '@platform/audit/audit.service';
+import { downloadHeaders } from '@platform/http/download-headers';
+import { UploadRateLimit } from '@platform/rate-limit/rate-limit';
 import { ewiDocumentsConfig } from '@config/ewi-documents.config';
 import { ExpertDocumentsService } from './expert-documents.service';
 import type {
@@ -29,10 +32,14 @@ type AuthedRequest = Request & { user?: AuthUserRef };
 /** Documents attorneys upload for an investigation (PDF, owner-only). */
 @Controller('ewi/documents')
 export class ExpertDocumentsController {
-  constructor(private readonly documents: ExpertDocumentsService) {}
+  constructor(
+    private readonly documents: ExpertDocumentsService,
+    private readonly audit: AuditService,
+  ) {}
 
   /** The opposing expert's CV. */
   @Post('cv')
+  @UploadRateLimit()
   @UseInterceptors(
     FileInterceptor('file', {
       // Multer stops reading once the limit is passed (HTTP 413).
@@ -52,17 +59,16 @@ export class ExpertDocumentsController {
     @Req() request: AuthedRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const { buffer, name } = await this.documents.readFile(
-      requireRequestUser(request).id,
-      id,
-    );
-    const asciiName = name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, "'");
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(name)}`,
-      'Cache-Control': 'private, no-store',
-      'X-Content-Type-Options': 'nosniff',
+    const userId = requireRequestUser(request).id;
+    const { buffer, name } = await this.documents.readFile(userId, id);
+    void this.audit.record({
+      product: 'ewi',
+      action: 'document.view',
+      actorId: userId,
+      resourceType: 'expert_document',
+      resourceId: id,
     });
+    res.set(downloadHeaders(name, 'application/pdf', 'inline'));
     return new StreamableFile(buffer);
   }
 

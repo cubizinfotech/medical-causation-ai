@@ -88,9 +88,9 @@ export function UserMenu({ user }: { user: AuthSessionUser }) {
     }
   };
 
-  const signOut = () => {
+  const signOut = async () => {
     setOpen(false);
-    logout();
+    await logout();
     router.push("/login");
   };
 
@@ -161,7 +161,7 @@ export function UserMenu({ user }: { user: AuthSessionUser }) {
             role="menuitem"
             tabIndex={-1}
             disabled={signingOut}
-            onClick={signOut}
+            onClick={() => void signOut()}
             className={cn(itemClass, "text-destructive hover:bg-destructive/10 focus-visible:bg-destructive/10")}
           >
             <LogOut className="h-4 w-4" aria-hidden />

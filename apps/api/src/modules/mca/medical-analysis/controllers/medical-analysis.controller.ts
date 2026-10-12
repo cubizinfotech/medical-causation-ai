@@ -5,69 +5,85 @@ import {
   Delete,
   Get,
   HttpCode,
+  HttpException,
   HttpStatus,
   InternalServerErrorException,
   Logger,
   Param,
+  ParseUUIDPipe,
   Post,
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import type { AuthUserRef } from '@platform/auth/auth.types';
 import { requireRequestUser } from '@platform/auth/request-user';
+import { AuditService } from '@platform/audit/audit.service';
+import { JobRateLimit } from '@platform/rate-limit/rate-limit';
 import { AiException } from '@ai/exceptions';
-import { MedicalAnalysisService } from '../services';
 import { MedicalAnalysisJobService } from '../jobs/medical-analysis-job.service';
 import { AnalysisHistoryService } from '../services/analysis-history.service';
 import { AnalyzeMedicalCaseDto } from '../dto/analyze-medical-case.dto';
-import { mapCaseDtoToAnalysisRequest } from '../utils/case-request.mapper';
-import { AnalysisResponseParseError } from '../utils/analysis-response.parser';
-import {
-  AnalysisSafetyException,
-  InsufficientEvidenceException,
-  MedicalAnalysisException,
-} from '../exceptions';
-import type { MedicalAnalysisResult } from '../types';
+import { MedicalAnalysisException } from '../exceptions';
 import type { MedicalAnalysisJobRecord } from '../jobs/medical-analysis-job.types';
 import type { CreateMedicalAnalysisJobResponse } from '../jobs/medical-analysis-job.types';
+
+type AuthedRequest = Request & { user?: AuthUserRef };
 
 @Controller('medical-analysis')
 export class MedicalAnalysisController {
   private readonly logger = new Logger(MedicalAnalysisController.name);
 
   constructor(
-    private readonly medicalAnalysisService: MedicalAnalysisService,
     private readonly jobService: MedicalAnalysisJobService,
     private readonly historyService: AnalysisHistoryService,
+    private readonly audit: AuditService,
   ) {}
 
   @Get('histories')
-  listHistories(@Req() request: Request & { user?: AuthUserRef }) {
+  listHistories(@Req() request: AuthedRequest) {
     return this.historyService.listHistories(requireRequestUser(request).id);
   }
 
   @Get('histories/:id')
-  getHistory(
-    @Param('id') id: string,
-    @Req() request: Request & { user?: AuthUserRef },
+  async getHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: AuthedRequest,
   ) {
-    return this.historyService.getHistory(id, requireRequestUser(request).id);
+    const userId = requireRequestUser(request).id;
+    const history = await this.historyService.getHistory(id, userId);
+    void this.audit.record({
+      product: 'mca',
+      action: 'analysis.view',
+      actorId: userId,
+      resourceType: 'analysis_case',
+      resourceId: id,
+    });
+    return history;
   }
 
   @Delete('histories/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteHistory(
-    @Param('id') id: string,
-    @Req() request: Request & { user?: AuthUserRef },
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: AuthedRequest,
   ): Promise<void> {
-    await this.historyService.deleteHistory(id, requireRequestUser(request).id);
+    const userId = requireRequestUser(request).id;
+    await this.historyService.deleteHistory(id, userId);
+    void this.audit.record({
+      product: 'mca',
+      action: 'analysis.delete',
+      actorId: userId,
+      resourceType: 'analysis_case',
+      resourceId: id,
+    });
   }
 
   @Post('jobs')
+  @JobRateLimit()
   @HttpCode(HttpStatus.ACCEPTED)
   async createJob(
     @Body() body: AnalyzeMedicalCaseDto,
-    @Req() request: Request & { user?: AuthUserRef },
+    @Req() request: AuthedRequest,
   ): Promise<CreateMedicalAnalysisJobResponse> {
     try {
       return await this.jobService.enqueue(
@@ -81,8 +97,8 @@ export class MedicalAnalysisController {
 
   @Get('jobs/:jobId')
   async getJob(
-    @Param('jobId') jobId: string,
-    @Req() request: Request & { user?: AuthUserRef },
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @Req() request: AuthedRequest,
   ): Promise<MedicalAnalysisJobRecord> {
     await this.historyService.assertJobOwner(
       jobId,
@@ -91,48 +107,21 @@ export class MedicalAnalysisController {
     return this.jobService.getJob(jobId);
   }
 
-  @Post('analyze')
-  @HttpCode(HttpStatus.OK)
-  async analyze(
-    @Body() body: AnalyzeMedicalCaseDto,
-  ): Promise<MedicalAnalysisResult> {
-    try {
-      return await this.medicalAnalysisService.analyze(
-        mapCaseDtoToAnalysisRequest(body),
-      );
-    } catch (error) {
-      return this.handleError(error);
-    }
-  }
-
   private handleError(error: unknown): never {
-    if (error instanceof AnalysisSafetyException) {
-      throw new BadRequestException(error.message);
-    }
-    if (error instanceof InsufficientEvidenceException) {
-      throw new BadRequestException(error.message);
-    }
+    if (error instanceof HttpException) throw error;
     if (error instanceof MedicalAnalysisException) {
       throw new BadRequestException(error.message);
-    }
-    if (error instanceof AnalysisResponseParseError) {
-      this.logger.error(`Medical analysis parse error: ${error.message}`);
-      throw new BadRequestException(
-        'The AI model returned an invalid response. Please retry, or switch to a more reliable chat model in AI_CHAT_MODEL.',
-      );
     }
     if (error instanceof AiException) {
       this.logger.error(`Medical analysis AI error: ${error.message}`);
       throw new BadRequestException(error.message);
     }
-    const message =
-      error instanceof Error ? error.message : 'Unknown analysis error';
     this.logger.error(
-      `Medical analysis failed: ${message}`,
+      `Medical analysis failed: ${error instanceof Error ? error.message : String(error)}`,
       error instanceof Error ? error.stack : undefined,
     );
     throw new InternalServerErrorException(
-      message || 'Medical analysis failed. Please try again.',
+      'Medical analysis could not be started. Please try again.',
     );
   }
 }
