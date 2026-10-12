@@ -21,7 +21,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379/0
       KNOWLEDGE_BASE_PATH: /knowledge-base
     volumes:
       - ./apps/api/src:/app/apps/api/src
@@ -64,7 +64,6 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     volumes:
       - ./apps/web/src:/app/apps/web/src
-      - ./apps/web/public:/app/apps/web/public
       - ./apps/web/package.json:/app/apps/web/package.json:ro
       - ./apps/web/tsconfig.json:/app/apps/web/tsconfig.json:ro
       - ./apps/web/next.config.ts:/app/apps/web/next.config.ts:ro

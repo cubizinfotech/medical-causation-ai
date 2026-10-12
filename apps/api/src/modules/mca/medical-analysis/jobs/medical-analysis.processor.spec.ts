@@ -22,23 +22,27 @@ describe('MedicalAnalysisProcessor', () => {
       {} as never,
       jobService as never,
       { analyze } as never,
+      { get: () => undefined } as never,
     );
     return { processor, jobService };
   }
 
   it('marks the job completed when analysis succeeds', async () => {
     const result = { executiveSummary: 'Done' };
-    const { processor, jobService } = createProcessor(
-      jest.fn().mockResolvedValue(result),
-    );
+    const analyze = jest.fn().mockResolvedValue(result);
+    const { processor, jobService } = createProcessor(analyze);
 
     await (
       processor as unknown as {
         process: (payload: MedicalAnalysisJobPayload) => Promise<void>;
       }
-    ).process({ jobId: 'job-1', request });
+    ).process({ jobId: 'job-1', caseId: 'case-1', request });
 
     expect(jobService.markRunning).toHaveBeenCalledWith('job-1');
+    expect(analyze).toHaveBeenCalledWith(
+      request,
+      expect.objectContaining({ caseId: 'case-1' }),
+    );
     expect(jobService.markCompleted).toHaveBeenCalledWith('job-1', result);
     expect(jobService.markFailed).not.toHaveBeenCalled();
   });
@@ -53,7 +57,7 @@ describe('MedicalAnalysisProcessor', () => {
         processor as unknown as {
           process: (payload: MedicalAnalysisJobPayload) => Promise<void>;
         }
-      ).process({ jobId: 'job-2', request }),
+      ).process({ jobId: 'job-2', caseId: 'case-2', request }),
     ).rejects.toThrow('knowledge base unavailable');
 
     expect(jobService.markFailed).toHaveBeenCalledWith(

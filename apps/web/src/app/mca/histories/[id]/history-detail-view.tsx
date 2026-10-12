@@ -14,17 +14,17 @@ import {
   Trash2,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout";
-import { LoadingCard, ProgressTimeline } from "@/components/demo";
-import { MedicalReport } from "@/components/report/medical-report";
+import { LoadingCard, ProgressTimeline } from "@/components/mca/demo";
+import { MedicalReport } from "@/components/mca/report/medical-report";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Progress } from "@/components/ui/progress";
-import { ANALYSIS_PROGRESS_STEPS } from "@/features/demo/constants";
-import { useMedicalAnalysisJob } from "@/features/demo/hooks/use-medical-analysis-job";
-import { medicalAnalysisClient } from "@/features/medical-analysis/medical-analysis.service";
-import type { AnalysisHistoryDetail } from "@/features/medical-analysis/history.types";
+import { ANALYSIS_PROGRESS_STEPS } from "@/features/mca/demo/constants";
+import { useMedicalAnalysisJob } from "@/features/mca/demo/hooks/use-medical-analysis-job";
+import { medicalAnalysisClient } from "@/features/mca/medical-analysis/medical-analysis.service";
+import type { AnalysisHistoryDetail } from "@/features/mca/medical-analysis/history.types";
 import { formatReportDate } from "@/utils/format-date";
 
 function formatElapsed(ms: number): string {

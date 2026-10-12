@@ -4,9 +4,11 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Worker } from 'bullmq';
 import { RedisService } from '@redis/redis.service';
-import { QUEUE_PREFIXES } from '@platform/queues/queue-prefixes';
+import { QUEUE_PREFIXES } from '@platform/jobs/job.types';
+import { workerOptions } from '@platform/jobs/worker-options';
 import { EWI_INVESTIGATION_QUEUE_NAME } from './ewi-investigation-job.constants';
 import { EwiInvestigationJobService } from './ewi-investigation-job.service';
 import type { EwiInvestigationJobPayload } from './ewi-investigation-job.types';
@@ -26,6 +28,7 @@ export class EwiInvestigationProcessor
     private readonly redisService: RedisService,
     private readonly jobService: EwiInvestigationJobService,
     private readonly investigationService: ExpertInvestigationService,
+    private readonly config: ConfigService,
   ) {}
 
   onModuleInit(): void {
@@ -35,7 +38,7 @@ export class EwiInvestigationProcessor
       {
         connection: this.redisService.getConnectionOptions(),
         prefix: QUEUE_PREFIXES.EWI,
-        concurrency: 1,
+        ...workerOptions(this.config),
       },
     );
 

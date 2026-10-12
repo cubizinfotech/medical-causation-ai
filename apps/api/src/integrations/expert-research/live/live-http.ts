@@ -23,8 +23,42 @@ export interface LiveHttpOptions {
 const USER_AGENT =
   'medical-causation-ai/1.0 (expert witness research; public records)';
 
+/** Redirects followed per request, all on the requested host. */
+const MAX_REDIRECTS = 3;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+class OffHostRedirectError extends Error {}
+
+/**
+ * fetch that follows redirects only on the host it was asked for. The
+ * clients call fixed public APIs; a redirect elsewhere (another site or an
+ * internal address) is refused rather than followed.
+ */
+async function fetchSameHost(
+  fetchImpl: typeof fetch,
+  url: URL | string,
+  init: RequestInit,
+): Promise<Response> {
+  let current = new URL(url);
+  for (let hop = 0; ; hop++) {
+    const response = await fetchImpl(current, { ...init, redirect: 'manual' });
+    const location = response.headers?.get('location');
+    if (response.status < 300 || response.status >= 400 || !location) {
+      return response;
+    }
+    const next = new URL(location, current);
+    if (
+      hop >= MAX_REDIRECTS ||
+      next.hostname !== current.hostname ||
+      next.protocol !== 'https:'
+    ) {
+      throw new OffHostRedirectError();
+    }
+    current = next;
+  }
 }
 
 /**
@@ -39,7 +73,7 @@ export async function fetchJson<T>(
   const fetchImpl = options.fetchImpl ?? fetch;
   let response: Response;
   try {
-    response = await fetchImpl(url, {
+    response = await fetchSameHost(fetchImpl, url, {
       method: options.method ?? 'GET',
       headers: {
         Accept: 'application/json',
@@ -54,6 +88,12 @@ export async function fetchJson<T>(
       signal: AbortSignal.timeout(options.timeoutMs),
     });
   } catch (error) {
+    if (error instanceof OffHostRedirectError) {
+      throw new LiveHttpError(
+        'The source redirected to another site; the request was not followed.',
+        'http',
+      );
+    }
     const timedOut =
       error instanceof Error &&
       (error.name === 'TimeoutError' || error.name === 'AbortError');

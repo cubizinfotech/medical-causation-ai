@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security (2026-10-12)
+
+- Removed the synchronous `POST /medical-analysis/analyze` (it could read another user's uploaded records by id) and `POST /ewi/investigate`. The worker now loads records only through the analysis they are attached to.
+- Login is always required (`AUTH_ENABLED`/`FEATURE_AUTH` and `GET /auth/status` removed). `JWT_SECRET` must be 32+ characters; tokens last 12 hours, carry an id, and `POST /auth/logout` revokes them. Unknown emails take as long to reject as wrong passwords.
+- Rate limits (`@nestjs/throttler`): 300 requests a minute by default, 10 logins, 10 job starts, 30 uploads; plus `JOB_DAILY_LIMIT_PER_USER` paid jobs per day.
+- Audit log `platform.audit_events`: sign-ins, failed sign-ins, sign-outs, and views, downloads, and deletes of analyses, records, CVs, reports, and demand letters.
+- Security headers: helmet on the API, a frame-blocking CSP and related headers on the website, `X-Frame-Options` and HSTS `includeSubDomains` in Caddy. WebSocket CORS limited to the website origins; the API trusts only the local proxy for client addresses.
+- Download file names are sanitized in every `Content-Disposition` header.
+- EWI request approvals record the signed-in user, never a name from the request body.
+- Login redirect accepts only paths on the site (`//evil.example` is refused). Sign-in and sign-out clear the previous user's data from the browser; a 401 ends the session.
+- Demo seed no longer contains real addresses, never overwrites an existing account, and needs `DEMO_USER_PASSWORD` in production. New `npm run user:create`.
+- Redis requires `REDIS_PASSWORD` when it is set. PM2 binds to `BIND_HOST` (use `127.0.0.1` behind Caddy). Backups are encrypted with GPG when configured and only encrypted backups leave the server.
+- External research requests follow redirects only on the same HTTPS host. The unused research URL helper was removed.
+- CI runs lint, type check, tests, and build before deploying, and the deploy checks the server's SSH host key (`DEPLOY_KNOWN_HOSTS`).
+
+### Fixed (2026-10-12)
+
+- Deleting an EWI investigation now removes its Word report file and its queued job; a running job stops. A job deleted or cancelled mid-run no longer writes a report or flips back to completed.
+- Job progress updates in Redis are atomic, so a cancel and a progress write can no longer overwrite each other.
+- A failed EWI queue add marks the investigation failed instead of leaving it pending forever; request errors such as "CV not found" keep their real status instead of becoming 500.
+- Two analyses started at once with the same records: the second now fails cleanly instead of reading records owned by the first.
+- The staged-upload limit holds under parallel uploads (per-user lock).
+- PDF uploads check the page limit before reading any text, and pdf.js documents are released after parsing (memory leak).
+- Long jobs are no longer taken for stalled and run (and billed) twice; worker lock and concurrency come from `JOB_*` settings.
+- AI JSON retries no longer grow the prompt on every attempt (3 attempts, each with only the latest correction).
+- History lists read all running jobs from Redis in one call and write only rows that changed.
+- Staged-upload cleanup runs hourly instead of on every upload.
+- Keyword search has a full-text index (`document_chunks_text_search_idx`).
+- `accidentDate` has a length limit; ids in URLs must be UUIDs.
+
+### Removed (2026-10-12)
+
+- Legacy re-export folders and redirect pages (`components/demo`, `components/report`, `features/demo`, `features/medical-analysis`, `/analysis`, `/case`, `/histories`, `/report`), the unused web AI client, unused API barrels and DTOs, empty `common`/`shared`/`utils`/`queues`/`medical` folders, Storage/Search scaffold modules, unused feature-flag and logging settings, the Passport JWT strategy, `check-embeddings.cjs`, and `run-medical-analysis.ts`.
+- The hard-coded server IP in the website and `next.config.ts` (`WEB_DEV_ORIGINS` replaces it).
+
 ### Added
 
 - EWI live research (`RESEARCH_PROVIDER=live`): NPI Registry identity check (optional NPI on the intake form), CMS Open Payments totals by the confirmed NPI, OpenAlex publications with strict author matching, and CourtListener opinions with Daubert/Frye/Rule 702 challenges. Rulings are recorded only from quoted court text.

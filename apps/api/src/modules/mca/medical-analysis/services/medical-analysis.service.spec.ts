@@ -324,21 +324,33 @@ describe('MedicalAnalysisService', () => {
     expect(aiService.complete).toHaveBeenCalledTimes(2);
   });
 
-  it('reads attached records into a chronology before the analysis', async () => {
+  it('never reads records without the case they are attached to', async () => {
     await service.analyze({
       medicalQuestion: 'Can mild TBI increase stroke risk?',
       recordIds: ['record-1'],
     });
+    expect(loadForAnalysis).not.toHaveBeenCalled();
+  });
+
+  it('reads attached records into a chronology before the analysis', async () => {
+    await service.analyze(
+      {
+        medicalQuestion: 'Can mild TBI increase stroke risk?',
+        recordIds: ['record-1'],
+      },
+      { caseId: 'case-1' },
+    );
 
     // Scanned pages are read with OCR before the records are loaded.
     expect(readScannedPages).toHaveBeenCalledWith(
+      'case-1',
       ['record-1'],
       expect.any(Function),
     );
     expect(readScannedPages.mock.invocationCallOrder[0]).toBeLessThan(
       loadForAnalysis.mock.invocationCallOrder[0],
     );
-    expect(loadForAnalysis).toHaveBeenCalledWith(['record-1']);
+    expect(loadForAnalysis).toHaveBeenCalledWith('case-1', ['record-1']);
     expect(buildChronology).toHaveBeenCalledWith(
       loadedRecords,
       12000,

@@ -6,6 +6,7 @@ import type {
 
 export interface MedicalAnalysisJobPayload {
   jobId: string;
+  caseId: string;
   request: MedicalAnalysisRequest;
 }
 

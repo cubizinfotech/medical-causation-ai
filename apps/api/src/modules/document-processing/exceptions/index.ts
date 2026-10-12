@@ -5,4 +5,5 @@ export {
   DocumentTooLargeException,
   ParsingFailedException,
   EmptyDocumentException,
+  TooManyPagesException,
 } from './document-processing.exceptions';

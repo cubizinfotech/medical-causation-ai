@@ -30,13 +30,8 @@ export type MedicalAnalysisJobUpdate = Pick<
   | 'completedAt'
 >;
 
-@WebSocketGateway({
-  namespace: '/medical-analysis',
-  cors: {
-    origin: true,
-    credentials: true,
-  },
-})
+// CORS comes from SocketIoAdapter (the configured website origins).
+@WebSocketGateway({ namespace: '/medical-analysis' })
 export class MedicalAnalysisGateway
   implements OnGatewayInit, OnGatewayConnection
 {

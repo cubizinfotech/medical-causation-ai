@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Patch,
   Post,
   Put,
@@ -19,8 +21,9 @@ import {
 import { UsersService } from '../users/users.service';
 import { ProfileService } from '../users/profile.service';
 import { parseAvatarDataUrl } from '../users/avatar';
+import { LoginRateLimit } from '../rate-limit/rate-limit';
 import { Public, Roles } from './auth.decorators';
-import { AuthService } from './auth.service';
+import { AuthService, readBearer } from './auth.service';
 import type { AuthUserRef } from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto, UploadAvatarDto } from './dto/update-profile.dto';
@@ -37,15 +40,19 @@ export class AuthController {
   ) {}
 
   @Public()
-  @Get('status')
-  status() {
-    return this.auth.status();
-  }
-
-  @Public()
+  @LoginRateLimit()
   @Post('login')
   login(@Body() body: LoginDto) {
     return this.auth.login(body.email, body.password);
+  }
+
+  /** Revokes the token sent with this request. */
+  @Roles(...PLATFORM_ROLES)
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(@Req() request: AuthedRequest): Promise<void> {
+    const token = readBearer(request.headers.authorization);
+    if (token) await this.auth.logout(token);
   }
 
   @Roles(...PLATFORM_ROLES)

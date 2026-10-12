@@ -8,16 +8,11 @@
   },
   "moduleNameMapper": {
     "^@config/(.*)$": "<rootDir>/../src/config/$1",
-    "^@common/(.*)$": "<rootDir>/../src/common/$1",
     "^@database/(.*)$": "<rootDir>/../src/database/$1",
     "^@modules/(.*)$": "<rootDir>/../src/modules/$1",
     "^@ai/(.*)$": "<rootDir>/../src/ai/$1",
-    "^@medical/(.*)$": "<rootDir>/../src/medical/$1",
     "^@integrations/(.*)$": "<rootDir>/../src/integrations/$1",
     "^@platform/(.*)$": "<rootDir>/../src/platform/$1",
-    "^@queues/(.*)$": "<rootDir>/../src/queues/$1",
-    "^@redis/(.*)$": "<rootDir>/../src/redis/$1",
-    "^@shared/(.*)$": "<rootDir>/../src/shared/$1",
-    "^@utils/(.*)$": "<rootDir>/../src/utils/$1"
+    "^@redis/(.*)$": "<rootDir>/../src/redis/$1"
   }
 }

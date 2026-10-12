@@ -10,9 +10,18 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { apiFetch, getAccessToken, setAccessToken } from "@/lib/config";
+import {
+  AUTH_EXPIRED_EVENT,
+  apiFetch,
+  getAccessToken,
+  setAccessToken,
+} from "@/lib/config";
 
 export interface AuthSessionUser {
   id: string;
@@ -36,32 +45,58 @@ export function roleLabel(role: string): string {
 }
 
 interface AuthContextValue {
-  enabled: boolean;
   user: AuthSessionUser | null;
   ready: boolean;
   signingOut: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * Removes everything this browser kept for the signed-in user: the token,
+ * case drafts and results in sessionStorage, and saved letterhead details.
+ */
+function clearStoredSession(): void {
+  setAccessToken(null);
+  try {
+    sessionStorage.clear();
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("mca:") || key.startsWith("ewi:")) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Storage can be unavailable (private mode); nothing to clear then.
+  }
+}
+
+const ME_KEY = ["auth", "me"] as const;
+
+/**
+ * Drops every cached API answer of the previous user and sets the signed-in
+ * user. queryClient.clear() must not be used here: it detaches the mounted
+ * ["auth", "me"] query, so the page would keep showing the old value.
+ */
+function resetSessionCache(
+  queryClient: QueryClient,
+  user: AuthSessionUser | null,
+): void {
+  void queryClient.cancelQueries();
+  queryClient.removeQueries({
+    predicate: (query) => query.queryKey[0] !== ME_KEY[0],
+  });
+  queryClient.setQueryData(ME_KEY, user);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const status = useQuery({
-    queryKey: ["auth", "status"],
-    queryFn: async () => {
-      const response = await apiFetch("/auth/status");
-      if (!response.ok) return { enabled: false };
-      return (await response.json()) as { enabled: boolean };
-    },
-  });
 
   const me = useQuery({
-    queryKey: ["auth", "me"],
+    queryKey: ME_KEY,
     queryFn: async () => {
-      const token = getAccessToken();
-      if (!token) return null;
+      if (!getAccessToken()) return null;
       const response = await apiFetch("/auth/me");
       if (!response.ok) {
         setAccessToken(null);
@@ -70,6 +105,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return (await response.json()) as AuthSessionUser;
     },
   });
+
+  // The API rejected the saved token (expired or signed out elsewhere).
+  useEffect(() => {
+    const onExpired = () => {
+      clearStoredSession();
+      resetSessionCache(queryClient, null);
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+  }, [queryClient]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -81,46 +126,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const payload: unknown = await response.json().catch(() => null);
       if (!response.ok) {
         const message =
-          typeof payload === "object" &&
-          payload !== null &&
-          "message" in payload
-            ? String((payload as { message: unknown }).message)
-            : "Login failed";
+          response.status === 429
+            ? "Too many sign-in attempts. Wait a minute and try again."
+            : typeof payload === "object" &&
+                payload !== null &&
+                "message" in payload
+              ? String((payload as { message: unknown }).message)
+              : "Login failed";
         throw new Error(message);
       }
       const body = payload as { accessToken: string; user: AuthSessionUser };
+      // Nothing from a previous user may show for this one.
+      clearStoredSession();
       setAccessToken(body.accessToken);
-      queryClient.setQueryData(["auth", "me"], body.user);
+      resetSessionCache(queryClient, body.user);
     },
     [queryClient],
   );
 
   const [signingOut, setSigningOut] = useState(false);
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     setSigningOut(true);
-    setAccessToken(null);
-    queryClient.setQueryData(["auth", "me"], null);
-    setSigningOut(false);
+    try {
+      // Revokes the token on the server; the local session ends regardless.
+      await apiFetch("/auth/logout", { method: "POST" }).catch(() => null);
+    } finally {
+      clearStoredSession();
+      resetSessionCache(queryClient, null);
+      setSigningOut(false);
+    }
   }, [queryClient]);
 
   const value = useMemo(
     () => ({
-      enabled: status.data?.enabled === true,
       user: me.data ?? null,
-      ready: !status.isPending && !me.isPending,
+      ready: !me.isPending,
       signingOut,
       login,
       logout,
     }),
-    [
-      status.data?.enabled,
-      status.isPending,
-      me.data,
-      me.isPending,
-      signingOut,
-      login,
-      logout,
-    ],
+    [me.data, me.isPending, signingOut, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -134,15 +179,7 @@ export function useAuth(): AuthContextValue {
   return value;
 }
 
-const PRIVATE_PREFIXES = [
-  "/mca",
-  "/ewi",
-  "/case",
-  "/analysis",
-  "/histories",
-  "/report",
-  "/profile",
-];
+const PRIVATE_PREFIXES = ["/mca", "/ewi", "/profile"];
 
 function isPrivatePath(pathname: string): boolean {
   return PRIVATE_PREFIXES.some(

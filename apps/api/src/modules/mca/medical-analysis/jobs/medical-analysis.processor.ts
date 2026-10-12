@@ -4,9 +4,11 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Worker } from 'bullmq';
 import { RedisService } from '@redis/redis.service';
-import { QUEUE_PREFIXES } from '@platform/queues/queue-prefixes';
+import { QUEUE_PREFIXES } from '@platform/jobs/job.types';
+import { workerOptions } from '@platform/jobs/worker-options';
 import { MEDICAL_ANALYSIS_QUEUE_NAME } from './medical-analysis-job.constants';
 import { MedicalAnalysisJobService } from './medical-analysis-job.service';
 import type { MedicalAnalysisJobPayload } from './medical-analysis-job.types';
@@ -21,6 +23,7 @@ export class MedicalAnalysisProcessor implements OnModuleInit, OnModuleDestroy {
     private readonly redisService: RedisService,
     private readonly jobService: MedicalAnalysisJobService,
     private readonly analysisService: MedicalAnalysisService,
+    private readonly config: ConfigService,
   ) {}
 
   onModuleInit(): void {
@@ -30,7 +33,7 @@ export class MedicalAnalysisProcessor implements OnModuleInit, OnModuleDestroy {
       {
         connection: this.redisService.getConnectionOptions(),
         prefix: QUEUE_PREFIXES.MCA,
-        concurrency: 1,
+        ...workerOptions(this.config),
       },
     );
 
@@ -46,11 +49,12 @@ export class MedicalAnalysisProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   private async process(payload: MedicalAnalysisJobPayload): Promise<void> {
-    const { jobId, request } = payload;
+    const { jobId, caseId, request } = payload;
 
     try {
       await this.jobService.markRunning(jobId);
       const result = await this.analysisService.analyze(request, {
+        caseId,
         onProgress: (update) => this.jobService.reportProgress(jobId, update),
       });
       await this.jobService.markCompleted(jobId, result);

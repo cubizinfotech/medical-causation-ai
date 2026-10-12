@@ -3,6 +3,7 @@ import { RedisModule } from '@redis/redis.module';
 import { DatabaseModule } from '@database/database.module';
 import { AiModule } from '@ai/ai.module';
 import { AuthModule } from '@platform/auth/auth.module';
+import { AuditModule } from '@platform/audit/audit.module';
 import { ReportModule } from '@platform/report/report.module';
 import { ExpertResearchIntegrationsModule } from '@integrations/expert-research';
 import { EwiCorrespondenceModule } from '../correspondence/ewi-correspondence.module';
@@ -28,6 +29,7 @@ import { ExpertCvService } from '../cv/expert-cv.service';
     DatabaseModule,
     AiModule,
     AuthModule,
+    AuditModule,
     ReportModule,
     ExpertResearchIntegrationsModule,
     EwiCorrespondenceModule,

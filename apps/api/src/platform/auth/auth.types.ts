@@ -18,6 +18,10 @@ export interface AccessTokenPayload {
   sub: string;
   email: string;
   roles: PlatformRole[];
+  /** Token id, set when signed. Logout revokes it. */
+  jti?: string;
+  /** Expiry (seconds since epoch), set when signed. */
+  exp?: number;
 }
 
 export interface IAuthService {

@@ -15,9 +15,14 @@ cp .env.example .env
 npm run docker:infra
 npm run docker:ps
 npm run prisma:migrate
+npm run seed:demo-users
 ```
 
+Before the first start, open `.env` and set `JWT_SECRET` to at least 32 random characters (`openssl rand -hex 32`). The API refuses to start without it.
+
 `npm run docker:infra` starts PostgreSQL, Redis, and pgAdmin. It is the same as `docker compose up -d postgres redis pgadmin`. It does not start the website.
+
+`npm run seed:demo-users` creates the two default sign-ins (see [Demo accounts](#demo-accounts)). Every page except the home page, login, terms, and privacy needs a signed-in user.
 
 Start the apps in two terminals and leave them running:
 
@@ -45,7 +50,6 @@ If the website says port 3000 is in use, stop the other program. The API must st
 | `RESEARCH_PROVIDER` | `mock` | No research vendor is called |
 | `EMAIL_PROVIDER` | `console` | Mail is logged, not sent |
 | `EMAIL_DELIVERY_ENABLED` | `false` | Same |
-| `AUTH_ENABLED` | `false` | Pages stay open for a tour |
 | `KNOWLEDGE_BASE_PATH` | `./knowledge-base` | Where MCA reads documents |
 
 ## pgAdmin, PostgreSQL, and Redis
@@ -70,9 +74,11 @@ Redis is on `localhost:6379`. The example file sets no Redis password. Check wit
 docker exec mca-redis redis-cli ping
 ```
 
+If you set `REDIS_PASSWORD`, add `-a "$REDIS_PASSWORD"` to that command.
+
 ## Product tour
 
-1. Open http://localhost:3000. The home page offers Medical Causation Analysis and Expert Witness Investigation.
+1. Open http://localhost:3000 and sign in as `gopalhingu123@gmail.com` with the password `password`. The home page offers Medical Causation Analysis and Expert Witness Investigation.
 2. MCA: open `/mca`, start a case or load an example, and watch progress. History is under `/mca/histories`. A live analysis calls the chat provider in `.env`. Leave the key empty if you only want to click through the screens.
 3. EWI: open `/ewi`, then **New Investigation**. Enter a name, city, and specialty. Progress is at `/ewi/investigation`. When it finishes, `/ewi/histories/:id` shows the summary, findings, questions, and **Download Word Report**. Cancel mid-run if you want; retry starts a new job with the same intake.
 
@@ -90,23 +96,22 @@ You need a working embedding key (`OPENROUTER_API_KEY` when `EMBEDDING_PROVIDER=
 
 ## Demo accounts
 
-Turn these on only when you want to show login.
-
-1. Set `AUTH_ENABLED=true`.
-2. Set `JWT_SECRET` to a long random string.
-3. Restart the API.
-4. Run `npm run seed:demo-users`.
+`npm run seed:demo-users` creates these two accounts. Running it again never changes an account that already exists.
 
 | Role | Email |
 |------|--------|
-| Super Admin | super-admin@example.com |
-| Admin | admin@example.com |
-| Attorney | attorney@example.com |
-| Paralegal | paralegal@example.com |
-| Medical Expert | medical-expert@example.com |
-| User | normal-user@example.com |
+| Attorney | gopalhingu123@gmail.com |
+| Attorney | dcs@dorothyclaysims.com |
 
-Each local account uses the password `password`. Do not use these accounts on the public droplet. The seed command refuses to run when `NODE_ENV=production`. Sign in at http://localhost:3000/login.
+Locally both use the password `password` (or `DEMO_USER_PASSWORD` when set). On the server the seed refuses `NODE_ENV=production` unless `ALLOW_DEMO_SEED=true` and a `DEMO_USER_PASSWORD` of 12+ characters are set. For anyone else, use:
+
+```bash
+npm run user:create -- jane@firm.example attorney "Jane Doe"
+```
+
+It prints a random password once (or uses `NEW_USER_PASSWORD`). Roles: `super_admin`, `admin`, `attorney`, `paralegal`, `medical_expert`, `user`.
+
+Sign-ins last 12 hours (`JWT_EXPIRES_IN`). **Sign out** ends the session on the server too. After 10 wrong passwords in a minute, login pauses for that minute.
 
 ## Related
 

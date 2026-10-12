@@ -84,10 +84,9 @@ function fakePrisma() {
         where: Record<string, unknown>;
         data: Partial<StoredRecord>;
       }) => {
-        rows
-          .filter((row) => matches(row, where))
-          .forEach((row) => Object.assign(row, data));
-        return Promise.resolve();
+        const matched = rows.filter((row) => matches(row, where));
+        matched.forEach((row) => Object.assign(row, data));
+        return Promise.resolve({ count: matched.length });
       },
     ),
     update: jest.fn(
@@ -124,10 +123,18 @@ function fakePrisma() {
       },
     ),
   };
-  const $transaction = jest.fn((operations: Array<Promise<unknown>>) =>
-    Promise.all(operations),
+  const prisma: Record<string, unknown> = {
+    caseRecord,
+    caseRecordPage,
+    $executeRaw: jest.fn(() => Promise.resolve(0)),
+  };
+  prisma.$transaction = jest.fn(
+    (operations: Array<Promise<unknown>> | ((tx: unknown) => unknown)) =>
+      typeof operations === 'function'
+        ? Promise.resolve(operations(prisma))
+        : Promise.all(operations),
   );
-  return { rows, prisma: { caseRecord, caseRecordPage, $transaction } };
+  return { rows, prisma };
 }
 
 /** OCR stand-in: returns the text given per page number. */
@@ -258,8 +265,10 @@ describe('CaseRecordsService', () => {
       ocrPages: [],
     });
 
+    await service.attachToCase('user-1', [summary.id], 'case-1');
     const progress: string[] = [];
     const result = await service.readScannedPages(
+      'case-1',
       [summary.id],
       (done, total) => {
         progress.push(`${done}/${total}`);
@@ -278,12 +287,14 @@ describe('CaseRecordsService', () => {
     expect(row.ocrCompletedAt).toBeInstanceOf(Date);
     expect(row.pages?.[0]).toMatchObject({ text: ocrText, ocrConfidence: 88 });
 
-    const [loaded] = await service.loadForAnalysis([summary.id]);
+    const [loaded] = await service.loadForAnalysis('case-1', [summary.id]);
+    // Records are read only through the case they belong to.
+    expect(await service.loadForAnalysis('case-2', [summary.id])).toEqual([]);
     expect(loaded.ocrPages).toEqual([1]);
     expect(loaded.pages[0].ocrConfidence).toBe(88);
 
     // A second analysis of the same file does not repeat OCR.
-    await service.readScannedPages([summary.id]);
+    await service.readScannedPages('case-1', [summary.id]);
     expect(ocr.recognize).toHaveBeenCalledTimes(1);
   });
 
@@ -309,13 +320,14 @@ describe('CaseRecordsService', () => {
       'user-1',
       file(makeScannedTestPdf([['scan']])),
     );
+    await service.attachToCase('user-1', [id], 'case-1');
 
-    const result = await service.readScannedPages([id]);
+    const result = await service.readScannedPages('case-1', [id]);
     expect(result.error).toMatch(/could not be read with OCR/);
     expect(rows[0].unreadablePages).toEqual([1]);
     expect(rows[0].ocrCompletedAt).toBeNull();
 
-    await service.readScannedPages([id]);
+    await service.readScannedPages('case-1', [id]);
     expect(broken.recognize).toHaveBeenCalledTimes(2);
   });
 
@@ -325,7 +337,8 @@ describe('CaseRecordsService', () => {
       'user-1',
       file(makeTestPdf([ER_PAGE, []])),
     );
-    expect(await service.readScannedPages([id])).toEqual({
+    await service.attachToCase('user-1', [id], 'case-1');
+    expect(await service.readScannedPages('case-1', [id])).toEqual({
       attempted: 0,
       read: 0,
     });
@@ -384,6 +397,10 @@ describe('CaseRecordsService', () => {
     await service.assertAttachable('user-1', [a.id]);
     await service.attachToCase('user-1', [a.id], 'case-1');
     expect(rows.find((row) => row.id === a.id)?.caseId).toBe('case-1');
+    // A second analysis started at the same moment cannot take it too.
+    await expect(
+      service.attachToCase('user-1', [a.id], 'case-2'),
+    ).rejects.toThrow(/another analysis/);
 
     await expect(
       service.assertAttachable('user-1', [a.id]),

@@ -52,4 +52,4 @@ Local and server demos use sample research records (`RESEARCH_PROVIDER=mock`). W
 | AI model | Phrases the analysis from retrieved evidence. It is not the source of facts |
 | Email | Logged locally. Not sent until delivery is turned on |
 
-Login can stay off for a private demo. When `AUTH_ENABLED=true`, the same accounts cover both products. Law-firm separation is not built yet.
+Everyone signs in; the same account covers both products. Each analysis, investigation, uploaded file, and report belongs to the user who created it, and nobody else can open it (so one firm's users never see another firm's cases). Sharing cases between colleagues in the same firm is not built yet. Sign-ins last 12 hours, signing out ends the session on the server, and views, downloads, and deletes of case data are recorded in an audit log.

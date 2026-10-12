@@ -7,10 +7,14 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
+import type { JobsSettings } from '@config/config.types';
+import { PrismaService } from '@database/prisma.service';
 import { RedisService } from '@redis/redis.service';
-import { QUEUE_PREFIXES } from '@platform/queues/queue-prefixes';
+import { QUEUE_PREFIXES } from '@platform/jobs/job.types';
+import { assertDailyJobQuota } from '@platform/jobs/daily-quota';
 import {
   EWI_INVESTIGATION_QUEUE_NAME,
   EWI_JOB_STATUS,
@@ -27,7 +31,14 @@ import type {
 } from './ewi-investigation-job.types';
 import type { CreateExpertInvestigationDto } from '../dto/create-expert-investigation.dto';
 import type { EwiInvestigationGateway } from '../gateway/ewi-investigation.gateway';
+import type { InvestigationWorkflowCheckpoint } from '../workflow/investigation-workflow';
 import { InvestigationHistoryService } from '../services/investigation-history.service';
+
+const FINISHED: ReadonlySet<string> = new Set([
+  EWI_JOB_STATUS.COMPLETED,
+  EWI_JOB_STATUS.FAILED,
+  EWI_JOB_STATUS.CANCELLED,
+]);
 
 @Injectable()
 export class EwiInvestigationJobService
@@ -41,6 +52,8 @@ export class EwiInvestigationJobService
     private readonly redisService: RedisService,
     @Inject(forwardRef(() => InvestigationHistoryService))
     private readonly historyService: InvestigationHistoryService,
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
   ) {}
 
   setGateway(gateway: EwiInvestigationGateway): void {
@@ -69,6 +82,11 @@ export class EwiInvestigationJobService
     dto: CreateExpertInvestigationDto,
     ownerUserId: string,
   ): Promise<CreateEwiInvestigationJobResponse> {
+    await assertDailyJobQuota(
+      this.prisma,
+      ownerUserId,
+      this.config.get<JobsSettings>('jobs')?.dailyLimitPerUser ?? 0,
+    );
     const jobId = randomUUID();
     const now = new Date().toISOString();
     const investigation = await this.historyService.create(
@@ -89,33 +107,41 @@ export class EwiInvestigationJobService
       updatedAt: now,
     };
 
-    await this.saveRecord(record);
-    await this.queue.add(
-      'run',
-      {
-        jobId,
-        request: {
-          expertName: dto.expertName.trim(),
-          city: dto.city.trim(),
-          specialty: dto.specialty.trim(),
-          ...(dto.npi ? { npi: dto.npi } : {}),
-          ...(investigation.cvDocumentId
-            ? { cvDocumentId: investigation.cvDocumentId }
-            : {}),
+    await this.redisService.setJson(this.jobKey(jobId), record);
+    try {
+      await this.queue.add(
+        'run',
+        {
+          jobId,
+          request: {
+            expertName: dto.expertName.trim(),
+            city: dto.city.trim(),
+            specialty: dto.specialty.trim(),
+            ...(dto.npi ? { npi: dto.npi } : {}),
+            ...(investigation.cvDocumentId
+              ? { cvDocumentId: investigation.cvDocumentId }
+              : {}),
+          },
         },
-      },
-      {
-        jobId,
-        removeOnComplete: 100,
-        removeOnFail: 50,
-        attempts: 1,
-      },
-    );
+        {
+          jobId,
+          removeOnComplete: 100,
+          removeOnFail: 50,
+          attempts: 1,
+        },
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to queue investigation';
+      this.logger.error(`Failed to queue EWI job ${jobId}: ${message}`);
+      await this.markFailed(jobId, 'The investigation could not be started.');
+      throw error;
+    }
 
     this.emit(record);
-    this.logger.log(
-      `Queued EWI investigation ${jobId} (${investigation.id}) for ${dto.expertName}`,
-    );
+    this.logger.log(`Queued EWI investigation ${jobId} (${investigation.id})`);
 
     return {
       investigationId: investigation.id,
@@ -133,11 +159,12 @@ export class EwiInvestigationJobService
   }
 
   async markRunning(jobId: string): Promise<void> {
-    const record = await this.requireRecord(jobId);
-    record.status = EWI_JOB_STATUS.RUNNING;
-    record.updatedAt = new Date().toISOString();
-    record.message = 'Investigation running…';
-    await this.saveRecord(record);
+    const record = await this.updateUnlessFinished(jobId, (current) => ({
+      ...current,
+      status: EWI_JOB_STATUS.RUNNING,
+      message: 'Investigation running…',
+    }));
+    if (!record) return;
     await this.historyService.updateFromJob(jobId, {
       status: 'running',
       message: record.message,
@@ -149,15 +176,14 @@ export class EwiInvestigationJobService
     jobId: string,
     update: EwiProgressUpdate,
   ): Promise<void> {
-    if (await this.isCancelled(jobId)) return;
-    const record = await this.requireRecord(jobId);
-    if (record.status === EWI_JOB_STATUS.CANCELLED) return;
-    record.step = update.step;
-    record.stepLabel = update.stepLabel;
-    record.progress = update.progress;
-    if (update.message) record.message = update.message;
-    record.updatedAt = new Date().toISOString();
-    await this.saveRecord(record);
+    const record = await this.updateUnlessFinished(jobId, (current) => ({
+      ...current,
+      step: update.step,
+      stepLabel: update.stepLabel,
+      progress: update.progress,
+      message: update.message ?? current.message,
+    }));
+    if (!record) return;
     await this.historyService.updateFromJob(jobId, {
       status: 'running',
       step: update.step,
@@ -170,13 +196,12 @@ export class EwiInvestigationJobService
 
   async saveCheckpoint(
     jobId: string,
-    checkpoint: import('../workflow/investigation-workflow').InvestigationWorkflowCheckpoint,
+    checkpoint: InvestigationWorkflowCheckpoint,
   ): Promise<void> {
-    const record = await this.requireRecord(jobId);
-    if (record.status === EWI_JOB_STATUS.CANCELLED) return;
-    record.checkpoint = checkpoint;
-    record.updatedAt = new Date().toISOString();
-    await this.saveRecord(record);
+    await this.updateUnlessFinished(jobId, (current) => ({
+      ...current,
+      checkpoint,
+    }));
   }
 
   async isCancelled(jobId: string): Promise<boolean> {
@@ -186,15 +211,14 @@ export class EwiInvestigationJobService
   }
 
   async markCancelled(jobId: string): Promise<void> {
-    const record = await this.loadRecord(jobId);
-    if (!record) return;
-    record.status = EWI_JOB_STATUS.CANCELLED;
-    record.message = 'Investigation cancelled';
-    record.updatedAt = new Date().toISOString();
-    await this.saveRecord(record);
+    const record = await this.updateUnlessFinished(jobId, (current) => ({
+      ...current,
+      status: EWI_JOB_STATUS.CANCELLED,
+      message: 'Investigation cancelled',
+    }));
     // Re-assert DB cancelled after any concurrent progress write.
     await this.historyService.cancelByJobId(jobId);
-    this.emit(record);
+    if (record) this.emit(record);
   }
 
   async markCompleted(
@@ -208,62 +232,73 @@ export class EwiInvestigationJobService
       templateVersion?: string;
     },
   ): Promise<void> {
-    const record = await this.requireRecord(jobId);
-    record.status = EWI_JOB_STATUS.COMPLETED;
-    record.progress = 100;
-    record.step = EWI_STAGE_REPORT;
-    record.stepLabel = EWI_JOB_STEP_LABELS[EWI_STAGE_REPORT];
-    record.message = 'Investigation complete';
-    record.result = result;
-    record.updatedAt = new Date().toISOString();
-    await this.saveRecord(record);
-    await this.historyService.markCompleted(jobId, result, {
-      fileName: report.fileName,
-      mimeType: report.mimeType,
-      buffer: report.buffer,
-      templateId: report.templateId,
-      templateVersion: report.templateVersion,
-    });
-    this.emit(record);
+    const record = await this.updateUnlessFinished(jobId, (current) => ({
+      ...current,
+      status: EWI_JOB_STATUS.COMPLETED,
+      progress: 100,
+      step: EWI_STAGE_REPORT,
+      stepLabel: EWI_JOB_STEP_LABELS[EWI_STAGE_REPORT],
+      message: 'Investigation complete',
+      result,
+    }));
+    // Cancelled meanwhile: keep that outcome and write no report. A record
+    // that expired from Redis still completes in the database.
+    if (record === null) return;
+    await this.historyService.markCompleted(jobId, result, report);
+    if (record) this.emit(record);
   }
 
   async markFailed(jobId: string, error: string): Promise<void> {
-    const record = await this.requireRecord(jobId);
-    record.status = EWI_JOB_STATUS.FAILED;
-    record.error = error;
-    record.message = error;
-    record.updatedAt = new Date().toISOString();
-    await this.saveRecord(record);
+    const record = await this.updateUnlessFinished(jobId, (current) => ({
+      ...current,
+      status: EWI_JOB_STATUS.FAILED,
+      error,
+      message: error,
+    }));
+    if (record === null) return;
     await this.historyService.markFailed(jobId, error);
-    this.emit(record);
+    if (record) this.emit(record);
   }
 
-  private async requireRecord(
-    jobId: string,
-  ): Promise<EwiInvestigationJobRecord> {
-    const record = await this.loadRecord(jobId);
-    if (!record) {
-      throw new NotFoundException(`EWI job "${jobId}" not found`);
+  /** Removes the progress record and a job that has not started yet. */
+  async deleteJobRecord(jobId: string): Promise<void> {
+    await this.redisService.getClient().del(this.jobKey(jobId));
+    try {
+      await (await this.queue.getJob(jobId))?.remove();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Unable to remove queued EWI job ${jobId}: ${message}`);
     }
-    return record;
   }
 
-  private async saveRecord(record: EwiInvestigationJobRecord): Promise<void> {
-    const client = this.redisService.getClient();
-    await client.set(
-      this.jobKey(record.jobId),
-      JSON.stringify(record),
-      'EX',
-      this.redisService.getTtlSeconds(),
-    );
-  }
-
-  private async loadRecord(
+  /**
+   * Applies a change to the job record unless the job already finished
+   * (a cancel must not be undone by a late progress write).
+   * Returns the new record, null when the job had already finished, or
+   * undefined when there is no record (expired or deleted).
+   */
+  private async updateUnlessFinished(
     jobId: string,
-  ): Promise<EwiInvestigationJobRecord | null> {
-    const raw = await this.redisService.getClient().get(this.jobKey(jobId));
-    if (!raw) return null;
-    return JSON.parse(raw) as EwiInvestigationJobRecord;
+    mutate: (current: EwiInvestigationJobRecord) => EwiInvestigationJobRecord,
+  ): Promise<EwiInvestigationJobRecord | null | undefined> {
+    let finished = false;
+    const record =
+      await this.redisService.updateJson<EwiInvestigationJobRecord>(
+        this.jobKey(jobId),
+        (current) => {
+          finished = FINISHED.has(current.status);
+          if (finished) return current;
+          return { ...mutate(current), updatedAt: new Date().toISOString() };
+        },
+      );
+    if (!record) return undefined;
+    return finished ? null : record;
+  }
+
+  private loadRecord(jobId: string): Promise<EwiInvestigationJobRecord | null> {
+    return this.redisService.getJson<EwiInvestigationJobRecord>(
+      this.jobKey(jobId),
+    );
   }
 
   private emit(record: EwiInvestigationJobRecord): void {

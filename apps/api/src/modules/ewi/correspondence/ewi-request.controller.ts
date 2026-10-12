@@ -16,7 +16,6 @@ import { Roles } from '@platform/auth/auth.decorators';
 import type { AuthUserRef } from '@platform/auth/auth.types';
 import { requireRequestUser } from '@platform/auth/request-user';
 import {
-  ApproveEwiRequestDto,
   ManualReviewEwiRequestDto,
   PrepareEwiRequestDto,
 } from './dto/ewi-request.dto';
@@ -34,8 +33,7 @@ const EWI_REQUEST_ROLES = [
 const EWI_REQUEST_OPS_ROLES = ['super_admin', 'admin'] as const;
 
 /**
- * EWI request/email control plane.
- * Role checks apply even when AUTH_ENABLED is false for other product APIs.
+ * EWI request/email control plane (signed-in attorneys and paralegals).
  * Credentials are never accepted on these routes.
  */
 @Controller('ewi/requests')
@@ -83,17 +81,12 @@ export class EwiRequestController {
   @Post(':id/approve')
   async approve(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: ApproveEwiRequestDto,
     @Req() request: Request & { user?: AuthUserRef },
   ) {
     const user = requireRequestUser(request);
     await this.assertRequestOwner(id, user.id);
-    const approvedBy =
-      body.approvedBy?.trim() ||
-      request.user?.email ||
-      request.user?.displayName ||
-      'authenticated-user';
-    return this.workflow.approve(id, approvedBy);
+    // The approver is always the signed-in user, never a name from the body.
+    return this.workflow.approve(id, user.email);
   }
 
   @Post(':id/send')
@@ -117,10 +110,7 @@ export class EwiRequestController {
       requestId: id,
       recipientEmail: body.recipientEmail,
       recipientName: body.recipientName,
-      approvedBy:
-        body.approvedBy?.trim() ||
-        request.user?.email ||
-        request.user?.displayName,
+      approvedBy: user.email,
       approve: body.approve,
     });
   }

@@ -115,10 +115,18 @@ function fakePrisma() {
       },
     ),
   };
-  const $transaction = jest.fn((operations: Array<Promise<unknown>>) =>
-    Promise.all(operations),
+  const prisma: Record<string, unknown> = {
+    expertDocument,
+    expertDocumentPage,
+    $executeRaw: jest.fn(() => Promise.resolve(0)),
+  };
+  prisma.$transaction = jest.fn(
+    (operations: Array<Promise<unknown>> | ((tx: unknown) => unknown)) =>
+      typeof operations === 'function'
+        ? Promise.resolve(operations(prisma))
+        : Promise.all(operations),
   );
-  return { rows, prisma: { expertDocument, expertDocumentPage, $transaction } };
+  return { rows, prisma };
 }
 
 const CV_PAGE = [

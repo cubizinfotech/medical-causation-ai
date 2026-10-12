@@ -7,10 +7,14 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
+import type { JobsSettings } from '@config/config.types';
+import { PrismaService } from '@database/prisma.service';
 import { RedisService } from '@redis/redis.service';
-import { QUEUE_PREFIXES } from '@platform/queues/queue-prefixes';
+import { QUEUE_PREFIXES } from '@platform/jobs/job.types';
+import { assertDailyJobQuota } from '@platform/jobs/daily-quota';
 import {
   ANALYSIS_JOB_STATUS,
   ANALYSIS_JOB_STEP_LABELS,
@@ -42,6 +46,8 @@ export class MedicalAnalysisJobService
     @Inject(forwardRef(() => AnalysisHistoryService))
     private readonly historyService: AnalysisHistoryService,
     private readonly caseRecords: CaseRecordsService,
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
   ) {}
 
   setGateway(gateway: MedicalAnalysisGateway): void {
@@ -75,6 +81,11 @@ export class MedicalAnalysisJobService
     const now = new Date().toISOString();
     const recordIds = request.recordIds ?? [];
 
+    await assertDailyJobQuota(
+      this.prisma,
+      ownerUserId,
+      this.config.get<JobsSettings>('jobs')?.dailyLimitPerUser ?? 0,
+    );
     // Validate before the case exists, so a bad record list creates nothing.
     if (recordIds.length > 0) {
       await this.caseRecords.assertAttachable(ownerUserId, recordIds);
@@ -86,11 +97,17 @@ export class MedicalAnalysisJobService
       ownerUserId,
     );
     if (recordIds.length > 0) {
-      await this.caseRecords.attachToCase(
-        ownerUserId,
-        recordIds,
-        analysisCase.id,
-      );
+      try {
+        await this.caseRecords.attachToCase(
+          ownerUserId,
+          recordIds,
+          analysisCase.id,
+        );
+      } catch (error) {
+        // Another analysis took a record first: leave nothing behind.
+        await this.historyService.discardCase(analysisCase.id);
+        throw error;
+      }
     }
 
     const record: MedicalAnalysisJobRecord = {
@@ -109,7 +126,7 @@ export class MedicalAnalysisJobService
     try {
       await this.queue.add(
         'run',
-        { jobId, request },
+        { jobId, caseId: analysisCase.id, request },
         {
           jobId,
           removeOnComplete: 100,
@@ -155,12 +172,10 @@ export class MedicalAnalysisJobService
     return record;
   }
 
-  async tryGetJob(jobId: string): Promise<MedicalAnalysisJobRecord | null> {
-    return this.loadRecord(jobId);
-  }
-
   async deleteJobRecord(jobId: string): Promise<void> {
     await this.redisService.getClient().del(this.jobKey(jobId));
+    // An active job is locked by the worker and cannot be removed; it finds
+    // no record and no case when it finishes, and saves nothing.
 
     try {
       const job = await this.queue.getJob(jobId);
@@ -249,41 +264,54 @@ export class MedicalAnalysisJobService
     jobId: string,
     partial: Partial<MedicalAnalysisJobRecord>,
   ): Promise<void> {
-    const existing = await this.loadRecord(jobId);
-    if (!existing) {
+    const updated =
+      await this.redisService.updateJson<MedicalAnalysisJobRecord>(
+        this.jobKey(jobId),
+        (existing) => ({
+          ...existing,
+          ...partial,
+          updatedAt: new Date().toISOString(),
+        }),
+      );
+    if (!updated) {
       this.logger.warn(
         `No analysis job record for ${jobId}; status update was not saved`,
       );
       return;
     }
 
-    const updated: MedicalAnalysisJobRecord = {
-      ...existing,
-      ...partial,
-      updatedAt: new Date().toISOString(),
-    };
-
-    await this.saveRecord(updated);
     void this.historyService.syncFromJobRecord(updated);
     this.emit(updated);
   }
 
-  private async saveRecord(record: MedicalAnalysisJobRecord): Promise<void> {
-    const client = this.redisService.getClient();
-    await client.set(
-      this.jobKey(record.jobId),
-      JSON.stringify(record),
-      'EX',
-      this.redisService.getTtlSeconds(),
+  private saveRecord(record: MedicalAnalysisJobRecord): Promise<void> {
+    return this.redisService.setJson(this.jobKey(record.jobId), record);
+  }
+
+  private loadRecord(jobId: string): Promise<MedicalAnalysisJobRecord | null> {
+    return this.redisService.getJson<MedicalAnalysisJobRecord>(
+      this.jobKey(jobId),
     );
   }
 
-  private async loadRecord(
-    jobId: string,
-  ): Promise<MedicalAnalysisJobRecord | null> {
-    const raw = await this.redisService.getClient().get(this.jobKey(jobId));
-    if (!raw) return null;
-    return JSON.parse(raw) as MedicalAnalysisJobRecord;
+  /** Job records for many jobs in one round trip (missing ones are null). */
+  async loadRecords(
+    jobIds: string[],
+  ): Promise<Map<string, MedicalAnalysisJobRecord>> {
+    const records = new Map<string, MedicalAnalysisJobRecord>();
+    if (jobIds.length === 0) return records;
+    const raw = await this.redisService
+      .getClient()
+      .mget(jobIds.map((jobId) => this.jobKey(jobId)));
+    raw.forEach((value, index) => {
+      if (value) {
+        records.set(
+          jobIds[index],
+          JSON.parse(value) as MedicalAnalysisJobRecord,
+        );
+      }
+    });
+    return records;
   }
 
   private emit(record: MedicalAnalysisJobRecord): void {

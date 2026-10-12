@@ -1,11 +1,7 @@
-/** Pages with less text than this are treated as scanned or blank. */
-export const MIN_READABLE_PAGE_CHARS = 30;
-
-/**
- * A page with less text than this that also shows an image is read with OCR:
- * typically a scan with only a fax header or stamp as real text.
- */
-export const OCR_IMAGE_PAGE_MAX_CHARS = 300;
+export {
+  MIN_READABLE_PAGE_CHARS,
+  OCR_IMAGE_PAGE_MAX_CHARS,
+} from '@modules/document-processing/utils/pdf-upload.util';
 
 /** The multer file shape this module reads (memory storage). */
 export interface UploadedRecordFile {

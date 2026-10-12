@@ -1,8 +1,8 @@
 import type { ProductId } from '../products';
 
 /**
- * Shared audit / history event contract (future durable store).
- * Do not log secrets or unnecessary PII.
+ * One audit entry: who did what to which record. Never put secrets or
+ * patient details in metadata; ids and counts are enough.
  */
 export interface AuditEvent {
   product: ProductId | 'platform';
@@ -10,10 +10,5 @@ export interface AuditEvent {
   actorId?: string;
   resourceType?: string;
   resourceId?: string;
-  metadata?: Record<string, unknown>;
-  occurredAt: string;
-}
-
-export interface IAuditService {
-  record(event: AuditEvent): Promise<void>;
+  metadata?: Record<string, string | number | boolean | null>;
 }
