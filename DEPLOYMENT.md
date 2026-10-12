@@ -17,8 +17,9 @@ Preferred checkout path: `/var/www/medical-causation-ai`. The deploy script also
 | `mca-postgres` | Docker, volume `mca-postgres-data` | `127.0.0.1:5432` |
 | `mca-redis` | Docker, volume `mca-redis-data` | `127.0.0.1:6379` |
 | `mca-pgadmin` | Docker, optional profile `tools` | `127.0.0.1:5050` |
+| `mca-caddy` | Docker, profile `https` | port `80` (and `443` with HTTPS) |
 
-`BIND_HOST` in `.env` is `0.0.0.0` while the site is served on the IP (anyone can reach ports 3000/3001) and `127.0.0.1` once HTTPS is on (only Caddy can). Public firewall ports for the current IP demo: `22`, `3000`, `3001`; with HTTPS: `22`, `80`, `443`. Leave `5432`, `6379`, and `5050` closed. pgAdmin is reached through an SSH tunnel, not the public internet.
+`BIND_HOST` in `.env` is `127.0.0.1`: only Caddy reaches ports 3000 and 3001, and visitors use port 80 (`CADDYFILE=Caddyfile.ip`) or HTTPS. `0.0.0.0` is only for running without Caddy. Public firewall ports: `22` and `80`, plus `443` once HTTPS is on. Leave `3000`, `3001`, `5432`, `6379`, and `5050` closed. pgAdmin and the database are reached through an SSH tunnel, not the public internet.
 
 PM2 keeps the API and web running after you log out of SSH. `pm2 startup` plus `pm2 save` starts them again after a reboot. Docker `restart: unless-stopped` does the same for Postgres and Redis.
 
@@ -176,17 +177,25 @@ pgAdmin is not required. It is behind the Compose profile `tools` and is bound t
 docker compose up -d pgadmin
 ```
 
-From your laptop:
+From your laptop, open an SSH tunnel and keep that window open (Ctrl+C closes it):
 
 ```bash
-ssh -L 5050:127.0.0.1:5050 deploy@157.230.156.87
+ssh -N -L 5051:127.0.0.1:5050 deploy@157.230.156.87
 ```
 
-Then open `http://127.0.0.1:5050`. Sign in with `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD`.
+Then open `http://localhost:5051`. The laptop side uses 5051 because a local pgAdmin (`npm run dev:infra`) already uses 5050; any free port works. If pgAdmin asks you to sign in, use `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` from the server `.env`.
 
 Register the server inside pgAdmin with host `postgres` (the container name), port `5432`, and the `POSTGRES_*` values from `.env`. pgAdmin runs on the Compose network, so it uses `postgres`, not `127.0.0.1`.
 
-Do not open port 5050 in the firewall.
+For a desktop database tool (DBeaver, TablePlus) instead, tunnel PostgreSQL itself and connect to `localhost:5433` with the `POSTGRES_*` values (5433, because a local PostgreSQL may use 5432):
+
+```bash
+ssh -N -L 5433:127.0.0.1:5432 deploy@157.230.156.87
+```
+
+Many tools can open the tunnel themselves: SSH host `157.230.156.87`, user `deploy`; database host `127.0.0.1`, port `5432`.
+
+Do not open port 5050 or 5432 in the firewall.
 
 ## 9. PM2
 
