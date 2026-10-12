@@ -14,6 +14,19 @@ if [[ ! -f package.json || ! -f ecosystem.config.js ]]; then
   exit 1
 fi
 
+# GitHub Actions connects with a non-interactive SSH session, which does not
+# read ~/.bashrc. A Node.js installed with nvm is then missing from PATH and
+# the system Node (often too old) runs instead. Load nvm and the version in
+# .nvmrc when nvm is installed.
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+  set +u
+  # shellcheck disable=SC1091
+  . "$NVM_DIR/nvm.sh"
+  nvm use --silent >/dev/null || nvm use --silent default >/dev/null || true
+  set -u
+fi
+
 if ! command -v node >/dev/null 2>&1; then
   echo "Node.js is not installed. Install Node.js 22 LTS (minimum 20.9)."
   exit 1

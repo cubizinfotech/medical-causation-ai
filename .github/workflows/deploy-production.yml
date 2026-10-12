@@ -67,8 +67,31 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts
+          # The new code is pulled first, so the server always runs the
+          # deploy script from this commit (not the copy it had before).
           ssh -i ~/.ssh/id_deploy \
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=20 \
+            -o ServerAliveInterval=30 \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            'if [ -d /var/www/medical-causation-ai/.git ]; then export MCA_ROOT=/var/www/medical-causation-ai; elif [ -d "$HOME/medical-causation-ai/.git" ]; then export MCA_ROOT="$HOME/medical-causation-ai"; else echo "Clone the repository to /var/www/medical-causation-ai"; exit 1; fi; bash "$MCA_ROOT/scripts/deploy-production.sh"'
+            'bash -s' <<'REMOTE'
+          set -euo pipefail
+          if [ -d /var/www/medical-causation-ai/.git ]; then
+            export MCA_ROOT=/var/www/medical-causation-ai
+          elif [ -d "$HOME/medical-causation-ai/.git" ]; then
+            export MCA_ROOT="$HOME/medical-causation-ai"
+          else
+            echo "Clone the repository to /var/www/medical-causation-ai"
+            exit 1
+          fi
+          cd "$MCA_ROOT"
+          if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+            echo "Tracked files have local changes on the server. Refusing to deploy."
+            git status --short --untracked-files=no
+            exit 1
+          fi
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          bash scripts/deploy-production.sh
+          REMOTE

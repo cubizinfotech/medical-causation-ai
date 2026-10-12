@@ -279,6 +279,8 @@ Repository secrets:
 
 The production `.env` stays on the server. Do not put it in GitHub.
 
+The workflow pulls `main` on the server first and then runs the deploy script from that commit. The script loads Node.js through nvm when nvm is installed (non-interactive SSH sessions do not read `~/.bashrc`), using the version in `.nvmrc` (22). Without that, the system Node.js (18 on Ubuntu 24.04) runs and the deploy stops with "Node.js … is too old".
+
 The server checkout must already exist, and that user must be able to `git fetch` and run Docker and PM2.
 
 ## 14. Health checks
