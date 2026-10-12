@@ -1,12 +1,45 @@
 import type { NextConfig } from "next";
-import { loadEnvConfig } from "@next/env";
+import fs from "fs";
 import path from "path";
 
 const repoRoot = path.join(__dirname, "../..");
 
-// The server .env lives at the repository root. NEXT_PUBLIC_* values are
-// inlined when `npm run build:web` runs, so this must load before the build.
-loadEnvConfig(repoRoot);
+/**
+ * NEXT_PUBLIC_* settings from the repository-root .env.local and .env (the
+ * first one found wins; a value already in the environment wins over both).
+ *
+ * Next.js loads env files from apps/web before it reads this config, and
+ * loadEnvConfig() then returns that cached result instead of reading the
+ * root, so the root files are read here. The values are inlined into the
+ * browser bundle through `env` below when `npm run build:web` runs.
+ */
+function rootPublicEnv(): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const file of [".env.local", ".env"]) {
+    let text: string;
+    try {
+      text = fs.readFileSync(path.join(repoRoot, file), "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of text.split(/\r?\n/)) {
+      const match = /^\s*(?:export\s+)?(NEXT_PUBLIC_[A-Z0-9_]+)\s*=\s*(.*)$/.exec(
+        line,
+      );
+      if (!match || match[1] in values) continue;
+      const raw = match[2].trim();
+      const quoted = /^(["'])(.*)\1$/.exec(raw);
+      values[match[1]] = quoted ? quoted[2] : raw.replace(/\s+#.*$/, "");
+    }
+  }
+  for (const key of Object.keys(values)) {
+    const fromEnvironment = process.env[key];
+    if (fromEnvironment !== undefined) values[key] = fromEnvironment;
+  }
+  return values;
+}
+
+const publicEnv = rootPublicEnv();
 
 // Extra hosts allowed to load the dev server (comma-separated), for example
 // a LAN address. Production (`next start`) does not use this.
@@ -38,6 +71,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["localhost", ...devOrigins],
   poweredByHeader: false,
+  env: publicEnv,
   // Standalone output is only for the optional local Docker image.
   // Production PM2 uses `next start`, which Next.js does not support
   // together with output: "standalone".
