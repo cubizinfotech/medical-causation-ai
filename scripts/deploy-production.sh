@@ -8,6 +8,20 @@ BRANCH="${DEPLOY_BRANCH:-main}"
 
 cd "$ROOT"
 
+# One deploy at a time. A push to main runs this script from GitHub Actions;
+# a second copy started by hand would delete node_modules while the first is
+# installing (npm ci), and both would end up broken. The second one waits.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"${DEPLOY_LOCK_FILE:-/tmp/mca-deploy.lock}"
+  if ! flock -n 9; then
+    echo "Another deploy is running. Waiting for it to finish..."
+    flock 9
+    echo "The other deploy finished. Continuing."
+  fi
+else
+  echo "Warning: flock is not installed, so two deploys could overlap."
+fi
+
 if [[ ! -f package.json || ! -f ecosystem.config.js ]]; then
   echo "Expected the repository at $ROOT (package.json and ecosystem.config.js)."
   echo "Clone it there, or set MCA_ROOT to the checkout path."
