@@ -1,5 +1,8 @@
 import { RateLimitExceededException } from '../exceptions';
-import { retryOnRateLimit } from './retry-on-rate-limit.util';
+import {
+  BACKGROUND_RATE_LIMIT_RETRY,
+  retryOnRateLimit,
+} from './retry-on-rate-limit.util';
 
 describe('retryOnRateLimit', () => {
   it('waits the time the provider asks for, capped, and tries once more', async () => {
@@ -28,5 +31,19 @@ describe('retryOnRateLimit', () => {
       'bad request',
     );
     expect(broken).toHaveBeenCalledTimes(1);
+  });
+
+  it('in background jobs, waits up to a minute and tries three times', async () => {
+    const sleep = jest.fn(() => Promise.resolve());
+    const call = jest
+      .fn()
+      .mockRejectedValueOnce(new RateLimitExceededException('mistral', 20_000))
+      .mockRejectedValueOnce(new RateLimitExceededException('mistral', 90_000))
+      .mockResolvedValueOnce('ok');
+    await expect(
+      retryOnRateLimit(call, { ...BACKGROUND_RATE_LIMIT_RETRY, sleep }),
+    ).resolves.toBe('ok');
+    expect(sleep.mock.calls).toEqual([[20_000], [60_000]]);
+    expect(call).toHaveBeenCalledTimes(3);
   });
 });

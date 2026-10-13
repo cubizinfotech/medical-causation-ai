@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '@ai/services';
-import { retryOnRateLimit } from '@ai/utils';
+import { BACKGROUND_RATE_LIMIT_RETRY, retryOnRateLimit } from '@ai/utils';
 import { MEDICAL_ANALYSIS_PROMPTS } from '../constants';
 import { MedicalPromptService } from '../prompts';
 import type { ChronologyEvent, MedicalSpecials } from '../types';
@@ -56,22 +56,24 @@ export class BillingExtractionService {
       const last = batch.pages[batch.pages.length - 1].pageNumber;
       const pages = first === last ? `page ${first}` : `pages ${first}–${last}`;
       try {
-        const response = await retryOnRateLimit(() =>
-          this.aiService.complete({
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              {
-                role: 'user',
-                content: this.prompts.render(template, {
-                  documentName: batch.documentName,
-                  pages: formatBatchPages(batch),
-                }),
-              },
-            ],
-            metadata: { responseFormat: 'json' },
-            temperature: 0,
-            maxTokens: BILLING_MAX_TOKENS,
-          }),
+        const response = await retryOnRateLimit(
+          () =>
+            this.aiService.complete({
+              messages: [
+                { role: 'system', content: SYSTEM_PROMPT },
+                {
+                  role: 'user',
+                  content: this.prompts.render(template, {
+                    documentName: batch.documentName,
+                    pages: formatBatchPages(batch),
+                  }),
+                },
+              ],
+              metadata: { responseFormat: 'json' },
+              temperature: 0,
+              maxTokens: BILLING_MAX_TOKENS,
+            }),
+          BACKGROUND_RATE_LIMIT_RETRY,
         );
         const raw = parseBillingResponse(response.content);
         if (raw.truncated) {

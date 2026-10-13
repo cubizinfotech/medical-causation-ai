@@ -23,6 +23,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed (2026-10-12)
 
+- EWI CV check: a CV whose text was read correctly showed "The CV could not be read" when the AI provider answered with a rate limit. AI calls inside background jobs (CV claims, EWI analysis, MCA analysis, chronology, bills) now wait the time the provider asks for, up to a minute, and try three times. A failed CV section now says the AI provider was busy instead of blaming the PDF.
+- New `AI_FALLBACK_PROVIDER`: when the main provider refuses a call (rate limit, no quota or credits, bad key, outage), the request goes to this provider.
+
 - Deleting an EWI investigation now removes its Word report file and its queued job; a running job stops. A job deleted or cancelled mid-run no longer writes a report or flips back to completed.
 - Job progress updates in Redis are atomic, so a cancel and a progress write can no longer overwrite each other.
 - A failed EWI queue add marks the investigation failed instead of leaving it pending forever; request errors such as "CV not found" keep their real status instead of becoming 500.

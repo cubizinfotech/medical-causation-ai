@@ -8,6 +8,8 @@ import type {
  */
 export interface ProviderConfigSettings {
   activeProvider: string;
+  /** Used when the active provider refuses a call (empty = none). */
+  fallbackProvider: string;
   chatModel: string;
   models: Record<string, string>;
   temperature: number;

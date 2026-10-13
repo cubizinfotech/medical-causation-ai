@@ -258,9 +258,9 @@ export function CvCheckPanel({ check }: { check?: EwiCvCheck | null }) {
           <p className="flex items-center gap-2 font-medium">
             <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
             {check.status === "failed"
-              ? "The CV could not be read."
+              ? "The CV was not checked."
               : check.status === "partial"
-                ? "Only part of the CV was read."
+                ? "Only part of the CV was checked."
                 : "Notes on reading the CV"}
           </p>
           {check.warnings.length > 0 ? (

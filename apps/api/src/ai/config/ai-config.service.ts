@@ -37,6 +37,13 @@ export class AiConfigService {
     return this.provider.activeProvider as LlmProviderName;
   }
 
+  get fallbackLlmProvider(): LlmProviderName | null {
+    const name = this.provider.fallbackProvider;
+    return name && name !== this.provider.activeProvider
+      ? (name as LlmProviderName)
+      : null;
+  }
+
   get activeEmbeddingProvider(): EmbeddingProviderName {
     return this.embedding.provider as EmbeddingProviderName;
   }

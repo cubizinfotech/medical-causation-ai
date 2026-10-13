@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiConfigService } from '@ai/config';
-import { TokenLimitExceededException } from '@ai/exceptions';
+import {
+  ProviderUnavailableException,
+  RateLimitExceededException,
+  TokenLimitExceededException,
+} from '@ai/exceptions';
 import { LlmProviderFactory, EmbeddingProviderFactory } from '@ai/providers';
 import type { ILlmProvider, IEmbeddingProvider } from '@ai/interfaces';
 import type {
@@ -63,16 +67,39 @@ export class AiService {
   }
 
   /**
-   * Execute an LLM completion request through the active provider.
+   * Execute an LLM completion request through the active provider. When it
+   * refuses the call (rate limit, no quota, bad key, outage) and
+   * AI_FALLBACK_PROVIDER is set, the same request goes to that provider.
    */
   async complete(options: AiCompletionOptions): Promise<LlmCompletionResponse> {
-    const provider = this.llmProviderFactory.getActiveProvider();
-    const model = this.llmProviderFactory.resolveModel(provider, options.model);
-
     const messages = await this.buildMessages(options);
-
     this.validateTokenLimits(messages);
 
+    const primary = this.llmProviderFactory.getActiveProvider();
+    try {
+      return await this.completeWith(primary, messages, options, options.model);
+    } catch (error) {
+      const fallback = this.fallbackFor(error);
+      if (!fallback) throw error;
+      this.logger.warn(
+        `${primary.name} refused the request (${error instanceof Error ? error.message : String(error)}); using fallback provider ${fallback.name}`,
+      );
+      // options.model names a model of the primary provider, so the
+      // fallback uses its own configured model.
+      return this.completeWith(fallback, messages, options);
+    }
+  }
+
+  private async completeWith(
+    provider: ILlmProvider,
+    messages: LlmMessage[],
+    options: AiCompletionOptions,
+    requestedModel?: string,
+  ): Promise<LlmCompletionResponse> {
+    const model = this.llmProviderFactory.resolveModel(
+      provider,
+      requestedModel,
+    );
     const request: LlmCompletionRequest = {
       messages,
       model,
@@ -92,6 +119,21 @@ export class AiService {
       ...response,
       executionTimeMs: Date.now() - startTime,
     };
+  }
+
+  /** The fallback provider, when this error is one it can help with. */
+  private fallbackFor(error: unknown): ILlmProvider | null {
+    const refused =
+      error instanceof RateLimitExceededException ||
+      error instanceof ProviderUnavailableException;
+    const name = this.aiConfigService.fallbackLlmProvider;
+    if (!refused || !name) return null;
+    try {
+      const provider = this.llmProviderFactory.getProvider(name);
+      return provider.isAvailable() ? provider : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

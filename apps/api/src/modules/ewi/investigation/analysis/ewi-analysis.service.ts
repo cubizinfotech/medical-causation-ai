@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '@ai/services';
+import { BACKGROUND_RATE_LIMIT_RETRY, retryOnRateLimit } from '@ai/utils';
 import {
   applyAiWording,
   AnalysisValidationError,
@@ -43,67 +44,71 @@ export class EwiAnalysisService {
       const system = await this.ai.loadPrompt(
         'ewi/investigation-analysis-system',
       );
-      const response = await this.ai.complete({
-        temperature: 0,
-        maxTokens: 8192,
-        metadata: {
-          product: 'ewi',
-          task: 'investigation-analysis',
-          responseFormat: 'json',
-        },
-        messages: [{ role: 'system', content: system.content }],
-        promptTemplateId: 'ewi/investigation-analysis',
-        promptVariables: {
-          expertName: packet.expertName,
-          specialty: packet.specialty,
-          findingsJson: JSON.stringify({
-            findings: packet.findings.map((finding) => ({
-              findingKey: finding.findingKey,
-              category: finding.category,
-              title: finding.title,
-              summary: finding.summary,
-              url: finding.url,
-              providerId: finding.providerId,
-              informationStatus: finding.informationStatus,
-              access: finding.access,
-            })),
-            sourceAttempts: packet.sourceAttempts,
-            requiredSections: [
-              'expert_summary',
-              'credentials',
-              'cv_comparison',
-              'inconsistencies',
-              'legal_matters',
-              'orders',
-              'motions',
-              'depositions',
-              'contradictory_testimony',
-              'publications',
-              'authorship',
-              'grants_patents',
-              'licenses_certifications',
-              'memberships',
-              'websites',
-              'videos',
-              'social_media',
-              'income_bias',
-              'university_rules',
-              'missing_unverified',
-              'investigation_findings',
-            ],
-            evidenceStatuses: [
-              'verified',
-              'partially_verified',
-              'conflicting',
-              'not_verified',
-              'not_found',
-              'unavailable',
-              'restricted',
-            ],
-            minQuestions: 100,
+      const response = await retryOnRateLimit(
+        () =>
+          this.ai.complete({
+            temperature: 0,
+            maxTokens: 8192,
+            metadata: {
+              product: 'ewi',
+              task: 'investigation-analysis',
+              responseFormat: 'json',
+            },
+            messages: [{ role: 'system', content: system.content }],
+            promptTemplateId: 'ewi/investigation-analysis',
+            promptVariables: {
+              expertName: packet.expertName,
+              specialty: packet.specialty,
+              findingsJson: JSON.stringify({
+                findings: packet.findings.map((finding) => ({
+                  findingKey: finding.findingKey,
+                  category: finding.category,
+                  title: finding.title,
+                  summary: finding.summary,
+                  url: finding.url,
+                  providerId: finding.providerId,
+                  informationStatus: finding.informationStatus,
+                  access: finding.access,
+                })),
+                sourceAttempts: packet.sourceAttempts,
+                requiredSections: [
+                  'expert_summary',
+                  'credentials',
+                  'cv_comparison',
+                  'inconsistencies',
+                  'legal_matters',
+                  'orders',
+                  'motions',
+                  'depositions',
+                  'contradictory_testimony',
+                  'publications',
+                  'authorship',
+                  'grants_patents',
+                  'licenses_certifications',
+                  'memberships',
+                  'websites',
+                  'videos',
+                  'social_media',
+                  'income_bias',
+                  'university_rules',
+                  'missing_unverified',
+                  'investigation_findings',
+                ],
+                evidenceStatuses: [
+                  'verified',
+                  'partially_verified',
+                  'conflicting',
+                  'not_verified',
+                  'not_found',
+                  'unavailable',
+                  'restricted',
+                ],
+                minQuestions: 100,
+              }),
+            },
           }),
-        },
-      });
+        BACKGROUND_RATE_LIMIT_RETRY,
+      );
       const wording = validateAiAnalysis(response.content, packet);
       this.logger.log(
         `EWI analysis wording accepted from ${provider.name}. Source assessments were kept.`,
@@ -146,30 +151,34 @@ export class EwiAnalysisService {
       const provider = this.ai.getActiveLlmProvider();
       if (!provider.isAvailable()) return [];
       const system = await this.ai.loadPrompt('ewi/challenge-rulings-system');
-      const response = await this.ai.complete({
-        temperature: 0,
-        maxTokens: 2048,
-        metadata: {
-          product: 'ewi',
-          task: 'challenge-rulings',
-          responseFormat: 'json',
-        },
-        messages: [{ role: 'system', content: system.content }],
-        promptTemplateId: 'ewi/challenge-rulings',
-        promptVariables: {
-          expertName: input.expertName,
-          surname: input.surname,
-          itemsJson: JSON.stringify(
-            input.candidates.map((candidate) => ({
-              id: candidate.id,
-              caseName: candidate.caseName,
-              court: candidate.court,
-              date: candidate.date,
-              excerpts: trimExcerpts(candidate.excerpts),
-            })),
-          ),
-        },
-      });
+      const response = await retryOnRateLimit(
+        () =>
+          this.ai.complete({
+            temperature: 0,
+            maxTokens: 2048,
+            metadata: {
+              product: 'ewi',
+              task: 'challenge-rulings',
+              responseFormat: 'json',
+            },
+            messages: [{ role: 'system', content: system.content }],
+            promptTemplateId: 'ewi/challenge-rulings',
+            promptVariables: {
+              expertName: input.expertName,
+              surname: input.surname,
+              itemsJson: JSON.stringify(
+                input.candidates.map((candidate) => ({
+                  id: candidate.id,
+                  caseName: candidate.caseName,
+                  court: candidate.court,
+                  date: candidate.date,
+                  excerpts: trimExcerpts(candidate.excerpts),
+                })),
+              ),
+            },
+          }),
+        BACKGROUND_RATE_LIMIT_RETRY,
+      );
       const readings = parseChallengeReadings(response.content);
       this.logger.log(
         `EWI challenge rulings: ${provider.name} read ${readings.length} of ${input.candidates.length} opinion(s); ${readings.filter((reading) => reading.outcome !== 'not_determined').length} proposed an outcome. Only quotes found in the text are kept.`,

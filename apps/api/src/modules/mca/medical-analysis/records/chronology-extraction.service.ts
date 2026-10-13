@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '@ai/services';
-import { retryOnRateLimit } from '@ai/utils';
+import { BACKGROUND_RATE_LIMIT_RETRY, retryOnRateLimit } from '@ai/utils';
 import { MEDICAL_ANALYSIS_PROMPTS } from '../constants';
 import { MedicalPromptService } from '../prompts';
 import type { MedicalChronology } from '../types';
@@ -83,21 +83,23 @@ export class ChronologyExtractionService {
       const first = batch.pages[0].pageNumber;
       const last = batch.pages[batch.pages.length - 1].pageNumber;
       try {
-        const response = await retryOnRateLimit(() =>
-          this.aiService.complete({
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              {
-                role: 'user',
-                content: this.prompts.render(template, {
-                  documentName: batch.documentName,
-                  pages: formatBatchPages(batch),
-                }),
-              },
-            ],
-            metadata: { responseFormat: 'json' },
-            temperature: 0,
-          }),
+        const response = await retryOnRateLimit(
+          () =>
+            this.aiService.complete({
+              messages: [
+                { role: 'system', content: SYSTEM_PROMPT },
+                {
+                  role: 'user',
+                  content: this.prompts.render(template, {
+                    documentName: batch.documentName,
+                    pages: formatBatchPages(batch),
+                  }),
+                },
+              ],
+              metadata: { responseFormat: 'json' },
+              temperature: 0,
+            }),
+          BACKGROUND_RATE_LIMIT_RETRY,
         );
         drafts.push(
           ...validateChronologyEvents(

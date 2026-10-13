@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '@ai/services';
+import { BACKGROUND_RATE_LIMIT_RETRY, retryOnRateLimit } from '@ai/utils';
 import { RetrievalService } from '@modules/rag/services';
 import type { IMedicalAnalysisService, AnalyzeOptions } from '../interfaces';
 import type {
@@ -287,14 +288,18 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       attempt < MedicalAnalysisService.MAX_COMPLETION_ATTEMPTS;
       attempt++
     ) {
-      const llmResponse = await this.aiService.complete({
-        messages: [
-          { role: 'system', content: params.systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        metadata: { responseFormat: 'json' },
-        temperature: 0.2,
-      });
+      const llmResponse = await retryOnRateLimit(
+        () =>
+          this.aiService.complete({
+            messages: [
+              { role: 'system', content: params.systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            metadata: { responseFormat: 'json' },
+            temperature: 0.2,
+          }),
+        BACKGROUND_RATE_LIMIT_RETRY,
+      );
 
       if (!llmResponse.content?.trim()) {
         if (attempt < MedicalAnalysisService.MAX_COMPLETION_ATTEMPTS - 1) {

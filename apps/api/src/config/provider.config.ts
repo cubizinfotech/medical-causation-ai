@@ -23,6 +23,8 @@ function resolveAnthropicEffort(): AnthropicEffort {
 export const providerConfig = (): ProviderConfigSettings => ({
   activeProvider:
     process.env.AI_PROVIDER?.trim().toLowerCase() ?? DEFAULT_LLM_PROVIDER,
+  fallbackProvider:
+    process.env.AI_FALLBACK_PROVIDER?.trim().toLowerCase() ?? '',
   chatModel: process.env.AI_CHAT_MODEL ?? '',
   models: {
     openrouter: process.env.OPENROUTER_LLM_MODEL ?? '',

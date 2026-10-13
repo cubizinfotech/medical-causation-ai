@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '@ai/services';
+import { RateLimitExceededException } from '@ai/exceptions';
+import { BACKGROUND_RATE_LIMIT_RETRY, retryOnRateLimit } from '@ai/utils';
 import { ExpertDocumentsService } from '../documents/expert-documents.service';
 import {
   buildCvBatches,
@@ -12,6 +14,17 @@ import type { CvClaim, CvExtraction } from './cv.types';
 
 function pageList(pages: number[]): string {
   return [...pages].sort((a, b) => a - b).join(', ');
+}
+
+/**
+ * Why a CV section is missing, in words the attorney can act on. The page
+ * text itself was read; it is the AI step that did not finish.
+ */
+function sectionFailure(pages: string, error: unknown): string {
+  if (error instanceof RateLimitExceededException) {
+    return `The AI provider was busy (rate limit) and did not read CV ${pages}. Its claims are missing from the CV check; run the investigation again in a few minutes.`;
+  }
+  return `The AI model could not read CV ${pages}. Its claims are missing from the CV check.`;
 }
 
 /**
@@ -79,22 +92,28 @@ export class ExpertCvService {
     let failed = 0;
     for (const [index, batch] of batches.entries()) {
       try {
-        const response = await this.ai.complete({
-          temperature: 0,
-          maxTokens: 4096,
-          metadata: {
-            product: 'ewi',
-            task: 'cv-claims',
-            responseFormat: 'json',
-          },
-          messages: [{ role: 'system', content: system.content }],
-          promptTemplateId: 'ewi/cv-claims',
-          promptVariables: {
-            expertName,
-            documentName: document.name,
-            pages: formatCvBatch(batch),
-          },
-        });
+        // A free-tier provider often asks to wait; the job waits rather
+        // than dropping this part of the CV.
+        const response = await retryOnRateLimit(
+          () =>
+            this.ai.complete({
+              temperature: 0,
+              maxTokens: 4096,
+              metadata: {
+                product: 'ewi',
+                task: 'cv-claims',
+                responseFormat: 'json',
+              },
+              messages: [{ role: 'system', content: system.content }],
+              promptTemplateId: 'ewi/cv-claims',
+              promptVariables: {
+                expertName,
+                documentName: document.name,
+                pages: formatCvBatch(batch),
+              },
+            }),
+          BACKGROUND_RATE_LIMIT_RETRY,
+        );
         drafts.push(...validateCvClaims(parseCvReply(response.content), batch));
       } catch (error) {
         failed += 1;
@@ -104,7 +123,10 @@ export class ExpertCvService {
           `CV section p.${first}-${last} failed: ${error instanceof Error ? error.message : String(error)}`,
         );
         warnings.push(
-          `CV pages ${first === last ? first : `${first}–${last}`} could not be read and are missing from the CV check.`,
+          sectionFailure(
+            first === last ? `page ${first}` : `pages ${first}–${last}`,
+            error,
+          ),
         );
       }
       await onProgress?.(
