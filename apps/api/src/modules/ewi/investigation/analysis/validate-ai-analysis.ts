@@ -189,12 +189,23 @@ function readString(value: unknown, field: string): string {
 }
 
 function readAssessment(value: unknown, field: string): EwiAssessment {
-  const assessment = readString(value, field);
+  const raw = readString(value, field)
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  const aliases: Record<string, string> = {
+    unverified: 'not_verified',
+    unknown: 'not_verified',
+    insufficient: 'not_verified',
+    inconclusive: 'not_verified',
+    not_available: 'unavailable',
+    restricted_unavailable: 'restricted',
+    no_result: 'not_found',
+    none: 'not_found',
+  };
+  const assessment = aliases[raw] ?? raw;
   if (!ASSESSMENT_SET.has(assessment)) {
-    throw new AnalysisValidationError(
-      'malformed',
-      `${field} must be one of: ${EWI_ASSESSMENTS.join(', ')}`,
-    );
+    // A label outside the enum cannot upgrade evidence. Keep the wording.
+    return 'not_verified';
   }
   return assessment as EwiAssessment;
 }

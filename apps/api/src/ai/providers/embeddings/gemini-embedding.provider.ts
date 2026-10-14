@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import {
   DEFAULT_EMBEDDING_MODELS,
   EMBEDDING_PROVIDERS,
@@ -18,10 +19,17 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function embeddingBatchSize(): number {
+  const configured = Number(process.env.GEMINI_EMBED_BATCH_SIZE ?? 16);
+  if (!Number.isFinite(configured) || configured < 1) return 16;
+  return Math.floor(configured);
+}
+
 export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
   readonly name = EMBEDDING_PROVIDERS.GEMINI;
   readonly defaultModel = DEFAULT_EMBEDDING_MODELS[EMBEDDING_PROVIDERS.GEMINI];
   readonly defaultDimensions = 768;
+  private readonly logger = new Logger(GeminiEmbeddingProvider.name);
 
   constructor(
     settings: AIProviderSettings,
@@ -39,9 +47,11 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
     const ai = createGeminiClient(this.settings.apiKey);
     const embeddings: number[][] = [];
     let totalTokens = 0;
+    const batchSize = embeddingBatchSize();
+    const itemDelayMs = Number(process.env.GEMINI_EMBED_ITEM_DELAY_MS ?? 100);
 
-    for (let index = 0; index < request.inputs.length; index++) {
-      const input = request.inputs[index];
+    for (let start = 0; start < request.inputs.length; start += batchSize) {
+      const slice = request.inputs.slice(start, start + batchSize);
       let success = false;
       let lastError = 'Gemini embedding failed';
 
@@ -49,24 +59,37 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
         try {
           const response = await ai.models.embedContent({
             model,
-            contents: input.text,
+            contents: slice.map((input) => ({
+              role: 'user' as const,
+              parts: [{ text: input.text }],
+            })),
             config: {
               outputDimensionality,
               abortSignal: AbortSignal.timeout(this.runtime.timeoutMs),
             },
           });
 
-          const values = response.embeddings?.[0]?.values ?? [];
-          if (values.length === 0) {
-            throw new Error('Gemini returned an empty embedding vector');
+          const vectors = (response.embeddings ?? []).map(
+            (item) => item.values ?? [],
+          );
+          if (
+            vectors.length !== slice.length ||
+            vectors.some((values) => values.length === 0)
+          ) {
+            throw new Error(
+              'Gemini returned a different number of embeddings than requested',
+            );
           }
 
-          embeddings.push(values);
-          totalTokens += Math.ceil(input.text.length / 4);
+          embeddings.push(...vectors);
+          totalTokens += slice.reduce(
+            (sum, input) => sum + Math.ceil(input.text.length / 4),
+            0,
+          );
           success = true;
 
-          if (index + 1 < request.inputs.length) {
-            await sleep(Number(process.env.GEMINI_EMBED_ITEM_DELAY_MS ?? 150));
+          if (start + batchSize < request.inputs.length && itemDelayMs > 0) {
+            await sleep(itemDelayMs);
           }
           break;
         } catch (error) {
@@ -80,6 +103,9 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
             const delay = isRateLimit
               ? this.runtime.retryDelayMs * attempt * 6
               : this.runtime.retryDelayMs * attempt;
+            this.logger.warn(
+              `Gemini embedding failed, retrying in ${delay}ms (attempt ${attempt}/${this.runtime.maxRetries})`,
+            );
             await sleep(delay);
           }
         }
