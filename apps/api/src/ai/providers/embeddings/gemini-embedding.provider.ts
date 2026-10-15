@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import {
   DEFAULT_EMBEDDING_MODELS,
   EMBEDDING_PROVIDERS,
@@ -28,6 +29,13 @@ async function sleep(ms: number): Promise<void> {
 /** batchEmbedContents accepts at most 100 requests per call. */
 const GEMINI_MAX_BATCH = 100;
 
+/** Texts per API call: GEMINI_EMBED_BATCH_SIZE (default 16), at most 100. */
+function embeddingBatchSize(): number {
+  const configured = Number(process.env.GEMINI_EMBED_BATCH_SIZE ?? 16);
+  if (!Number.isFinite(configured) || configured < 1) return 16;
+  return Math.min(Math.floor(configured), GEMINI_MAX_BATCH);
+}
+
 const EMBED_FAILURE_BY_KIND: Partial<
   Record<GeminiErrorInfo['kind'], ProviderFailureKind>
 > = {
@@ -42,6 +50,7 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
   readonly name = EMBEDDING_PROVIDERS.GEMINI;
   readonly defaultModel = DEFAULT_EMBEDDING_MODELS[EMBEDDING_PROVIDERS.GEMINI];
   readonly defaultDimensions = 768;
+  private readonly logger = new Logger(GeminiEmbeddingProvider.name);
 
   constructor(
     settings: AIProviderSettings,
@@ -51,9 +60,10 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
   }
 
   /**
-   * Embeds up to 100 texts per API call. Each text is sent as its own
-   * Content object: gemini-embedding-2 merges a plain string array into one
-   * input and returns a single vector for all of it.
+   * Embeds GEMINI_EMBED_BATCH_SIZE texts per API call (default 16, at most
+   * 100), pausing GEMINI_EMBED_ITEM_DELAY_MS between calls. Each text is sent
+   * as its own Content object: gemini-embedding-2 merges a plain string array
+   * into one input and returns a single vector for all of it.
    */
   async embed(request: EmbeddingRequest): Promise<EmbeddingResponse> {
     this.validateConfiguration();
@@ -64,25 +74,26 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
     const ai = createGeminiClient(this.settings.apiKey);
     const embeddings: number[][] = [];
     let totalTokens = 0;
+    const batchSize = embeddingBatchSize();
+    const itemDelayMs = Number(process.env.GEMINI_EMBED_ITEM_DELAY_MS ?? 100);
 
-    for (
-      let offset = 0;
-      offset < request.inputs.length;
-      offset += GEMINI_MAX_BATCH
-    ) {
-      const batch = request.inputs.slice(offset, offset + GEMINI_MAX_BATCH);
+    for (let start = 0; start < request.inputs.length; start += batchSize) {
+      const slice = request.inputs.slice(start, start + batchSize);
       const vectors = await this.embedBatch(
         ai,
         model,
-        batch.map((input) => input.text),
+        slice.map((input) => input.text),
         outputDimensionality,
         request.maxAttempts,
       );
       embeddings.push(...vectors);
-      totalTokens += batch.reduce(
+      totalTokens += slice.reduce(
         (sum, input) => sum + Math.ceil(input.text.length / 4),
         0,
       );
+      if (start + batchSize < request.inputs.length && itemDelayMs > 0) {
+        await sleep(itemDelayMs);
+      }
     }
 
     const usage = {
@@ -153,12 +164,15 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
             EMBED_FAILURE_BY_KIND[info.kind] ?? 'unavailable',
           );
         }
-        await sleep(
+        const delay =
           info.retryAfterMs ??
-            (info.kind === 'rate_limit'
-              ? this.runtime.retryDelayMs * attempt * 2
-              : this.runtime.retryDelayMs * attempt),
+          (info.kind === 'rate_limit'
+            ? this.runtime.retryDelayMs * attempt * 2
+            : this.runtime.retryDelayMs * attempt);
+        this.logger.warn(
+          `Gemini embedding ${info.kind}${info.status ? ` (${info.status})` : ''}, retrying in ${delay}ms (attempt ${attempt}/${attempts})`,
         );
+        await sleep(delay);
       }
     }
   }

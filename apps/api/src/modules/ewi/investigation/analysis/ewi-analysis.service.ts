@@ -67,6 +67,8 @@ export class EwiAnalysisService {
         () =>
           this.ai.complete({
             temperature: 0,
+            // Twenty-one sections plus 100 questions overflow 8192 tokens and
+            // come back as truncated, invalid JSON.
             maxTokens: EWI_ANALYSIS_MAX_TOKENS,
             metadata: {
               product: 'ewi',

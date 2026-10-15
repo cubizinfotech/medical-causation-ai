@@ -63,6 +63,31 @@ describe('validateAiAnalysis', () => {
     );
   });
 
+  it('keeps wording when a section status is a near-miss label', () => {
+    const raw = JSON.stringify({
+      summary: 'Could not verify the collected citation.',
+      conclusions: [
+        {
+          text: 'The collected citation could not be verified from finding f1.',
+          sourceRefs: ['f1'],
+        },
+      ],
+      sectionSummaries: [
+        {
+          section: 'publications',
+          text: 'The collected citation could not be verified.',
+          status: 'unverified',
+          sourceRefs: ['f1'],
+          findingKeys: ['f1'],
+        },
+      ],
+      questions: groundedQuestionBank(),
+    });
+
+    const wording = validateAiAnalysis(raw, packet);
+    expect(wording.sectionSummaries?.[0]?.status).toBe('not_verified');
+  });
+
   it('rejects a conclusion that invents a degree and a publication', () => {
     const raw = JSON.stringify({
       summary: 'Could not verify the collected citation.',
@@ -235,10 +260,12 @@ describe('validateAiAnalysis', () => {
     expect(wording.sectionSummaries?.[0]?.status).toBe('not_verified');
   });
 
-  it('still rejects an unknown status on a finding that is shown', () => {
-    expect(() =>
-      validateAiAnalysis(withStatuses('not_verified', 'probably_true'), packet),
-    ).toThrow(/got "probably_true"/);
+  it('reads an unknown finding status as not verified, never stronger', () => {
+    const wording = validateAiAnalysis(
+      withStatuses('not_verified', 'probably_true'),
+      packet,
+    );
+    expect(wording.investigationFindings?.[0]?.status).toBe('not_verified');
   });
 });
 

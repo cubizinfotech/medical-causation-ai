@@ -126,7 +126,31 @@ describe('GeminiProvider', () => {
 });
 
 describe('GeminiEmbeddingProvider', () => {
-  beforeEach(() => embedContent.mockReset());
+  const savedEnv = {
+    batch: process.env.GEMINI_EMBED_BATCH_SIZE,
+    delay: process.env.GEMINI_EMBED_ITEM_DELAY_MS,
+  };
+
+  beforeEach(() => {
+    embedContent.mockReset();
+    embedContent.mockImplementation(({ contents }: { contents: unknown[] }) =>
+      Promise.resolve({
+        embeddings: contents.map((_, i) => ({ values: [i, 1, 0] })),
+      }),
+    );
+    delete process.env.GEMINI_EMBED_BATCH_SIZE;
+    process.env.GEMINI_EMBED_ITEM_DELAY_MS = '0';
+  });
+
+  afterAll(() => {
+    for (const [name, value] of [
+      ['GEMINI_EMBED_BATCH_SIZE', savedEnv.batch],
+      ['GEMINI_EMBED_ITEM_DELAY_MS', savedEnv.delay],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
 
   const runtime = {
     timeoutMs: 1000,
@@ -135,17 +159,35 @@ describe('GeminiEmbeddingProvider', () => {
     dimensions: 3,
   };
 
-  it('embeds many texts per call, one Content object per text', async () => {
-    embedContent.mockImplementation(({ contents }: { contents: unknown[] }) =>
-      Promise.resolve({
-        embeddings: contents.map((_, i) => ({ values: [i, 1, 0] })),
-      }),
-    );
+  const inputs = Array.from({ length: 150 }, (_, i) => ({
+    id: `c${i}`,
+    text: `text ${i}`,
+  }));
+
+  it('sends 16 texts per call by default', async () => {
     const provider = new GeminiEmbeddingProvider(settings, runtime);
-    const inputs = Array.from({ length: 150 }, (_, i) => ({
-      id: `c${i}`,
-      text: `text ${i}`,
-    }));
+
+    const response = await provider.embed({
+      inputs,
+      model: 'gemini-embedding-2',
+    });
+
+    expect(embedContent).toHaveBeenCalledTimes(10);
+    expect(response.results).toHaveLength(150);
+  });
+
+  it('never sends more than the API limit of 100 per call', async () => {
+    process.env.GEMINI_EMBED_BATCH_SIZE = '500';
+    const provider = new GeminiEmbeddingProvider(settings, runtime);
+
+    await provider.embed({ inputs, model: 'gemini-embedding-2' });
+
+    expect(embedContent).toHaveBeenCalledTimes(2);
+  });
+
+  it('embeds many texts per call, one Content object per text', async () => {
+    process.env.GEMINI_EMBED_BATCH_SIZE = '100';
+    const provider = new GeminiEmbeddingProvider(settings, runtime);
 
     const response = await provider.embed({
       inputs,

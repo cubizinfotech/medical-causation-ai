@@ -194,32 +194,37 @@ function readString(value: unknown, field: string): string {
  */
 const ASSESSMENT_ALIASES: Record<string, string> = {
   unverified: 'not_verified',
-  no_record: 'not_found',
+  unknown: 'not_verified',
+  insufficient: 'not_verified',
+  inconclusive: 'not_verified',
   not_available: 'unavailable',
+  restricted_unavailable: 'restricted',
+  no_result: 'not_found',
+  no_record: 'not_found',
+  none: 'not_found',
 };
 
+function normalizeAssessment(written: string): EwiAssessment {
+  const label = written.toLowerCase().replace(/[\s-]+/g, '_');
+  const assessment = ASSESSMENT_ALIASES[label] ?? label;
+  // A label outside the enum cannot upgrade evidence. Keep the wording.
+  return ASSESSMENT_SET.has(assessment)
+    ? (assessment as EwiAssessment)
+    : 'not_verified';
+}
+
 function readAssessment(value: unknown, field: string): EwiAssessment {
-  const written = readString(value, field)
-    .toLowerCase()
-    .replace(/[\s-]+/g, '_');
-  const assessment = ASSESSMENT_ALIASES[written] ?? written;
-  if (!ASSESSMENT_SET.has(assessment)) {
-    throw new AnalysisValidationError(
-      'malformed',
-      `${field} must be one of: ${EWI_ASSESSMENTS.join(', ')} (got "${assessment.slice(0, 40)}")`,
-    );
-  }
-  return assessment as EwiAssessment;
+  return normalizeAssessment(readString(value, field));
 }
 
 /**
  * A section's status from the model is never shown: mergeSectionWording
- * keeps the status derived from the sources. An unknown label there is
- * read as the most cautious one instead of discarding all the wording.
+ * keeps the status derived from the sources. A missing or unknown label
+ * there is read as the most cautious one instead of discarding the wording.
  */
 function readSectionStatus(value: unknown): EwiAssessment {
-  return typeof value === 'string' && ASSESSMENT_SET.has(value)
-    ? (value as EwiAssessment)
+  return typeof value === 'string'
+    ? normalizeAssessment(value)
     : 'not_verified';
 }
 

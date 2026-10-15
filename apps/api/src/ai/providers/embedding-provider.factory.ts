@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   DEFAULT_EMBEDDING_MODELS,
@@ -21,12 +21,14 @@ import {
   GroqEmbeddingProvider,
 } from './embeddings/gemini-embedding.provider';
 import type { EmbeddingRuntimeOptions } from './base/openai-compatible-embedding.provider';
+import { resolveGeminiEmbeddingModel } from '@ai/utils/gemini-client.util';
 
 /**
  * Factory that resolves the active embedding provider based on EMBEDDING_PROVIDER env variable.
  */
 @Injectable()
 export class EmbeddingProviderFactory {
+  private readonly logger = new Logger(EmbeddingProviderFactory.name);
   private readonly providers: Map<EmbeddingProviderName, IEmbeddingProvider>;
 
   constructor(
@@ -108,12 +110,21 @@ export class EmbeddingProviderFactory {
   }
 
   resolveModel(provider: IEmbeddingProvider, model?: string): string {
-    if (model) return model;
+    const configured = model?.trim() || this.aiConfigService.embeddingModel;
+    if (provider.name !== EMBEDDING_PROVIDERS.GEMINI) {
+      return configured || provider.defaultModel;
+    }
 
-    const configured = this.aiConfigService.embeddingModel;
-    if (configured) return configured;
-
-    return provider.defaultModel;
+    const resolved = resolveGeminiEmbeddingModel(
+      configured,
+      provider.defaultModel,
+    );
+    if (resolved.replaced) {
+      this.logger.warn(
+        `Embedding model "${configured}" cannot embed text. Using ${resolved.model}.`,
+      );
+    }
+    return resolved.model;
   }
 
   getDefaultModel(name: EmbeddingProviderName): string {
