@@ -59,8 +59,10 @@ export class DocumentProcessingService implements IDocumentProcessingService {
   private get ocrSettings(): OcrSettings {
     return (
       this.configService.get<OcrSettings>('ocr') ?? {
-        provider: 'mock',
+        provider: 'tesseract',
         autoOcr: true,
+        maxPages: 500,
+        dpi: 200,
       }
     );
   }
@@ -183,6 +185,7 @@ export class DocumentProcessingService implements IDocumentProcessingService {
                   charCount: parserOutput.rawText.length,
                 },
               ],
+          { pdf: extension === 'pdf' ? buffer : undefined },
         );
       pages = ocrPages;
       ocrStatus = ocr.status;

@@ -10,6 +10,16 @@ import { DocumentProcessingService } from './document-processing.service';
 import { ParserFactory } from '../parsers/parser.factory';
 import { PARSER_TYPES } from '../constants';
 
+// These tests use the fixed-text OCR stand-in, not Tesseract.
+const savedOcrProvider = process.env.OCR_PROVIDER;
+beforeAll(() => {
+  process.env.OCR_PROVIDER = 'mock';
+});
+afterAll(() => {
+  if (savedOcrProvider === undefined) delete process.env.OCR_PROVIDER;
+  else process.env.OCR_PROVIDER = savedOcrProvider;
+});
+
 function resolveKnowledgeBaseRoot(): string | null {
   const candidates = [
     resolve(process.cwd(), 'knowledge-base'),

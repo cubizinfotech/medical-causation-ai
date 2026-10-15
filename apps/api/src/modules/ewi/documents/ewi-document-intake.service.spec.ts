@@ -10,6 +10,16 @@ import { EwiDocumentsModule } from './ewi-documents.module';
 import { EwiDocumentIntakeService } from './ewi-document-intake.service';
 import { EwiReportReferenceService } from './ewi-report-reference.service';
 
+// These tests use the fixed-text OCR stand-in, not Tesseract.
+const savedOcrProvider = process.env.OCR_PROVIDER;
+beforeAll(() => {
+  process.env.OCR_PROVIDER = 'mock';
+});
+afterAll(() => {
+  if (savedOcrProvider === undefined) delete process.env.OCR_PROVIDER;
+  else process.env.OCR_PROVIDER = savedOcrProvider;
+});
+
 describe('EwiDocumentIntakeService', () => {
   let intake: EwiDocumentIntakeService;
   let reportRefs: EwiReportReferenceService;

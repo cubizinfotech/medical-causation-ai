@@ -6,6 +6,8 @@ import { DocumentProcessingService } from './services/document-processing.servic
 import { OcrService } from './ocr/ocr.service';
 import { MockOcrProvider } from './ocr/mock-ocr.provider';
 import { DisabledOcrProvider } from './ocr/disabled-ocr.provider';
+import { PdfPageOcr } from './ocr/pdf-page-ocr';
+import { TesseractOcrProvider } from './ocr/tesseract-ocr.provider';
 
 @Module({
   imports: [AppConfigModule, KnowledgeBaseModule],
@@ -15,6 +17,8 @@ import { DisabledOcrProvider } from './ocr/disabled-ocr.provider';
     OcrService,
     MockOcrProvider,
     DisabledOcrProvider,
+    PdfPageOcr,
+    TesseractOcrProvider,
   ],
   exports: [
     DocumentProcessingService,

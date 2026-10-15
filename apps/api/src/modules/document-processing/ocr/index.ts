@@ -1,6 +1,7 @@
 export { OcrService, OCR_PROVIDER } from './ocr.service';
 export { MockOcrProvider } from './mock-ocr.provider';
 export { DisabledOcrProvider } from './disabled-ocr.provider';
+export { TesseractOcrProvider } from './tesseract-ocr.provider';
 export type {
   IOcrProvider,
   OcrDocumentResult,

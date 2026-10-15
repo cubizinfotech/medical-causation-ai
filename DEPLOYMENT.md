@@ -362,6 +362,8 @@ tail -f logs/index-kb.log      # Ctrl+C stops watching, not the indexing
 
 `index:kb` finds the files under `KNOWLEDGE_BASE_PATH`, splits them into passages, embeds them with the configured `EMBEDDING_PROVIDER`, and stores them in PostgreSQL. Files already indexed are skipped, so it is safe to run again after adding books. A file that cannot be indexed (for example a book over `KNOWLEDGE_BASE_MAX_FILE_SIZE_MB`) is reported and skipped; the rest continue. Do not start it while an upload is incomplete.
 
+Scanned PDFs (pages that are images, with no text layer) are read with OCR on the server while indexing. This takes about 1–2 seconds per page on a laptop and longer on the 1-CPU droplet, so a large scanned book can take an hour or more; run it with `nohup` as above. A scan with more than `OCR_MAX_PAGES` (default 500) scanned pages is skipped with a message: split it into parts of up to 500 pages and under the size limit, then index again. A scan OCR cannot read is listed as `failed` with the reason "No readable text".
+
 To index part of the library first, give one or more `--only` texts that appear in the file paths:
 
 ```bash

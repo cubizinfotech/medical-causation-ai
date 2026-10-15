@@ -23,10 +23,19 @@ export interface OcrDocumentResult {
   warnings: string[];
 }
 
+/** The whole file, for engines that render pages themselves. */
+export interface OcrContext {
+  /** The PDF bytes, when the document is a PDF. */
+  pdf?: Buffer;
+}
+
 export interface IOcrProvider {
   readonly name: string;
   isAvailable(): boolean;
-  recognizePages(pages: OcrPageInput[]): Promise<OcrDocumentResult>;
+  recognizePages(
+    pages: OcrPageInput[],
+    context?: OcrContext,
+  ): Promise<OcrDocumentResult>;
 }
 
 /**

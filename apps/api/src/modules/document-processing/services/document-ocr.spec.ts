@@ -10,6 +10,16 @@ import { MockOcrProvider } from '../ocr/mock-ocr.provider';
 import { DocumentProcessingException } from '../exceptions';
 import { PdfParser } from '../parsers/pdf.parser';
 
+// These tests use the fixed-text OCR stand-in, not Tesseract.
+const savedOcrProvider = process.env.OCR_PROVIDER;
+beforeAll(() => {
+  process.env.OCR_PROVIDER = 'mock';
+});
+afterAll(() => {
+  if (savedOcrProvider === undefined) delete process.env.OCR_PROVIDER;
+  else process.env.OCR_PROVIDER = savedOcrProvider;
+});
+
 describe('DocumentProcessingService OCR and page refs', () => {
   let service: DocumentProcessingService;
   let mockOcr: MockOcrProvider;

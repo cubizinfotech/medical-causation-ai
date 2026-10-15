@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { ProcessedPage } from '../types';
 import { DisabledOcrProvider } from './disabled-ocr.provider';
 import { MockOcrProvider } from './mock-ocr.provider';
+import { TesseractOcrProvider } from './tesseract-ocr.provider';
 import {
   mergeOcrIntoPages,
   type IOcrProvider,
@@ -23,22 +24,25 @@ export class OcrService {
     private readonly configService: ConfigService,
     private readonly mockProvider: MockOcrProvider,
     private readonly disabledProvider: DisabledOcrProvider,
+    private readonly tesseractProvider: TesseractOcrProvider,
   ) {}
 
   getActiveProvider(): IOcrProvider {
     const name = (
-      this.configService.get<string>('ocr.provider') ?? 'mock'
+      this.configService.get<string>('ocr.provider') ?? 'tesseract'
     ).toLowerCase();
     if (name === 'disabled') return this.disabledProvider;
-    return this.mockProvider;
+    if (name === 'mock') return this.mockProvider;
+    return this.tesseractProvider;
   }
 
   /**
    * Recognize text for pages that need OCR. Preserves page numbers from input.
+   * `pdf` is the whole file, which engines that render pages need.
    */
   async recognizeDocumentPages(
     pages: ProcessedPage[],
-    options: { force?: boolean } = {},
+    options: { force?: boolean; pdf?: Buffer } = {},
   ): Promise<{ pages: ProcessedPage[]; ocr: OcrDocumentResult }> {
     const provider = this.getActiveProvider();
     const inputs: OcrPageInput[] = pages.map((page) => ({
@@ -54,7 +58,7 @@ export class OcrService {
     this.logger.log(
       `Running OCR via ${provider.name} for ${pages.length} page(s)`,
     );
-    const ocr = await provider.recognizePages(inputs);
+    const ocr = await provider.recognizePages(inputs, { pdf: options.pdf });
     return { pages: mergeOcrIntoPages(pages, ocr), ocr };
   }
 }

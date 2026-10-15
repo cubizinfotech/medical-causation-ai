@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A file whose text cannot be read (a scan OCR did not read) is now marked `failed` with that reason, instead of `indexed` with 0 passages.
 - `npm run index:kb -- --only <text>` from the repository root ignored `--only` and indexed the whole library: npm read it as its own option. The root script now passes arguments through.
 
+### Added (2026-10-15)
+
+- Scanned library PDFs are now read with OCR while indexing, using the Tesseract engine already used for uploaded medical records (on this server; nothing is sent elsewhere). Before, library indexing only had a placeholder OCR, so scans failed with "No readable text". Pages that already have text are kept; a page OCR cannot read stays empty. `OCR_PROVIDER` (`tesseract` by default, or `disabled`), `OCR_MAX_PAGES` (default 500; a larger scan is skipped with a message to split it), and `OCR_DPI` (default 200).
+
 ### Fixed (2026-10-14): MCA analyses failing with "No retrieved evidence available"
 
 - Library search found nothing for four reasons, all fixed:

@@ -1,4 +1,5 @@
 import type { ProviderConfigSettings } from './ai-config.types';
+import type { OcrSettings } from './ocr.config';
 
 export interface AppSettings {
   name: string;
@@ -249,10 +250,7 @@ export interface RagConfigSettings {
   hnswEfSearch: number;
 }
 
-export interface OcrSettings {
-  provider: 'mock' | 'disabled';
-  autoOcr: boolean;
-}
+export type { OcrSettings };
 
 export interface RootConfig {
   app: AppSettings;
