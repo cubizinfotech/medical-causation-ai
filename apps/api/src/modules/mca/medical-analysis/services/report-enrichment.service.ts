@@ -64,9 +64,11 @@ export class ReportEnrichmentService {
       result.retrievedEvidence.map((item) => [item.chunkId, item]),
     );
 
-    // Record citations appear in the chronology, not as library sources.
+    // Record citations appear in the chronology and PubMed citations under
+    // published literature, not as library sources.
     const libraryCitations = result.citations.filter(
-      (citation) => citation.sourceKind !== 'medical_record',
+      (citation) =>
+        (citation.sourceKind ?? 'knowledge_base') === 'knowledge_base',
     );
     const citedIds = new Set(result.citations.map((c) => c.chunkId));
 

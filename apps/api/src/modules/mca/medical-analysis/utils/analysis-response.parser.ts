@@ -246,5 +246,11 @@ export function parseMedicalAnalysisJson(
     conclusion: output.conclusion ?? '',
     citations: output.citations ?? [],
     literatureSearch: output.literatureSearch,
+    alternativeExplanations: Array.isArray(output.alternativeExplanations)
+      ? output.alternativeExplanations
+      : [],
+    generalMedicalKnowledge: Array.isArray(output.generalMedicalKnowledge)
+      ? output.generalMedicalKnowledge
+      : [],
   };
 }

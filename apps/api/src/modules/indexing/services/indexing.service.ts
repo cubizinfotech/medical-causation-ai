@@ -224,20 +224,29 @@ export class IndexingService implements IIndexingService {
     }
   }
 
+  /**
+   * Embeds chunks that have no vector, or a vector from another provider or
+   * model (after EMBEDDING_PROVIDER or AI_EMBEDDING_MODEL changes). Old
+   * vectors are replaced one batch at a time, so search keeps working while
+   * this runs.
+   */
   async reembedAllMissingEmbeddings(): Promise<IndexDocumentResult[]> {
     const documents = await this.documentRepository.findAllIndexed();
     const results: IndexDocumentResult[] = [];
+    const isCurrent = this.embeddingService.isCurrentEmbedding();
 
     for (const document of documents) {
-      const embeddingCount = await this.embeddingRepository.countForDocument(
-        document.id,
-      );
+      const current =
+        await this.embeddingRepository.findCurrentEmbeddedChunkIds(
+          document.id,
+          isCurrent,
+        );
 
-      if (embeddingCount >= document.chunkCount && embeddingCount > 0) {
+      if (current.size >= document.chunkCount && current.size > 0) {
         continue;
       }
 
-      const result = await this.reembedDocument(document);
+      const result = await this.reembedDocument(document, current);
       results.push(result);
     }
 
@@ -254,6 +263,7 @@ export class IndexingService implements IIndexingService {
     indexedDocument: Awaited<
       ReturnType<IndexedDocumentRepository['findAllIndexed']>
     >[number],
+    embeddedChunkIds: Set<string>,
   ): Promise<IndexDocumentResult> {
     const startTime = Date.now();
     const storedChunks = await this.chunkRepository.findByDocumentId(
@@ -266,9 +276,6 @@ export class IndexingService implements IIndexingService {
         'No stored chunks found for re-embedding',
       );
     }
-
-    const embeddedChunkIds =
-      await this.embeddingRepository.findEmbeddedChunkIds(indexedDocument.id);
 
     const chunksToEmbed = storedChunks.filter(
       (chunk) => !embeddedChunkIds.has(chunk.id),

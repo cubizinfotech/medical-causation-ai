@@ -61,6 +61,22 @@ export class EmbeddingRepository {
     return new Set(rows.map((row) => row.chunkId));
   }
 
+  /** Chunk ids with a vector made by `isCurrent` (provider, model). */
+  async findCurrentEmbeddedChunkIds(
+    documentId: string,
+    isCurrent: (provider: string, model: string) => boolean,
+  ): Promise<Set<string>> {
+    const rows = await this.prisma.chunkEmbedding.findMany({
+      where: { chunk: { documentId } },
+      select: { chunkId: true, provider: true, model: true },
+    });
+    return new Set(
+      rows
+        .filter((row) => isCurrent(row.provider, row.model))
+        .map((row) => row.chunkId),
+    );
+  }
+
   async deleteAll(): Promise<number> {
     const result = await this.prisma.$executeRawUnsafe(
       'DELETE FROM vectors.chunk_embeddings',

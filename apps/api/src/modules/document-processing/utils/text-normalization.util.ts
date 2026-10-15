@@ -1,6 +1,14 @@
 import { CHARS_PER_TOKEN_ESTIMATE } from '../constants';
 
 /**
+ * C0 control characters other than tab, newline, and carriage return. PDFs
+ * sometimes carry NUL among them, which PostgreSQL rejects in text columns.
+ */
+export const CONTROL_CHARACTERS =
+  // eslint-disable-next-line no-control-regex -- matching them is the point
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+/**
  * Normalize whitespace, unicode, line endings, and invisible characters.
  * Preserves paragraph breaks (double newlines).
  */
@@ -11,6 +19,7 @@ export function normalizeText(text: string): string {
     // Normalize line endings
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
+    .replace(CONTROL_CHARACTERS, ' ')
     // Remove zero-width and BOM characters
     .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '')
     // Normalize unicode spaces to regular space

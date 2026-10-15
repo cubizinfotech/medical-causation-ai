@@ -26,9 +26,40 @@ export interface AnalysisCitation {
   citationText: string;
   sourceFile: string;
   /** Absent on older reports, which only cited the knowledge base. */
-  sourceKind?: "knowledge_base" | "medical_record";
+  sourceKind?: "knowledge_base" | "medical_record" | "public_literature";
   /** Set for medical_record citations: the uploaded record to open. */
   recordId?: string;
+  /** Set for public_literature citations: the PubMed page of the study. */
+  url?: string;
+}
+
+/**
+ * What the analysis rests on. knowledge_base: the firm library had enough
+ * relevant passages. The other modes mean the library was supplemented with
+ * PubMed abstracts and labelled general medical knowledge.
+ */
+export type EvidenceBasisMode =
+  | "knowledge_base"
+  | "knowledge_base_and_literature"
+  | "literature"
+  | "general_knowledge";
+
+export interface EvidenceBasis {
+  mode: EvidenceBasisMode;
+  knowledgeBasePassages: number;
+  relevantKnowledgeBasePassages: number;
+  literatureArticles: number;
+  recordEntries: number;
+  usesGeneralKnowledge: boolean;
+  note: string;
+}
+
+export interface AlternativeExplanation {
+  explanation: string;
+  assessment: string;
+  /** cited_evidence: backed by the citations; otherwise AI reasoning. */
+  basis: "cited_evidence" | "general_knowledge";
+  citations: AnalysisCitation[];
 }
 
 export type ChronologyEventType =
@@ -321,6 +352,11 @@ export interface MedicalAnalysisResult {
   limitations: string[];
   conclusion: string;
   citations: AnalysisCitation[];
+  /** Absent on reports saved before these sections existed. */
+  alternativeExplanations?: AlternativeExplanation[];
+  /** AI reasoning from general medical knowledge, not from a cited source. */
+  generalMedicalKnowledge?: string[];
+  evidenceBasis?: EvidenceBasis;
   causationOpinion: string;
   timelineEvents: TimelineEvent[];
   riskFactors: RiskFactor[];

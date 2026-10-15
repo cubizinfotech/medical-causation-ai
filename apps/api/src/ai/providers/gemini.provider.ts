@@ -5,14 +5,33 @@ import type { LlmCompletionRequest, LlmCompletionResponse } from '@ai/types';
 import {
   ProviderUnavailableException,
   RateLimitExceededException,
+  type ProviderFailureKind,
 } from '@ai/exceptions';
 import { BaseLlmProvider } from './base/base-llm.provider';
 import type { LlmRuntimeOptions } from './base/openai-compatible-llm.provider';
 import { createGeminiClient } from '@ai/utils/gemini-client.util';
+import {
+  classifyGeminiError,
+  type GeminiErrorInfo,
+} from '@ai/utils/gemini-errors.util';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/** Overloaded (503) and dropped connections are common and cost nothing to retry once. */
+const MIN_TRANSIENT_ATTEMPTS = 2;
+const MAX_TRANSIENT_DELAY_MS = 5000;
+
+const FAILURE_BY_KIND: Partial<
+  Record<GeminiErrorInfo['kind'], ProviderFailureKind>
+> = {
+  auth: 'auth',
+  permission: 'auth',
+  not_found: 'not_found',
+  invalid_request: 'invalid_request',
+  timeout: 'timeout',
+};
 
 export class GeminiProvider extends BaseLlmProvider {
   readonly name = LLM_PROVIDERS.GEMINI;
@@ -46,9 +65,9 @@ export class GeminiProvider extends BaseLlmProvider {
       }));
 
     const ai = createGeminiClient(this.settings.apiKey);
-    let lastError: Error | null = null;
+    const configuredAttempts = Math.max(1, this.runtime.maxRetries);
 
-    for (let attempt = 1; attempt <= this.runtime.maxRetries; attempt++) {
+    for (let attempt = 1; ; attempt++) {
       try {
         const response = await ai.models.generateContent({
           model,
@@ -63,11 +82,17 @@ export class GeminiProvider extends BaseLlmProvider {
         });
 
         const usage = response.usageMetadata;
+        // MAX_TOKENS means the answer was cut off; callers use this to
+        // shorten the request instead of resending the same one.
+        const finishReason =
+          response.candidates?.[0]?.finishReason ??
+          response.promptFeedback?.blockReason;
 
         return {
           content: response.text ?? '',
           model: response.modelVersion ?? model,
           provider: this.name,
+          finishReason: finishReason ? String(finishReason) : undefined,
           usage: {
             promptTokens: usage?.promptTokenCount ?? 0,
             completionTokens: usage?.candidatesTokenCount ?? 0,
@@ -76,35 +101,48 @@ export class GeminiProvider extends BaseLlmProvider {
           executionTimeMs: Date.now() - startTime,
         };
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        const message = lastError.message.toLowerCase();
-        const isRateLimit =
-          message.includes('429') || message.includes('rate limit');
+        const info = classifyGeminiError(error);
+        const attempts =
+          info.kind === 'server' || info.kind === 'network'
+            ? Math.max(configuredAttempts, MIN_TRANSIENT_ATTEMPTS)
+            : configuredAttempts;
 
-        if (attempt < this.runtime.maxRetries) {
-          const delay = isRateLimit
-            ? this.runtime.retryDelayMs * attempt * 2
-            : this.runtime.retryDelayMs * attempt;
-
+        if (info.retryable && attempt < attempts) {
+          const delay =
+            info.retryAfterMs ??
+            (info.kind === 'rate_limit'
+              ? this.runtime.retryDelayMs * attempt * 2
+              : Math.min(
+                  this.runtime.retryDelayMs * attempt,
+                  MAX_TRANSIENT_DELAY_MS,
+                ));
           this.logger.warn(
-            `Gemini request failed, retrying in ${delay}ms (attempt ${attempt}/${this.runtime.maxRetries}): ${lastError.message}`,
+            `Gemini ${info.kind}${info.status ? ` (${info.status})` : ''} on attempt ${attempt}/${attempts}; retrying in ${delay}ms: ${info.detail}`,
           );
           await sleep(delay);
           continue;
         }
 
-        if (isRateLimit) {
-          throw new RateLimitExceededException(
-            this.name,
-            this.runtime.retryDelayMs * attempt * 2,
-          );
-        }
+        this.logger.warn(
+          `Gemini request failed: ${info.kind}${info.status ? ` (${info.status})` : ''}: ${info.detail}`,
+        );
+        throw this.toException(info, attempt);
       }
     }
+  }
 
-    throw new ProviderUnavailableException(
+  private toException(info: GeminiErrorInfo, attempt: number): Error {
+    if (info.kind === 'rate_limit' || info.kind === 'quota') {
+      return new RateLimitExceededException(
+        this.name,
+        info.retryAfterMs ?? this.runtime.retryDelayMs * attempt * 2,
+        info.kind === 'quota',
+      );
+    }
+    return new ProviderUnavailableException(
       this.name,
-      lastError?.message ?? 'Unknown Gemini error',
+      info.detail,
+      FAILURE_BY_KIND[info.kind] ?? 'unavailable',
     );
   }
 }

@@ -24,6 +24,7 @@ import { Progress } from "@/components/ui/progress";
 import { ANALYSIS_PROGRESS_STEPS } from "@/features/mca/demo/constants";
 import { useMedicalAnalysisJob } from "@/features/mca/demo/hooks/use-medical-analysis-job";
 import { medicalAnalysisClient } from "@/features/mca/medical-analysis/medical-analysis.service";
+import { analysisFailureMessage } from "@/features/mca/medical-analysis/failure-message";
 import type { AnalysisHistoryDetail } from "@/features/mca/medical-analysis/history.types";
 import { formatReportDate } from "@/utils/format-date";
 
@@ -150,11 +151,10 @@ export default function HistoryDetailView({ id }: { id: string }) {
       return "This case finished successfully. The full report is below.";
     }
     if (isFailed) {
-      return (
-        jobError?.message ??
-        job?.error ??
-        history?.errorMessage ??
-        "The analysis could not be completed."
+      return analysisFailureMessage(
+        jobError?.message,
+        job?.error,
+        history?.errorMessage,
       );
     }
     if (processing) {

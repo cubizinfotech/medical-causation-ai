@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Worker } from 'bullmq';
 import { RedisService } from '@redis/redis.service';
+import { describeAiFailure, describeError } from '@ai/utils';
 import { QUEUE_PREFIXES } from '@platform/jobs/job.types';
 import { workerOptions } from '@platform/jobs/worker-options';
 import { EWI_INVESTIGATION_QUEUE_NAME } from './ewi-investigation-job.constants';
@@ -16,6 +17,20 @@ import {
   ExpertInvestigationService,
   InvestigationCancelledError,
 } from '../services/expert-investigation.service';
+
+/** What the attorney is told when an investigation job fails. */
+export function describeInvestigationFailure(error: unknown): {
+  code: string;
+  message: string;
+} {
+  return (
+    describeAiFailure(error, 'the investigation') ?? {
+      code: 'INVESTIGATION_FAILED',
+      message:
+        'Something went wrong and the investigation did not complete. Please run it again. If it keeps happening, contact support.',
+    }
+  );
+}
 
 @Injectable()
 export class EwiInvestigationProcessor
@@ -45,7 +60,7 @@ export class EwiInvestigationProcessor
     this.worker.on('failed', (job, error) => {
       if (error instanceof InvestigationCancelledError) return;
       this.logger.error(
-        `EWI job ${job?.id ?? 'unknown'} failed: ${error.message}`,
+        `EWI job ${job?.id ?? 'unknown'} failed: ${describeError(error)}`,
       );
     });
 
@@ -91,9 +106,12 @@ export class EwiInvestigationProcessor
         this.logger.log(`EWI investigation job ${jobId} cancelled`);
         return;
       }
-      const message =
-        error instanceof Error ? error.message : 'Unknown investigation error';
-      await this.jobService.markFailed(jobId, message);
+      // The attorney sees a plain explanation; the log keeps the detail.
+      const failure = describeInvestigationFailure(error);
+      this.logger.error(
+        `EWI investigation job ${jobId} failed (${failure.code}): ${describeError(error)}`,
+      );
+      await this.jobService.markFailed(jobId, failure.message);
       throw error;
     }
   }

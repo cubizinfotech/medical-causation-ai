@@ -1,14 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '@ai/services';
-import { BACKGROUND_RATE_LIMIT_RETRY, retryOnRateLimit } from '@ai/utils';
+import {
+  BACKGROUND_RATE_LIMIT_RETRY,
+  describeError,
+  retryOnRateLimit,
+} from '@ai/utils';
 import { RetrievalService } from '@modules/rag/services';
+import type { RetrievalRequest, RetrievalResult } from '@modules/rag/types';
 import type { IMedicalAnalysisService, AnalyzeOptions } from '../interfaces';
 import type {
+  AnalysisPromptMode,
   MedicalAnalysisRequest,
   MedicalAnalysisResult,
   MedicalChronology,
   MedicalSpecials,
 } from '../types';
+import { ANALYSIS_MAX_OUTPUT_TOKENS } from '../constants';
+import {
+  buildEvidenceBasis,
+  capUncitedConfidence,
+  libraryIsSufficient,
+} from './evidence-basis.helpers';
+import type { CaseLiteratureResult } from './case-literature.service';
 import type { LoadedCaseRecord } from '../records/case-record.types';
 import { findDefenseIssues } from '../records/defense-issues';
 import {
@@ -17,7 +30,11 @@ import {
 } from '../jobs/medical-analysis-job.constants';
 import type { AnalysisJobStep } from '../jobs/medical-analysis-job.constants';
 import { MedicalQueryBuilder, AnalysisPromptBuilder } from '../builders';
-import { AnalysisResponseMapper, AnalysisSafetyValidator } from '../validators';
+import {
+  AnalysisResponseMapper,
+  AnalysisSafetyValidator,
+  verifiedReferencesFrom,
+} from '../validators';
 import { ReportEnrichmentService } from './report-enrichment.service';
 import { CaseLiteratureService } from './case-literature.service';
 import { CaseRecordsService } from '../records/case-records.service';
@@ -30,7 +47,9 @@ import type { LlmCompletionResponse } from '@ai/types';
 
 /**
  * Single entry point for AI medical causation analysis.
- * MUST use RAG retrieval — never bypasses the knowledge base.
+ * Always searches the firm library first. When it has too little relevant
+ * material, the analysis is supplemented with PubMed abstracts and labelled
+ * general medical knowledge instead of failing.
  */
 @Injectable()
 export class MedicalAnalysisService implements IMedicalAnalysisService {
@@ -38,6 +57,8 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
   private static readonly MAX_COMPLETION_ATTEMPTS = 3;
   private static readonly JSON_RETRY_INSTRUCTION =
     '\n\nCORRECTION: Your previous response was not valid JSON. Return ONLY a single raw JSON object matching the schema. Do not include markdown fences, explanations, or reasoning tags.';
+  private static readonly TRUNCATED_RETRY_INSTRUCTION =
+    '\n\nCORRECTION: Your previous response was cut off because it was too long. Return the same JSON schema, shorter: at most 6 items in each evidence list, excerpts under 30 words, reasoning under 50 words per item, and aiReasoning under 250 words.';
 
   constructor(
     private readonly retrievalService: RetrievalService,
@@ -71,8 +92,9 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       });
     };
 
+    // Case details stay out of the logs.
     this.logger.log(
-      `Starting medical analysis for question: "${request.medicalQuestion.slice(0, 80)}..."`,
+      `Starting medical analysis (${request.recordIds?.length ?? 0} record(s) attached)`,
     );
 
     await report(ANALYSIS_JOB_STEPS.INTAKE, 10, 'Preparing medical case…');
@@ -95,14 +117,35 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       'Searching private knowledge base…',
     );
 
-    const retrieval = await this.retrievalService.retrieve(retrievalRequest);
+    const retrieval = await this.retrieveLibrary(retrievalRequest);
+    const promptMode: AnalysisPromptMode = libraryIsSufficient(retrieval)
+      ? 'library'
+      : 'supplemented';
 
-    this.safetyValidator.validateRetrievalHasContext(retrieval);
+    // Too little in the library: look for published studies before the AI
+    // call, so their abstracts can be cited. Never throws.
+    let prefetchedLiterature: CaseLiteratureResult | undefined;
+    if (promptMode === 'supplemented') {
+      this.logger.log(
+        `Library coverage is limited (${retrieval.coverage?.relevantChunkCount ?? 0} relevant passage(s), search=${retrieval.coverage?.searchMode ?? 'hybrid'}); supplementing the analysis`,
+      );
+      await report(
+        ANALYSIS_JOB_STEPS.PUBLIC_LIT,
+        41,
+        'Few matching library sources — searching published studies (PubMed)…',
+      );
+      prefetchedLiterature = await this.caseLiterature.research(
+        request,
+        await this.caseLiterature.suggestSearch(request),
+      );
+    }
 
     await report(
       ANALYSIS_JOB_STEPS.EVIDENCE,
       45,
-      'Ranking medical sources and building context…',
+      promptMode === 'library'
+        ? 'Ranking medical sources and building context…'
+        : 'Combining library sources, published studies, and case records…',
     );
 
     const builtPrompts = await this.promptBuilder.build(
@@ -111,6 +154,7 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       chronology,
       this.caseRecords.chronologySettings.chronologyPromptChars,
       defenseIssues,
+      { mode: promptMode, literature: prefetchedLiterature?.references },
     );
     const citationMap = new Map(
       builtPrompts.citationCatalog.map((c) => [c.chunkId, c]),
@@ -120,7 +164,7 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
     await report(
       ANALYSIS_JOB_STEPS.REASONING,
       62,
-      'Analyzing medical literature with AI…',
+      'Analyzing the medical evidence with AI…',
     );
 
     const llmResult = await this.completeWithCitationValidation({
@@ -129,18 +173,32 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       allowedChunkIds,
       citationMap,
     });
+    // Links, PMIDs, and DOIs the model wrote that are not among the sources
+    // it was given are removed before anything is saved.
+    const scrubbed = this.safetyValidator.scrubFreeText(
+      llmResult.llmOutput,
+      verifiedReferencesFrom(builtPrompts.citationCatalog),
+    );
+    if (scrubbed.removed > 0) {
+      this.logger.warn(
+        `Removed ${scrubbed.removed} unverified link(s) or identifier(s) from the analysis text`,
+      );
+    }
 
     // Uses the search terms the analysis just suggested. Never throws: a
     // failed search is reported in the result, not as a failed analysis.
-    await report(
-      ANALYSIS_JOB_STEPS.PUBLIC_LIT,
-      74,
-      'Searching public medical literature (PubMed)…',
-    );
-    const literature = await this.caseLiterature.research(
-      request,
-      llmResult.llmOutput.literatureSearch,
-    );
+    let literature = prefetchedLiterature;
+    if (!literature) {
+      await report(
+        ANALYSIS_JOB_STEPS.PUBLIC_LIT,
+        74,
+        'Searching public medical literature (PubMed)…',
+      );
+      literature = await this.caseLiterature.research(
+        request,
+        scrubbed.output.literatureSearch,
+      );
+    }
 
     await report(
       ANALYSIS_JOB_STEPS.SUMMARY,
@@ -148,16 +206,38 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       'Generating statistical summary and citations…',
     );
 
+    const mapped = this.responseMapper.mapToResult({
+      request,
+      llmOutput: scrubbed.output,
+      citationMap,
+      retrieval,
+      analysisExecutionTimeMs: Date.now() - analysisStart,
+      llmProvider: llmResult.llmResponse.provider,
+      llmModel: llmResult.llmResponse.model,
+    });
+    const evidenceBasis = buildEvidenceBasis({
+      promptMode,
+      retrieval,
+      offered: builtPrompts.offered ?? {
+        libraryPassages: retrieval.chunks.length,
+        literatureArticles: 0,
+        recordEntries: 0,
+      },
+      result: mapped,
+      literature: literature.summary,
+    });
+
+    const capped = capUncitedConfidence(mapped, evidenceBasis);
     const result = this.reportEnrichment.enrich(
-      this.responseMapper.mapToResult({
-        request,
-        llmOutput: llmResult.llmOutput,
-        citationMap,
-        retrieval,
-        analysisExecutionTimeMs: Date.now() - analysisStart,
-        llmProvider: llmResult.llmResponse.provider,
-        llmModel: llmResult.llmResponse.model,
-      }),
+      {
+        ...capped,
+        evidenceBasis,
+        // Passages the analysis was given, not every passage searched.
+        metadata: {
+          ...capped.metadata,
+          chunkCount: evidenceBasis.knowledgeBasePassages,
+        },
+      },
       request,
       literature,
       chronology,
@@ -172,11 +252,52 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
     );
 
     this.logger.log(
-      `Analysis complete: confidence=${result.confidenceScore.score}, ` +
+      `Analysis complete: basis=${evidenceBasis.mode}, confidence=${result.confidenceScore.score}, ` +
         `chunks=${result.metadata.chunkCount}, citations=${result.citations.length}`,
     );
 
     return result;
+  }
+
+  /**
+   * Searches the firm library. A failed search (database or embedding
+   * problem) is treated as an empty result: the analysis continues with
+   * other sources rather than failing.
+   */
+  private async retrieveLibrary(
+    retrievalRequest: RetrievalRequest,
+  ): Promise<RetrievalResult> {
+    try {
+      return await this.retrievalService.retrieve(retrievalRequest);
+    } catch (error) {
+      this.logger.warn(
+        `Library search failed; continuing without library passages: ${describeError(error)}`,
+      );
+      return {
+        question: retrievalRequest.question,
+        chunks: [],
+        context: {
+          contextText: '',
+          citations: [],
+          chunkCount: 0,
+          estimatedTokens: 0,
+          truncated: false,
+        },
+        executionTimeMs: 0,
+        embeddingProvider: 'none',
+        embeddingModel: 'none',
+        strategy: 'hybrid',
+        reranker: 'none',
+        coverage: {
+          searchMode: 'keyword_only',
+          vectorSkipReason: 'embedding_failed',
+          relevantChunkCount: 0,
+          topSimilarity: 0,
+          relevanceThreshold: 0,
+          sufficient: false,
+        },
+      };
+    }
   }
 
   /** Reads uploaded records into a cited chronology (steps 15–34%). */
@@ -297,17 +418,24 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
             ],
             metadata: { responseFormat: 'json' },
             temperature: 0.2,
+            maxTokens: ANALYSIS_MAX_OUTPUT_TOKENS,
           }),
         BACKGROUND_RATE_LIMIT_RETRY,
       );
+      // A cut-off answer is not fixed by sending the same prompt again.
+      const truncated = /max_tokens|^length$/i.test(
+        llmResponse.finishReason ?? '',
+      );
+      const correction = truncated
+        ? MedicalAnalysisService.TRUNCATED_RETRY_INSTRUCTION
+        : MedicalAnalysisService.JSON_RETRY_INSTRUCTION;
 
       if (!llmResponse.content?.trim()) {
         if (attempt < MedicalAnalysisService.MAX_COMPLETION_ATTEMPTS - 1) {
           this.logger.warn(
-            `Empty LLM response on attempt ${attempt + 1}, retrying`,
+            `Empty LLM response on attempt ${attempt + 1} (finish=${llmResponse.finishReason ?? 'unknown'}), retrying`,
           );
-          userPrompt =
-            params.userPrompt + MedicalAnalysisService.JSON_RETRY_INSTRUCTION;
+          userPrompt = params.userPrompt + correction;
           continue;
         }
         throw new AnalysisResponseParseError('LLM returned an empty response');
@@ -316,16 +444,21 @@ export class MedicalAnalysisService implements IMedicalAnalysisService {
       let llmOutput: MedicalAnalysisLlmOutput;
       try {
         llmOutput = parseMedicalAnalysisJson(llmResponse.content);
+        // A report without its reasoning is incomplete, not a success.
+        if (!llmOutput.aiReasoning?.trim()) {
+          throw new AnalysisResponseParseError(
+            'LLM response is missing aiReasoning',
+          );
+        }
       } catch (error) {
         if (
           attempt < MedicalAnalysisService.MAX_COMPLETION_ATTEMPTS - 1 &&
           error instanceof AnalysisResponseParseError
         ) {
           this.logger.warn(
-            `JSON parse failed on attempt ${attempt + 1}: ${error.message}`,
+            `JSON parse failed on attempt ${attempt + 1}${truncated ? ' (answer was cut off)' : ''}: ${error.message}`,
           );
-          userPrompt =
-            params.userPrompt + MedicalAnalysisService.JSON_RETRY_INSTRUCTION;
+          userPrompt = params.userPrompt + correction;
           continue;
         }
         throw error;

@@ -26,8 +26,8 @@ export const BACKGROUND_RATE_LIMIT_RETRY: RateLimitRetryOptions = {
 /**
  * Runs an AI call; after a rate-limit error, waits the time the provider
  * asked for (at most maxWaitMs) and tries again, up to `attempts` tries in
- * total (default 2). Other errors, and the last rate-limit error, are thrown
- * to the caller.
+ * total (default 2). Other errors, an exhausted daily quota, and the last
+ * rate-limit error are thrown to the caller.
  */
 export async function retryOnRateLimit<T>(
   call: () => Promise<T>,
@@ -39,7 +39,7 @@ export async function retryOnRateLimit<T>(
       return await call();
     } catch (error) {
       if (!(error instanceof RateLimitExceededException)) throw error;
-      if (attempt >= attempts) throw error;
+      if (error.quotaExhausted || attempt >= attempts) throw error;
       const wait = Math.min(
         error.retryAfterMs ?? DEFAULT_WAIT_MS,
         options.maxWaitMs ?? 10_000,

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { describeError } from '@ai/utils';
 import type { RagConfigSettings } from '@config/config.types';
 import { KNOWLEDGE_SOURCE_TYPES, RETRIEVAL_STRATEGIES } from '../constants';
 import type { IKnowledgeRetriever } from '../interfaces';
@@ -15,12 +16,18 @@ export class VectorRetriever {
   async retrieve(
     query: RetrievalQuery,
     minSimilarity: number,
+    efSearch: number,
   ): Promise<ChunkSearchRow[]> {
+    if (!query.embedding?.length || !query.embeddingSpace?.models.length) {
+      return [];
+    }
     return this.chunkSearch.searchByVector(
       query.embedding,
+      query.embeddingSpace,
       query.filters,
       query.topK,
       minSimilarity,
+      efSearch,
     );
   }
 }
@@ -31,7 +38,7 @@ export class KeywordRetriever {
 
   async retrieve(query: RetrievalQuery): Promise<ChunkSearchRow[]> {
     return this.chunkSearch.searchByKeyword(
-      query.queryText,
+      query.keywordQuery,
       query.filters,
       query.topK,
     );
@@ -56,10 +63,19 @@ export class HybridKnowledgeBaseRetriever implements IKnowledgeRetriever {
 
   async retrieve(query: RetrievalQuery): Promise<RetrievedChunk[]> {
     const [vectorRows, keywordRows] = await Promise.all([
-      this.vectorRetriever.retrieve(
-        { ...query, topK: this.config.vectorTopK },
-        this.config.minSimilarityScore,
-      ),
+      this.vectorRetriever
+        .retrieve(
+          { ...query, topK: this.config.vectorTopK },
+          this.config.minSimilarityScore,
+          this.config.hnswEfSearch,
+        )
+        .catch((error: unknown) => {
+          // e.g. stored vectors of another size: keyword results still help.
+          this.logger.warn(
+            `Vector search failed; using keyword results only: ${describeError(error)}`,
+          );
+          return [] as ChunkSearchRow[];
+        }),
       this.keywordRetriever.retrieve({
         ...query,
         topK: this.config.keywordTopK,

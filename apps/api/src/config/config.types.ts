@@ -238,6 +238,15 @@ export interface RagConfigSettings {
   minSimilarityScore: number;
   rrfK: number;
   defaultReranker: string;
+  /**
+   * Similarity at which a passage counts as relevant to the case. Unset:
+   * a default for the embedding model (scores differ widely by model).
+   */
+  relevanceMinSimilarity?: number;
+  /** Relevant passages needed before the library alone backs an analysis. */
+  minRelevantChunks: number;
+  /** HNSW candidates examined per vector search (pgvector hnsw.ef_search). */
+  hnswEfSearch: number;
 }
 
 export interface OcrSettings {

@@ -8,3 +8,4 @@ export {
   ConfigurationErrorException,
   NotImplementedException,
 } from './ai.exceptions';
+export type { ProviderFailureKind } from './ai.exceptions';

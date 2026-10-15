@@ -121,9 +121,48 @@ export interface AnalysisCitation {
   citationText: string;
   sourceFile: string;
   /** Absent on older reports, which only cited the knowledge base. */
-  sourceKind?: 'knowledge_base' | 'medical_record';
+  sourceKind?: 'knowledge_base' | 'medical_record' | 'public_literature';
   /** Set for medical_record citations: the uploaded record to open. */
   recordId?: string;
+  /** Set for public_literature citations: the PubMed page of the study. */
+  url?: string;
+}
+
+/**
+ * What the analysis rests on. knowledge_base: the firm library had enough
+ * relevant passages. Otherwise the library was supplemented with PubMed
+ * abstracts and, where no source covers a point, the model's general medical
+ * knowledge, which the report labels as such.
+ */
+export type EvidenceBasisMode =
+  | 'knowledge_base'
+  | 'knowledge_base_and_literature'
+  | 'literature'
+  | 'general_knowledge';
+
+export interface EvidenceBasis {
+  mode: EvidenceBasisMode;
+  /** Library passages offered to the model. */
+  knowledgeBasePassages: number;
+  /** Library passages that matched the case closely. */
+  relevantKnowledgeBasePassages: number;
+  /** PubMed abstracts offered to the model as citable evidence. */
+  literatureArticles: number;
+  /** Entries from the client's records offered to the model. */
+  recordEntries: number;
+  /** The model was allowed to reason from general medical knowledge. */
+  usesGeneralKnowledge: boolean;
+  /** One or two sentences for the report. */
+  note: string;
+}
+
+/** Another cause that could explain the condition, and how it was weighed. */
+export interface AlternativeExplanation {
+  explanation: string;
+  assessment: string;
+  /** cited_evidence: backed by the citations listed; otherwise AI reasoning. */
+  basis: 'cited_evidence' | 'general_knowledge';
+  citations: AnalysisCitation[];
 }
 
 export type ChronologyEventType =
@@ -256,6 +295,14 @@ export interface MedicalAnalysisLlmOutput {
   }>;
   /** Suggested PubMed search; validated before use, may be absent. */
   literatureSearch?: unknown;
+  alternativeExplanations?: Array<{
+    explanation: string;
+    assessment: string;
+    basis?: string;
+    chunkIds?: string[];
+  }>;
+  /** Statements from general medical knowledge, not from a provided source. */
+  generalMedicalKnowledge?: string[];
 }
 
 export interface BaseMedicalAnalysisResult {
@@ -271,6 +318,11 @@ export interface BaseMedicalAnalysisResult {
   limitations: string[];
   conclusion: string;
   citations: AnalysisCitation[];
+  /** Absent on reports saved before these sections existed. */
+  alternativeExplanations?: AlternativeExplanation[];
+  /** AI reasoning from general medical knowledge, not from cited sources. */
+  generalMedicalKnowledge?: string[];
+  evidenceBasis?: EvidenceBasis;
   metadata: {
     retrievalExecutionTimeMs: number;
     analysisExecutionTimeMs: number;
@@ -430,9 +482,23 @@ export interface MedicalAnalysisResult extends BaseMedicalAnalysisResult {
   };
 }
 
+/**
+ * library: the firm library had enough relevant passages, and the model may
+ * use only the provided evidence. supplemented: library passages are
+ * supplemented with PubMed abstracts and labelled general medical knowledge.
+ */
+export type AnalysisPromptMode = 'library' | 'supplemented';
+
 export interface BuiltAnalysisPrompts {
   systemPrompt: string;
   userPrompt: string;
   allowedChunkIds: string[];
   citationCatalog: AnalysisCitation[];
+  mode?: AnalysisPromptMode;
+  /** What the prompt offered the model, for the report's evidence basis. */
+  offered?: {
+    libraryPassages: number;
+    literatureArticles: number;
+    recordEntries: number;
+  };
 }

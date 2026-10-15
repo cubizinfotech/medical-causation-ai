@@ -1,0 +1,16 @@
+Write a PubMed search for published studies on this medical causation question.
+
+Question: {{medicalQuestion}}
+Injury, trauma, or exposure: {{injury}}
+Diagnosis: {{diagnosis}}
+
+Return only a JSON object:
+{
+  "exposureTerms": ["1 to 3 standard medical names for the injury, trauma, or exposure, e.g. traumatic brain injury"],
+  "outcomeTerms": ["1 to 3 standard medical names for the claimed condition, e.g. ischemic stroke"],
+  "queries": ["2 or 3 plain-English PubMed queries of 3 to 7 words that name the relationship, most specific first, e.g. stroke risk after traumatic brain injury"]
+}
+
+Rules:
+- Use only medical concepts: never the patient's age, sex, dates, names, employers, or places.
+- Keep queries short (PubMed requires every word to match). No quotation marks, field tags, or AND/OR.

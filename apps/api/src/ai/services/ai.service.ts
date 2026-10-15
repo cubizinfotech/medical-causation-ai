@@ -15,7 +15,7 @@ import type {
   EmbeddingRequest,
   EmbeddingResponse,
 } from '@ai/types';
-import { estimateTokenCount } from '@ai/utils';
+import { describeError, estimateTokenCount } from '@ai/utils';
 import { PromptService } from './prompt.service';
 
 /**
@@ -46,6 +46,18 @@ export class AiService {
    */
   getActiveEmbeddingProvider(): IEmbeddingProvider {
     return this.embeddingProviderFactory.getActiveProvider();
+  }
+
+  /**
+   * The provider and model new embeddings are made with. Stored vectors are
+   * only comparable with a query embedded by the same pair.
+   */
+  getActiveEmbeddingTarget(): { provider: string; model: string } {
+    const provider = this.embeddingProviderFactory.getActiveProvider();
+    return {
+      provider: provider.name,
+      model: this.embeddingProviderFactory.resolveModel(provider),
+    };
   }
 
   /**
@@ -82,7 +94,7 @@ export class AiService {
       const fallback = this.fallbackFor(error);
       if (!fallback) throw error;
       this.logger.warn(
-        `${primary.name} refused the request (${error instanceof Error ? error.message : String(error)}); using fallback provider ${fallback.name}`,
+        `${primary.name} refused the request (${describeError(error)}); using fallback provider ${fallback.name}`,
       );
       // options.model names a model of the primary provider, so the
       // fallback uses its own configured model.

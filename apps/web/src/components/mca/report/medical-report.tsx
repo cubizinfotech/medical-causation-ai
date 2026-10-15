@@ -10,13 +10,16 @@ import {
   Download,
   FileText,
   Gavel,
+  GitCompare,
   Globe,
+  Layers,
   Loader2,
   Printer,
   Receipt,
   Scale,
   Shield,
   ShieldAlert,
+  Sparkles,
   Stethoscope,
 } from "lucide-react";
 import type { MedicalAnalysisResult } from "@/features/mca/medical-analysis/types";
@@ -33,7 +36,12 @@ import { PublicLiteratureSection } from "@/components/mca/report/public-literatu
 import { MedicalChronologySection } from "@/components/mca/report/medical-chronology-section";
 import { DefenseIssuesSection } from "@/components/mca/report/defense-issues-section";
 import { MedicalSpecialsSection } from "@/components/mca/report/medical-specials-section";
-import { RecordPageLink } from "@/components/mca/report/record-page-link";
+import {
+  AlternativeExplanationsList,
+  CitationSource,
+  EvidenceBasisSection,
+  GeneralKnowledgeList,
+} from "@/components/mca/report/evidence-basis-section";
 import { formatReportDate } from "@/utils/format-date";
 
 function SectionCard({
@@ -163,6 +171,12 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
           </CardContent>
         </Card>
 
+        {result.evidenceBasis ? (
+          <SectionCard icon={Layers} title="Evidence Basis">
+            <EvidenceBasisSection basis={result.evidenceBasis} />
+          </SectionCard>
+        ) : null}
+
         <SectionCard icon={Scale} title="Confidence Score">
           <div className="space-y-4">
             <div className="flex items-center justify-between text-sm">
@@ -232,6 +246,18 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
             </div>
           ) : null}
         </SectionCard>
+
+        {result.alternativeExplanations ? (
+          <SectionCard icon={GitCompare} title="Alternative Explanations">
+            <AlternativeExplanationsList items={result.alternativeExplanations} />
+          </SectionCard>
+        ) : null}
+
+        {result.generalMedicalKnowledge?.length ? (
+          <SectionCard icon={Sparkles} title="Uncited AI Reasoning">
+            <GeneralKnowledgeList statements={result.generalMedicalKnowledge} />
+          </SectionCard>
+        ) : null}
 
         <SectionCard icon={Calendar} title="Timeline of Events">
           <ol className="space-y-4">
@@ -435,23 +461,7 @@ function EvidenceList({
         >
           <p className="leading-relaxed">{item.excerpt}</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            {item.citation.sourceKind === "medical_record" &&
-            item.citation.recordId &&
-            item.citation.pageNumber ? (
-              <RecordPageLink
-                recordId={item.citation.recordId}
-                pageNumber={item.citation.pageNumber}
-              >
-                {item.citation.documentName} · Page {item.citation.pageNumber}
-              </RecordPageLink>
-            ) : (
-              <>
-                {item.citation.documentName}
-                {item.citation.pageNumber
-                  ? ` · Page ${item.citation.pageNumber}`
-                  : ""}
-              </>
-            )}
+            <CitationSource citation={item.citation} />
           </p>
           <p className="mt-2 text-muted-foreground">{item.reasoning}</p>
         </li>

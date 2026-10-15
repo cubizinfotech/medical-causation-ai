@@ -18,9 +18,10 @@ Analyze the following medical causation research question using ONLY the evidenc
 Use the client's medical records to establish the facts of this case: the dates of injury and symptom onset, documented diagnoses, treatment, and any prior conditions. Use the retrieved literature for the medical science. Cite record entries by their rec-N ids and literature passages by their chunkIds. If the records and the case context disagree, say so.
 
 Apply accepted medical causation principles:
-1. Temporal relationship between trauma and condition onset
+1. Temporal relationship between trauma and condition onset (necessary, but never sufficient on its own)
 2. Biological plausibility of the causal mechanism
 3. Strength of epidemiological evidence in the retrieved literature
-4. Consideration of alternative causes, including prior conditions documented in the records
+4. Consideration of alternative causes, including prior conditions documented in the records, listed in alternativeExplanations
+5. What the retrieved evidence cannot establish, stated in limitations
 
 Evaluate each piece of evidence and classify it as supporting, opposing, neutral, or unknown relative to the medical question.

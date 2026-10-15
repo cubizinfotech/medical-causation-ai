@@ -99,7 +99,9 @@ MCA and EWI never import each other; both use `platform/` and the shared library
 | `npm run validate` | Lint, type check, tests, and build (the same checks CI runs) |
 | `npm test` | API unit tests (`npm test --workspace=web` for the website) |
 | `npm run prisma:migrate` | Apply new database migrations |
-| `npm run reembed:kb:full` | Rebuild the library search index from `knowledge-base/` |
+| `npm run index:kb` | Index new or changed files in `knowledge-base/` for the library search |
+| `npm run reembed:kb` | Re-embed the indexed library after changing the embedding provider or model (replaces old vectors in place) |
+| `npm run check:retrieval` | Run sample library searches and show how well the library covers them |
 | `npm run seed:demo-users` | The 2 default sign-ins (gopalhingu123, dcs) |
 | `npm run user:create -- <email> <role> "<Name>"` | Create a real account |
 

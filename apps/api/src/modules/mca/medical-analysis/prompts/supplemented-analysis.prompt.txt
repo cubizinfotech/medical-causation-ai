@@ -1,0 +1,30 @@
+Analyze the following medical causation research question. {{coverageNote}}
+
+## Medical Question
+{{medicalQuestion}}
+
+## Patient / Case Context
+{{caseContext}}
+
+## Client Medical Records (facts of this case)
+{{recordsContext}}
+
+## Firm Library Passages
+{{retrievedContext}}
+
+## Published Studies (PubMed abstracts)
+{{literatureContext}}
+
+## Citation Catalog (cite these ids only)
+{{citationCatalog}}
+
+Use the client's medical records and the case context to establish the facts of this case: the dates of injury and symptom onset, documented diagnoses, treatment, and any prior conditions or risk factors. Use the library passages and published studies as cited evidence for the medical science; an abstract supports only what it states. Where they do not cover a point your reasoning needs, you may use general medical knowledge and must list it in generalMedicalKnowledge. If the records and the case context disagree, say so.
+
+Apply accepted medical causation principles:
+1. Temporal relationship between trauma and condition onset (necessary, but never sufficient on its own)
+2. Biological plausibility of the causal mechanism
+3. Strength and type of the evidence (study design, size, consistency), and whether it applies to this patient and this injury
+4. Alternative causes, including prior conditions and risk factors in the case details or records, listed in alternativeExplanations
+5. What the available evidence cannot establish, stated in limitations
+
+Classify each provided source you rely on as supporting, opposing, neutral, or unknown relative to the medical question.

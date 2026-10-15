@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiService } from '@ai/services';
+import { sameEmbeddingModel } from '@ai/utils';
 import type { IndexingConfigSettings } from '@config/config.types';
 import type { ChunkDraft } from '../types';
 
@@ -18,6 +19,13 @@ export class IndexingEmbeddingService {
 
   private get config(): IndexingConfigSettings {
     return this.configService.get<IndexingConfigSettings>('indexing')!;
+  }
+
+  /** True when a stored vector was made by the configured provider and model. */
+  isCurrentEmbedding(): (provider: string, model: string) => boolean {
+    const target = this.aiService.getActiveEmbeddingTarget();
+    return (provider, model) =>
+      provider === target.provider && sameEmbeddingModel(model, target.model);
   }
 
   async embedChunks(chunks: ChunkDraft[]): Promise<

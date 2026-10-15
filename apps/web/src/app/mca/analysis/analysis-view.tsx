@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ANALYSIS_PROGRESS_STEPS } from "@/features/mca/demo/constants";
 import { useMedicalAnalysisJob } from "@/features/mca/demo/hooks/use-medical-analysis-job";
+import { analysisFailureMessage } from "@/features/mca/medical-analysis/failure-message";
 import {
   loadCaseForm,
   loadActiveAnalysis,
@@ -150,10 +151,10 @@ export default function AnalysisView() {
       return "Your medical causation report is ready to review.";
     }
     if (isFailed) {
-      return error?.message ?? job?.error ?? "The analysis could not be completed.";
+      return analysisFailureMessage(error?.message, job?.error);
     }
     if (error) {
-      return error.message;
+      return analysisFailureMessage(error.message);
     }
     if (isRunning) {
       return (
@@ -251,9 +252,14 @@ export default function AnalysisView() {
                     <p className="mt-1 text-sm text-muted-foreground">
                       Confidence score: {job?.result?.confidenceScore.score ?? "—"}%
                       {job?.result?.metadata?.chunkCount
-                        ? ` · ${job.result.metadata.chunkCount} knowledge-base chunks used`
+                        ? ` · ${job.result.metadata.chunkCount} knowledge-base passages used`
                         : ""}
                     </p>
+                    {job?.result?.evidenceBasis ? (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {job.result.evidenceBasis.note}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-3">
                     <Button onClick={openReport}>View Report</Button>
@@ -274,12 +280,9 @@ export default function AnalysisView() {
                   <div>
                     <p className="font-semibold text-destructive">Failed — analysis did not complete</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {error?.message ?? job?.error ?? "An unexpected error occurred."}
+                      {analysisFailureMessage(error?.message, job?.error)}
                     </p>
                   </div>
-                    <p className="text-xs text-muted-foreground">
-                      Common causes: knowledge base not re-embedded after switching embedding models (`npm run reembed:kb`), Gemini API quota limits, invalid JSON from the LLM, or Redis not running (`npm run docker:infra`).
-                    </p>
                   <div className="flex flex-wrap gap-3">
                     <Button onClick={() => runAnalysis()}>
                       <RotateCcw className="h-4 w-4" />

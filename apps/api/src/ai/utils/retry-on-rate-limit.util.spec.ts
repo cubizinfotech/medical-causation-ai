@@ -16,6 +16,18 @@ describe('retryOnRateLimit', () => {
     expect(call).toHaveBeenCalledTimes(2);
   });
 
+  it('does not wait on an exhausted daily quota', async () => {
+    const sleep = jest.fn(() => Promise.resolve());
+    const call = jest
+      .fn()
+      .mockRejectedValue(new RateLimitExceededException('gemini', 1000, true));
+    await expect(
+      retryOnRateLimit(call, { ...BACKGROUND_RATE_LIMIT_RETRY, sleep }),
+    ).rejects.toMatchObject({ quotaExhausted: true });
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it('gives up after a second rate limit and passes other errors through', async () => {
     const sleep = () => Promise.resolve();
     const limited = jest

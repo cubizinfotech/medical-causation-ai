@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (2026-10-14): MCA analyses failing with "No retrieved evidence available"
+
+- Library search found nothing for four reasons, all fixed:
+  - **Embedding model mismatch.** The library vectors were made with `openrouter/text-embedding-3-small` and the queries with `gemini/gemini-embedding-2`. Both have 768 dimensions, so nothing failed, but scores between the two models are meaningless. Vector search now compares only vectors of the query's model, skips the paid embedding call when none exist, and logs `Library vectors were made with … run npm run reembed:kb`.
+  - **Keyword search required every word of the case** (`plainto_tsquery` over the whole case text) and matched no passage. It now searches for any of the case's medical terms (`websearch_to_tsquery`, ranked with `ts_rank_cd`).
+  - **The vector index was built on an empty table.** Its ivfflat list centres were random, and with one probe it returned only 1–3 of the true 20 nearest passages. Migration `20261014120000_hnsw_vector_index` replaces it with HNSW (20 of 20 in the same test) and indexes `(provider, model)`.
+  - **Indexing stopped at the first failing file.** `index:kb` gave up at the 1.2 GB DeJong book (over the size limit), so the other books and all 433 articles were never indexed. It now reports a failed file and continues. PDFs containing NUL characters (rejected by PostgreSQL) and PDFs that repeat a passage word for word also failed; both are fixed, for case records too.
+- `npm run reembed:kb` now replaces vectors from another provider or model in place, a batch at a time, so search keeps working while it runs. Gemini embeddings go up to 100 texts per API call instead of one call per passage: 1,481 passages took 71 seconds.
+- An analysis no longer fails when the library has little on the question. With fewer than `RAG_MIN_RELEVANT_CHUNKS` relevant passages (similarity at least `RAG_RELEVANCE_MIN_SIMILARITY`, set per model), it plans PubMed queries with a short AI call, gives the abstracts to the model as citable `pmid-N` sources, and lets the model use general medical knowledge in a separate, labelled list. Without any cited library passage or study, the confidence score is capped at 39 and a limitation says why.
+- Library search that fails (embedding outage, database error) falls back to keyword search or to the supplemented analysis instead of failing the job.
+- The causation analysis has its own output budget (`MCA_ANALYSIS_MAX_TOKENS`, default 8,192): `AI_MAX_TOKENS=3000` cut long answers off. A cut-off answer is retried with a request to shorten it, not resent as is.
+- EWI: the AI wording of the report was always discarded. The answer was cut off at 8,192 tokens (now `EWI_ANALYSIS_MAX_TOKENS`, default 24,576), same-meaning status spellings were rejected, and asking for exactly 100 questions often returned 98. The checks against collected evidence are unchanged.
+- EWI CV check and analysis prompts were not found when the API started outside `apps/api`; the prompt folder is now also found next to the compiled code.
+
+### Added (2026-10-14)
+
+- MCA report sections: **Evidence Basis** (library passages, PubMed abstracts, client records, general knowledge), **Alternative Explanations** (each marked cited evidence or AI reasoning), and **Uncited AI Reasoning**. Cited evidence shows its source (Firm library, PubMed with a link, Client record).
+- Prompts state that timing alone does not establish causation and require alternative explanations. Links, PMIDs, and DOIs the model writes that are not among its sources are removed.
+- `npm run check:retrieval [question]`: runs sample searches and prints coverage and scores (titles only). `npm run index:kb -- --only <text>` indexes matching files only.
+
+### Changed (2026-10-14)
+
+- Failed analyses and investigations show a plain message ("The AI service is busy…", "…is not set up correctly… contact your administrator", "…took too long to respond") instead of the internal error, which goes to the log with API keys removed. The analysis page no longer shows developer hints. Older saved failures with technical text show a generic message.
+- Gemini: a request that cannot succeed (bad key, unknown model, invalid request) is not resent; an overloaded model (503) or dropped connection is retried once even with `AI_RETRY_MAX_ATTEMPTS=1`; Google's requested wait is honoured on a rate limit; a used-up daily quota is not retried. A search query tries its embedding at most twice (indexing keeps `EMBEDDING_RETRY_MAX_ATTEMPTS`).
+- The analysis log no longer includes the first 80 characters of the medical question. The retrieval log is capped at 200 entries in memory.
+
 ### Security (2026-10-12)
 
 - Removed the synchronous `POST /medical-analysis/analyze` (it could read another user's uploaded records by id) and `POST /ewi/investigate`. The worker now loads records only through the analysis they are attached to.

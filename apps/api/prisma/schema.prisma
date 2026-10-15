@@ -93,6 +93,7 @@ model ChunkEmbedding {
 
   chunk DocumentChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
 
+  @@index([provider, model])
   @@map("chunk_embeddings")
   @@schema("vectors")
 }

@@ -151,7 +151,12 @@ describe('MedicalAnalysisService', () => {
     references: [],
   };
   const research = jest.fn().mockResolvedValue(literatureResult);
-  const caseLiterature = { research } as unknown as CaseLiteratureService;
+  const searchPlan = { queries: ['benzene exposure leukemia'] };
+  const suggestSearch = jest.fn().mockResolvedValue(searchPlan);
+  const caseLiterature = {
+    research,
+    suggestSearch,
+  } as unknown as CaseLiteratureService;
   const loadedRecords = [
     {
       id: 'record-1',
@@ -281,7 +286,8 @@ describe('MedicalAnalysisService', () => {
     expect(result.confidenceScore.score).toBe(72);
   });
 
-  it('should reject when retrieval returns no context', async () => {
+  it('supplements the analysis when the library has no relevant passages', async () => {
+    research.mockClear();
     retrievalService.retrieve.mockResolvedValue(
       createMockRetrievalResult({
         chunks: [],
@@ -292,12 +298,135 @@ describe('MedicalAnalysisService', () => {
           estimatedTokens: 0,
           truncated: false,
         },
+        coverage: {
+          searchMode: 'hybrid',
+          relevantChunkCount: 0,
+          topSimilarity: 0.41,
+          relevanceThreshold: 0.72,
+          sufficient: false,
+        },
       }),
     );
 
+    const result = await service.analyze({
+      medicalQuestion: 'Test question?',
+    });
+
+    // PubMed is searched before the AI call, with AI-planned queries, so its
+    // abstracts can be cited; and only once.
+    expect(research).toHaveBeenCalledTimes(1);
+    expect(research).toHaveBeenCalledWith(expect.anything(), searchPlan);
+    expect(research.mock.invocationCallOrder[0]).toBeLessThan(
+      aiService.complete.mock.invocationCallOrder[0],
+    );
+    expect(buildPrompts).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      10000,
+      expect.anything(),
+      { mode: 'supplemented', literature: [] },
+    );
+    expect(result).toBeDefined();
+  });
+
+  it('caps confidence and says so when no cited source supports the analysis', async () => {
+    retrievalService.retrieve.mockResolvedValue(
+      createMockRetrievalResult({
+        chunks: [],
+        coverage: {
+          searchMode: 'hybrid',
+          relevantChunkCount: 0,
+          topSimilarity: 0.41,
+          relevanceThreshold: 0.72,
+          sufficient: false,
+        },
+      }),
+    );
+    buildPrompts.mockResolvedValue({
+      ...builtPrompts,
+      citationCatalog: [],
+      allowedChunkIds: [],
+      mode: 'supplemented',
+      offered: { libraryPassages: 0, literatureArticles: 0, recordEntries: 0 },
+    });
+    responseMapper.mapToResult.mockReturnValue({
+      ...mappedResult,
+      citations: [],
+      generalMedicalKnowledge: ['Stroke has many causes.'],
+    });
+    aiService.complete.mockResolvedValue({
+      content: JSON.stringify({
+        ...llmJson,
+        retrievedEvidence: [],
+        supportingEvidence: [],
+        citations: [],
+      }),
+      model: 'test-model',
+      provider: 'gemini',
+      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+      executionTimeMs: 10,
+    });
+
+    await service.analyze({ medicalQuestion: 'Test question?' });
+
+    const calls = reportEnrichment.enrich.mock.calls as unknown[][];
+    const enriched = calls[calls.length - 1][0] as {
+      confidenceScore: { score: number };
+      limitations: string[];
+      evidenceBasis: { mode: string; usesGeneralKnowledge: boolean };
+    };
+    expect(enriched.evidenceBasis.mode).toBe('general_knowledge');
+    expect(enriched.evidenceBasis.usesGeneralKnowledge).toBe(true);
+    expect(enriched.confidenceScore.score).toBe(39);
+    expect(enriched.limitations[0]).toMatch(/general medical knowledge/);
+  });
+
+  it('continues without library passages when the library search fails', async () => {
+    retrievalService.retrieve.mockRejectedValue(new Error('db down'));
+
     await expect(
       service.analyze({ medicalQuestion: 'Test question?' }),
-    ).rejects.toThrow('No retrieved evidence available');
+    ).resolves.toBeDefined();
+    expect(buildPrompts).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ chunks: [] }),
+      undefined,
+      10000,
+      expect.anything(),
+      expect.objectContaining({ mode: 'supplemented' }),
+    );
+  });
+
+  it('asks for a shorter answer when the previous one was cut off', async () => {
+    aiService.complete
+      .mockResolvedValueOnce({
+        content: '{"executiveSummary": "Summ',
+        model: 'test-model',
+        provider: 'gemini',
+        finishReason: 'MAX_TOKENS',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        executionTimeMs: 10,
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify(llmJson),
+        model: 'test-model',
+        provider: 'gemini',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        executionTimeMs: 10,
+      });
+
+    await service.analyze({
+      medicalQuestion: 'Can mild TBI increase stroke risk?',
+    });
+
+    expect(aiService.complete).toHaveBeenCalledTimes(2);
+    const retry = aiService.complete.mock.calls[1][0] as {
+      messages: Array<{ content: string }>;
+      maxTokens: number;
+    };
+    expect(retry.messages[1].content).toContain('cut off');
+    expect(retry.maxTokens).toBeGreaterThanOrEqual(8192);
   });
 
   it('should retry when LLM returns invalid JSON', async () => {
@@ -367,6 +496,7 @@ describe('MedicalAnalysisService', () => {
       chronology,
       10000,
       issues,
+      { mode: 'library', literature: undefined },
     );
     expect(reportEnrichment.enrich).toHaveBeenCalledWith(
       expect.anything(),

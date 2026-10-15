@@ -6,7 +6,7 @@ import {
   TooManyPagesException,
 } from '../exceptions';
 import type { ProcessedPage } from '../types';
-import { countWords } from '../utils';
+import { CONTROL_CHARACTERS, countWords } from '../utils';
 
 /** Pages with less text than this are checked for images (likely scans). */
 const IMAGE_CHECK_MAX_CHARS = 300;
@@ -61,6 +61,9 @@ export class PdfParser implements IDocumentParser {
             return '';
           })
           .join(' ')
+          // Some PDFs encode NUL and other control characters in their text;
+          // PostgreSQL rejects NUL in text columns.
+          .replace(CONTROL_CHARACTERS, ' ')
           .replace(/\s+/g, ' ')
           .trim();
 

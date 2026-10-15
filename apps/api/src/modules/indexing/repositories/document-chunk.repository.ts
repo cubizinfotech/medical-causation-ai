@@ -15,8 +15,18 @@ export class DocumentChunkRepository {
 
     if (chunks.length === 0) return [];
 
+    // A PDF can repeat a passage word for word (a reprinted page or
+    // abstract); the second copy adds nothing to search, so keep one.
+    const seen = new Set<string>();
+    const unique = chunks.filter((chunk) => {
+      if (seen.has(chunk.contentHash)) return false;
+      seen.add(chunk.contentHash);
+      return true;
+    });
+
     await this.prisma.documentChunk.createMany({
-      data: chunks.map((chunk) => ({
+      skipDuplicates: true,
+      data: unique.map((chunk) => ({
         externalChunkId: chunk.chunkId,
         documentId,
         chunkIndex: chunk.chunkIndex,

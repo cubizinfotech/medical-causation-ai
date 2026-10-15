@@ -141,7 +141,10 @@ export class MedicalAnalysisJobService
         `Failed to queue medical analysis job ${jobId}: ${message}`,
       );
       try {
-        await this.markFailed(jobId, message);
+        await this.markFailed(
+          jobId,
+          'The analysis could not be started. Please try again in a moment.',
+        );
       } catch (markError) {
         const markMessage =
           markError instanceof Error ? markError.message : String(markError);

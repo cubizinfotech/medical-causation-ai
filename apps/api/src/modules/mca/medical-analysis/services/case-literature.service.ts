@@ -1,4 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { AiService } from '@ai/services';
+import { describeError, retryOnRateLimit } from '@ai/utils';
+import { MEDICAL_ANALYSIS_PROMPTS } from '../constants';
+import { MedicalPromptService } from '../prompts/medical-prompt.service';
 import {
   MedicalLiteratureService,
   type EvidenceType,
@@ -56,6 +60,9 @@ export function toPublicReference(article: LiteratureArticle): PublicReference {
   };
 }
 
+/** A query plan is short; a larger budget only invites rambling. */
+const QUERY_PLAN_MAX_TOKENS = 400;
+
 /**
  * Finds published studies on the case's causation question.
  * Never throws: a failed search is reported in the summary instead, so the
@@ -65,7 +72,54 @@ export function toPublicReference(article: LiteratureArticle): PublicReference {
 export class CaseLiteratureService {
   private readonly logger = new Logger(CaseLiteratureService.name);
 
-  constructor(private readonly literature: MedicalLiteratureService) {}
+  constructor(
+    private readonly literature: MedicalLiteratureService,
+    private readonly aiService: AiService,
+    private readonly prompts: MedicalPromptService,
+  ) {}
+
+  /**
+   * Asks the AI provider for PubMed search terms before the analysis, for
+   * cases the firm library does not cover. Keyword queries built from the
+   * diagnosis miss the exposure (e.g. "benzene") and find off-topic studies.
+   * Returns undefined when search is off or the plan fails; research() then
+   * falls back to keywords. Only validated medical terms reach PubMed.
+   */
+  async suggestSearch(request: MedicalAnalysisRequest): Promise<unknown> {
+    if (!this.literature.enabled) return undefined;
+    try {
+      const template = await this.prompts.load(
+        MEDICAL_ANALYSIS_PROMPTS.LITERATURE_QUERIES,
+      );
+      const response = await retryOnRateLimit(() =>
+        this.aiService.complete({
+          messages: [
+            {
+              role: 'user',
+              content: this.prompts.render(template, {
+                medicalQuestion: request.medicalQuestion,
+                injury: request.injury ?? '',
+                diagnosis: request.diagnosis ?? '',
+              }),
+            },
+          ],
+          metadata: { responseFormat: 'json' },
+          temperature: 0,
+          maxTokens: QUERY_PLAN_MAX_TOKENS,
+        }),
+      );
+      const start = response.content.indexOf('{');
+      const end = response.content.lastIndexOf('}');
+      return start >= 0 && end > start
+        ? (JSON.parse(response.content.slice(start, end + 1)) as unknown)
+        : undefined;
+    } catch (error) {
+      this.logger.warn(
+        `PubMed query planning failed; using keywords: ${describeError(error)}`,
+      );
+      return undefined;
+    }
+  }
 
   /**
    * @param suggestion the literatureSearch field from the analysis model's

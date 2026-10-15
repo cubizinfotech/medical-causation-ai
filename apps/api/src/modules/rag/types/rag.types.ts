@@ -90,6 +90,15 @@ export interface RetrievedChunk {
   keywordScore: number;
   combinedScore: number;
   citation: ChunkCitation;
+  /** Similar enough to the case to count as relevant evidence. */
+  relevant?: boolean;
+}
+
+/** Restricts vector search to vectors made by the query's own model. */
+export interface EmbeddingSpace {
+  provider: string;
+  /** Stored model names that match the query model (spellings can differ). */
+  models: string[];
 }
 
 /**
@@ -97,9 +106,29 @@ export interface RetrievedChunk {
  */
 export interface RetrievalQuery {
   queryText: string;
-  embedding: number[];
+  /** OR query of medical terms for keyword search; empty skips it. */
+  keywordQuery: string;
+  /** Absent when vector search is not possible for this query. */
+  embedding?: number[];
+  embeddingSpace?: EmbeddingSpace;
   filters: RetrievalFilters;
   topK: number;
+}
+
+export type VectorSearchSkipReason =
+  'embedding_failed' | 'model_mismatch' | 'no_vectors';
+
+/** How well the library covered this question. */
+export interface RetrievalCoverage {
+  /** keyword_only: vector search was skipped (see vectorSkipReason). */
+  searchMode: 'hybrid' | 'keyword_only';
+  vectorSkipReason?: VectorSearchSkipReason;
+  /** Passages at or above relevanceThreshold. */
+  relevantChunkCount: number;
+  topSimilarity: number;
+  relevanceThreshold: number;
+  /** Enough relevant passages for the library alone to back the analysis. */
+  sufficient: boolean;
 }
 
 /**
@@ -141,6 +170,8 @@ export interface RetrievalResult {
   embeddingModel: string;
   strategy: string;
   reranker: string;
+  /** Absent only in results built before coverage was measured. */
+  coverage?: RetrievalCoverage;
 }
 
 /**
@@ -159,5 +190,8 @@ export interface RetrievalLogEntry {
   estimatedContextTokens: number;
   strategy: string;
   reranker: string;
+  searchMode?: RetrievalCoverage['searchMode'];
+  relevantChunkCount?: number;
+  topSimilarity?: number;
   timestamp: Date;
 }

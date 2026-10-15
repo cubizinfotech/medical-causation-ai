@@ -1,4 +1,5 @@
 export {
+  CONTROL_CHARACTERS,
   normalizeText,
   countWords,
   estimateTokens,

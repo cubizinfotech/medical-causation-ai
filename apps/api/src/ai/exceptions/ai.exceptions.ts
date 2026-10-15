@@ -11,13 +11,30 @@ export class AiException extends Error {
   }
 }
 
+/**
+ * Why a provider refused a request. `unavailable` covers outages and network
+ * errors; the others mean the request will not succeed until the
+ * configuration changes.
+ */
+export type ProviderFailureKind =
+  'unavailable' | 'timeout' | 'auth' | 'not_found' | 'invalid_request';
+
 /** Thrown when the configured AI provider is unavailable or not yet integrated. */
 export class ProviderUnavailableException extends AiException {
-  constructor(provider: string, reason?: string) {
+  readonly provider: string;
+  readonly failure: ProviderFailureKind;
+
+  constructor(
+    provider: string,
+    reason?: string,
+    failure: ProviderFailureKind = 'unavailable',
+  ) {
     super(
       `AI provider "${provider}" is unavailable${reason ? `: ${reason}` : ''}`,
       'PROVIDER_UNAVAILABLE',
     );
+    this.provider = provider;
+    this.failure = failure;
   }
 }
 
@@ -34,13 +51,18 @@ export class InvalidModelException extends AiException {
 /** Thrown when the provider rate limit is exceeded. */
 export class RateLimitExceededException extends AiException {
   readonly retryAfterMs?: number;
+  /** A daily quota is used up: waiting a minute will not help. */
+  readonly quotaExhausted: boolean;
 
-  constructor(provider: string, retryAfterMs?: number) {
+  constructor(provider: string, retryAfterMs?: number, quotaExhausted = false) {
     super(
-      `Rate limit exceeded for provider "${provider}"${retryAfterMs ? ` — retry after ${retryAfterMs}ms` : ''}`,
+      quotaExhausted
+        ? `Quota exhausted for provider "${provider}"`
+        : `Rate limit exceeded for provider "${provider}"${retryAfterMs ? ` — retry after ${retryAfterMs}ms` : ''}`,
       'RATE_LIMIT_EXCEEDED',
     );
     this.retryAfterMs = retryAfterMs;
+    this.quotaExhausted = quotaExhausted;
   }
 }
 

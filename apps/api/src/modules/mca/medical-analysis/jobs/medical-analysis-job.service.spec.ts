@@ -132,10 +132,12 @@ describe('MedicalAnalysisJobService', () => {
     const saved = [...store.values()].map(
       (value) => JSON.parse(value) as { status: string; error?: string },
     );
+    // The user sees a plain message; the queue error stays in the log.
     expect(saved).toEqual([
       expect.objectContaining({
         status: 'failed',
-        error: 'Redis connection refused',
+        error:
+          'The analysis could not be started. Please try again in a moment.',
       }),
     ]);
   });

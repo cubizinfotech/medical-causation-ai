@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import type { RetrievalResult } from '@modules/rag/types';
+import type { RetrievalResult, RetrievedChunk } from '@modules/rag/types';
 import type {
   MedicalAnalysisRequest,
   BuiltAnalysisPrompts,
   AnalysisCitation,
+  AnalysisPromptMode,
   DefenseIssuesSummary,
   MedicalChronology,
+  PublicReference,
 } from '../types';
 import { MedicalPromptService } from '../prompts';
 import {
@@ -16,6 +18,91 @@ import { MedicalQueryBuilder } from './medical-query.builder';
 
 const DEFAULT_CHRONOLOGY_PROMPT_CHARS = 10000;
 const MAX_PROMPT_ISSUES = 10;
+const MAX_LITERATURE_ARTICLES = 8;
+/** Without a vector score, keep the best keyword matches only. */
+const MAX_KEYWORD_ONLY_PASSAGES = 5;
+
+const GENERAL_KNOWLEDGE_RULES: Record<AnalysisPromptMode, string> = {
+  library:
+    'leave it empty ([]); this analysis must rest on the provided evidence.',
+  supplemented:
+    'list each statement from general medical knowledge (not from a provided source) that your reasoning relies on. No citations, statistics, study names, authors, or links in these statements.',
+};
+
+export interface AnalysisPromptOptions {
+  mode?: AnalysisPromptMode;
+  /** PubMed results; only those with an abstract excerpt become evidence. */
+  literature?: PublicReference[];
+}
+
+/** PubMed abstracts as citable evidence, keyed by their reference id. */
+export function literatureCitations(
+  references: PublicReference[],
+): Array<{ citation: AnalysisCitation; excerpt: string; label: string }> {
+  return references
+    .filter((reference) => reference.excerpt?.trim())
+    .slice(0, MAX_LITERATURE_ARTICLES)
+    .map((reference) => {
+      const details = [reference.journal, reference.year]
+        .filter(Boolean)
+        .join(', ');
+      const label = `${reference.title}${details ? ` (${details}${reference.publicationType ? `; ${reference.publicationType}` : ''})` : ''}`;
+      return {
+        label,
+        excerpt: reference.excerpt!.trim(),
+        citation: {
+          chunkId: reference.id,
+          documentName: reference.title,
+          pageNumber: null,
+          chunkNumber: 0,
+          similarityScore: 0,
+          citationText: `[PubMed${reference.pmid ? ` PMID ${reference.pmid}` : ''}: ${label}]`,
+          sourceFile: reference.url,
+          sourceKind: 'public_literature',
+          url: reference.url,
+        },
+      };
+    });
+}
+
+/**
+ * Library passages for a supplemented analysis: only those that matched the
+ * case closely, so off-topic text is not offered as evidence.
+ */
+function supplementedLibraryChunks(
+  retrieval: RetrievalResult,
+): RetrievedChunk[] {
+  if (retrieval.coverage?.searchMode === 'keyword_only') {
+    return retrieval.chunks.slice(0, MAX_KEYWORD_ONLY_PASSAGES);
+  }
+  return retrieval.chunks.filter((chunk) => chunk.relevant);
+}
+
+function formatLibraryContext(chunks: RetrievedChunk[]): string {
+  return chunks
+    .map(
+      (chunk, order) =>
+        `--- Evidence ${order + 1} ${chunk.citation.citationText} ---\n${chunk.text}`,
+    )
+    .join('\n\n');
+}
+
+function coverageNote(
+  libraryPassages: number,
+  literatureArticles: number,
+  keywordOnly: boolean,
+): string {
+  const library = keywordOnly
+    ? `The firm's medical library could only be searched by keyword; ${libraryPassages} passage(s) matched the question's terms and may or may not be on topic.`
+    : libraryPassages === 0
+      ? "The firm's medical library returned no passages that closely match this question."
+      : `The firm's medical library returned only ${libraryPassages} closely matching passage(s).`;
+  const literature =
+    literatureArticles === 0
+      ? 'No published study abstracts were available.'
+      : `${literatureArticles} published study abstract(s) from PubMed are included.`;
+  return `${library} ${literature}`;
+}
 
 /**
  * The rule-based "bad facts" as a short list for the model. Citation ids are
@@ -64,21 +151,29 @@ export class AnalysisPromptBuilder {
     chronology?: MedicalChronology,
     chronologyPromptChars = DEFAULT_CHRONOLOGY_PROMPT_CHARS,
     defenseIssues?: DefenseIssuesSummary,
+    options: AnalysisPromptOptions = {},
   ): Promise<BuiltAnalysisPrompts> {
     const prompts = await this.promptService.loadAll();
+    const mode: AnalysisPromptMode = options.mode ?? 'library';
+    const libraryChunks =
+      mode === 'supplemented'
+        ? supplementedLibraryChunks(retrieval)
+        : retrieval.chunks;
+    const literature =
+      mode === 'supplemented'
+        ? literatureCitations(options.literature ?? [])
+        : [];
 
-    const libraryCitations: AnalysisCitation[] = retrieval.chunks.map(
-      (chunk) => ({
-        chunkId: chunk.chunkId,
-        documentName: chunk.documentTitle,
-        pageNumber: chunk.pageNumber,
-        chunkNumber: chunk.chunkIndex + 1,
-        similarityScore: chunk.combinedScore,
-        citationText: chunk.citation.citationText,
-        sourceFile: chunk.sourceFile,
-        sourceKind: 'knowledge_base',
-      }),
-    );
+    const libraryCitations: AnalysisCitation[] = libraryChunks.map((chunk) => ({
+      chunkId: chunk.chunkId,
+      documentName: chunk.documentTitle,
+      pageNumber: chunk.pageNumber,
+      chunkNumber: chunk.chunkIndex + 1,
+      similarityScore: chunk.combinedScore,
+      citationText: chunk.citation.citationText,
+      sourceFile: chunk.sourceFile,
+      sourceKind: 'knowledge_base',
+    }));
 
     const records = this.buildRecordsContext(
       request,
@@ -90,23 +185,55 @@ export class AnalysisPromptBuilder {
       new Set(records.citations.map((citation) => citation.chunkId)),
     );
     if (issuesText) records.text = `${records.text}\n\n${issuesText}`;
-    const citationCatalog = [...libraryCitations, ...records.citations];
+    const citationCatalog = [
+      ...libraryCitations,
+      ...literature.map((item) => item.citation),
+      ...records.citations,
+    ];
 
     const catalogText = citationCatalog
       .map((c) =>
         c.sourceKind === 'medical_record'
           ? `- chunkId: ${c.chunkId} | ${c.citationText} | client medical record`
-          : `- chunkId: ${c.chunkId} | ${c.citationText} | similarity: ${c.similarityScore.toFixed(3)}`,
+          : c.sourceKind === 'public_literature'
+            ? `- chunkId: ${c.chunkId} | ${c.citationText} | published study abstract`
+            : `- chunkId: ${c.chunkId} | ${c.citationText} | similarity: ${c.similarityScore.toFixed(3)}`,
       )
       .join('\n');
 
-    const analysisBody = this.promptService.render(prompts.medicalAnalysis, {
+    const shared = {
       medicalQuestion: request.medicalQuestion,
       caseContext: this.queryBuilder.buildCaseContext(request),
       recordsContext: records.text,
-      retrievedContext: retrieval.context.contextText,
       citationCatalog: catalogText,
-    });
+    };
+    const analysisBody =
+      mode === 'supplemented'
+        ? this.promptService.render(prompts.supplementedAnalysis, {
+            ...shared,
+            coverageNote: coverageNote(
+              libraryChunks.length,
+              literature.length,
+              retrieval.coverage?.searchMode === 'keyword_only',
+            ),
+            retrievedContext:
+              libraryChunks.length > 0
+                ? formatLibraryContext(libraryChunks)
+                : 'No closely matching passages.',
+            literatureContext:
+              literature.length > 0
+                ? literature
+                    .map(
+                      (item) =>
+                        `--- ${item.citation.chunkId} | ${item.label} ---\n${item.excerpt}`,
+                    )
+                    .join('\n\n')
+                : 'None available.',
+          })
+        : this.promptService.render(prompts.medicalAnalysis, {
+            ...shared,
+            retrievedContext: retrieval.context.contextText,
+          });
 
     const userPrompt = [
       analysisBody,
@@ -115,14 +242,22 @@ export class AnalysisPromptBuilder {
       '',
       this.promptService.render(prompts.jsonOutput, {
         allowedChunkIds: citationCatalog.map((c) => c.chunkId).join('\n'),
+        generalKnowledgeRule: GENERAL_KNOWLEDGE_RULES[mode],
       }),
     ].join('\n');
 
     return {
-      systemPrompt: prompts.system,
+      systemPrompt:
+        mode === 'supplemented' ? prompts.supplementedSystem : prompts.system,
       userPrompt,
       allowedChunkIds: citationCatalog.map((c) => c.chunkId),
       citationCatalog,
+      mode,
+      offered: {
+        libraryPassages: libraryCitations.length,
+        literatureArticles: literature.length,
+        recordEntries: records.citations.length,
+      },
     };
   }
 

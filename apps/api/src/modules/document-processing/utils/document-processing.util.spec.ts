@@ -13,6 +13,12 @@ describe('text-normalization.util', () => {
     expect(result).toBe('Hello world\n\nSecond paragraph');
   });
 
+  it('removes NUL and other control characters PostgreSQL rejects', () => {
+    expect(normalizeText('Stroke\u0000 risk\u0007 after\u001F TBI\tok')).toBe(
+      'Stroke risk after TBI ok',
+    );
+  });
+
   it('should count words', () => {
     expect(countWords('one two three')).toBe(3);
     expect(countWords('')).toBe(0);

@@ -5,7 +5,10 @@ import {
 } from '@ai/constants';
 import type { AIProviderSettings } from '@config/config.types';
 import type { EmbeddingRequest, EmbeddingResponse } from '@ai/types';
-import { ProviderUnavailableException } from '@ai/exceptions';
+import {
+  ProviderUnavailableException,
+  type ProviderFailureKind,
+} from '@ai/exceptions';
 import { BaseEmbeddingProvider } from '../base/base-embedding.provider';
 import {
   type EmbeddingRuntimeOptions,
@@ -13,10 +16,27 @@ import {
   unavailable,
 } from '../base/openai-compatible-embedding.provider';
 import { createGeminiClient } from '@ai/utils/gemini-client.util';
+import {
+  classifyGeminiError,
+  type GeminiErrorInfo,
+} from '@ai/utils/gemini-errors.util';
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/** batchEmbedContents accepts at most 100 requests per call. */
+const GEMINI_MAX_BATCH = 100;
+
+const EMBED_FAILURE_BY_KIND: Partial<
+  Record<GeminiErrorInfo['kind'], ProviderFailureKind>
+> = {
+  auth: 'auth',
+  permission: 'auth',
+  not_found: 'not_found',
+  invalid_request: 'invalid_request',
+  timeout: 'timeout',
+};
 
 export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
   readonly name = EMBEDDING_PROVIDERS.GEMINI;
@@ -30,6 +50,11 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
     super(settings);
   }
 
+  /**
+   * Embeds up to 100 texts per API call. Each text is sent as its own
+   * Content object: gemini-embedding-2 merges a plain string array into one
+   * input and returns a single vector for all of it.
+   */
   async embed(request: EmbeddingRequest): Promise<EmbeddingResponse> {
     this.validateConfiguration();
     const model = request.model ?? this.defaultModel;
@@ -40,54 +65,24 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
     const embeddings: number[][] = [];
     let totalTokens = 0;
 
-    for (let index = 0; index < request.inputs.length; index++) {
-      const input = request.inputs[index];
-      let success = false;
-      let lastError = 'Gemini embedding failed';
-
-      for (let attempt = 1; attempt <= this.runtime.maxRetries; attempt++) {
-        try {
-          const response = await ai.models.embedContent({
-            model,
-            contents: input.text,
-            config: {
-              outputDimensionality,
-              abortSignal: AbortSignal.timeout(this.runtime.timeoutMs),
-            },
-          });
-
-          const values = response.embeddings?.[0]?.values ?? [];
-          if (values.length === 0) {
-            throw new Error('Gemini returned an empty embedding vector');
-          }
-
-          embeddings.push(values);
-          totalTokens += Math.ceil(input.text.length / 4);
-          success = true;
-
-          if (index + 1 < request.inputs.length) {
-            await sleep(Number(process.env.GEMINI_EMBED_ITEM_DELAY_MS ?? 150));
-          }
-          break;
-        } catch (error) {
-          lastError = error instanceof Error ? error.message : String(error);
-          const isRateLimit =
-            lastError.includes('429') ||
-            lastError.toLowerCase().includes('quota') ||
-            lastError.toLowerCase().includes('rate limit');
-
-          if (attempt < this.runtime.maxRetries) {
-            const delay = isRateLimit
-              ? this.runtime.retryDelayMs * attempt * 6
-              : this.runtime.retryDelayMs * attempt;
-            await sleep(delay);
-          }
-        }
-      }
-
-      if (!success) {
-        unavailable(this.name, lastError);
-      }
+    for (
+      let offset = 0;
+      offset < request.inputs.length;
+      offset += GEMINI_MAX_BATCH
+    ) {
+      const batch = request.inputs.slice(offset, offset + GEMINI_MAX_BATCH);
+      const vectors = await this.embedBatch(
+        ai,
+        model,
+        batch.map((input) => input.text),
+        outputDimensionality,
+        request.maxAttempts,
+      );
+      embeddings.push(...vectors);
+      totalTokens += batch.reduce(
+        (sum, input) => sum + Math.ceil(input.text.length / 4),
+        0,
+      );
     }
 
     const usage = {
@@ -111,6 +106,61 @@ export class GeminiEmbeddingProvider extends BaseEmbeddingProvider {
       usage,
       executionTimeMs: Date.now() - startTime,
     };
+  }
+
+  private async embedBatch(
+    ai: ReturnType<typeof createGeminiClient>,
+    model: string,
+    texts: string[],
+    outputDimensionality: number,
+    maxAttempts?: number,
+  ): Promise<number[][]> {
+    const attempts = Math.max(
+      1,
+      Math.min(this.runtime.maxRetries, maxAttempts ?? Infinity),
+    );
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const response = await ai.models.embedContent({
+          model,
+          contents: texts.map((text) => ({ role: 'user', parts: [{ text }] })),
+          config: {
+            outputDimensionality,
+            abortSignal: AbortSignal.timeout(this.runtime.timeoutMs),
+          },
+        });
+        const vectors = (response.embeddings ?? []).map(
+          (embedding) => embedding.values ?? [],
+        );
+        // A short or empty answer would pair vectors with the wrong text.
+        if (
+          vectors.length !== texts.length ||
+          vectors.some((values) => values.length === 0)
+        ) {
+          throw new ProviderUnavailableException(
+            this.name,
+            `Gemini returned ${vectors.length} embedding(s) for ${texts.length} input(s)`,
+          );
+        }
+        return vectors;
+      } catch (error) {
+        if (error instanceof ProviderUnavailableException) throw error;
+        const info = classifyGeminiError(error);
+        if (!info.retryable || attempt >= attempts) {
+          throw new ProviderUnavailableException(
+            this.name,
+            `${info.kind}${info.status ? ` (${info.status})` : ''}: ${info.detail}`,
+            EMBED_FAILURE_BY_KIND[info.kind] ?? 'unavailable',
+          );
+        }
+        await sleep(
+          info.retryAfterMs ??
+            (info.kind === 'rate_limit'
+              ? this.runtime.retryDelayMs * attempt * 2
+              : this.runtime.retryDelayMs * attempt),
+        );
+      }
+    }
   }
 }
 

@@ -1,4 +1,6 @@
 import type { MedicalLiteratureService } from '@integrations/medical-literature';
+import type { AiService } from '@ai/services';
+import type { MedicalPromptService } from '../prompts/medical-prompt.service';
 import { CaseLiteratureService } from './case-literature.service';
 import {
   buildFallbackLiteratureRequest,
@@ -68,12 +70,53 @@ describe('literature query helpers', () => {
 });
 
 describe('CaseLiteratureService', () => {
+  const complete = jest.fn();
+  const prompts = {
+    load: jest.fn().mockResolvedValue('Q: {{medicalQuestion}}'),
+    render: (template: string, vars: Record<string, string>) =>
+      template.replace('{{medicalQuestion}}', vars.medicalQuestion),
+  };
+
   function build(literature: Partial<MedicalLiteratureService>) {
-    return new CaseLiteratureService({
-      enabled: true,
-      ...literature,
-    } as MedicalLiteratureService);
+    return new CaseLiteratureService(
+      { enabled: true, ...literature } as MedicalLiteratureService,
+      { complete } as unknown as AiService,
+      prompts as unknown as MedicalPromptService,
+    );
   }
+
+  beforeEach(() => complete.mockReset());
+
+  it('asks the AI for PubMed queries for a case the library does not cover', async () => {
+    const plan = {
+      exposureTerms: ['benzene'],
+      outcomeTerms: ['acute myeloid leukemia'],
+      queries: ['benzene exposure acute myeloid leukemia'],
+    };
+    complete.mockResolvedValue({ content: JSON.stringify(plan) });
+
+    const suggestion = await build({}).suggestSearch(caseRequest);
+
+    expect(suggestion).toEqual(plan);
+    // A short JSON answer: small output budget, deterministic.
+    expect(complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        temperature: 0,
+        maxTokens: 400,
+        metadata: { responseFormat: 'json' },
+      }),
+    );
+  });
+
+  it('plans nothing when search is off, and survives a failed plan', async () => {
+    expect(await build({ enabled: false }).suggestSearch(caseRequest)).toBe(
+      undefined,
+    );
+    expect(complete).not.toHaveBeenCalled();
+
+    complete.mockRejectedValue(new Error('provider down'));
+    expect(await build({}).suggestSearch(caseRequest)).toBeUndefined();
+  });
 
   const article = {
     pmid: '111',

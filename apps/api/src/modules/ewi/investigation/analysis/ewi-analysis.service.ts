@@ -1,13 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '@ai/services';
-import { BACKGROUND_RATE_LIMIT_RETRY, retryOnRateLimit } from '@ai/utils';
+import {
+  BACKGROUND_RATE_LIMIT_RETRY,
+  describeError,
+  retryOnRateLimit,
+} from '@ai/utils';
+import type { LlmCompletionResponse } from '@ai/types';
 import {
   applyAiWording,
   AnalysisValidationError,
   validateAiAnalysis,
 } from './validate-ai-analysis';
 import { buildDeterministicAnalysis } from './deterministic-analysis';
-import type { AnalysisPacket, EwiAnalysisRecord } from './ewi-analysis.types';
+import {
+  MIN_LEADING_QUESTIONS,
+  type AnalysisPacket,
+  type EwiAnalysisRecord,
+} from './ewi-analysis.types';
 import type {
   ChallengeCandidate,
   ChallengeReading,
@@ -15,6 +24,15 @@ import type {
 
 /** Excerpt text sent per opinion; keeps the request small for rate-limited models. */
 const MAX_EXCERPT_CHARS = 1800;
+
+/**
+ * Output budget for the investigation wording: 21 sections and at least 100
+ * leading questions. At 8,192 tokens Gemini stopped mid-answer (MAX_TOKENS
+ * after about 33,000 characters) and the wording was always discarded.
+ */
+const EWI_ANALYSIS_MAX_TOKENS = Number(
+  process.env.EWI_ANALYSIS_MAX_TOKENS ?? 24576,
+);
 
 @Injectable()
 export class EwiAnalysisService {
@@ -28,6 +46,7 @@ export class EwiAnalysisService {
    */
   async interpret(packet: AnalysisPacket): Promise<EwiAnalysisRecord> {
     const deterministic = buildDeterministicAnalysis(packet);
+    let response: LlmCompletionResponse | undefined;
     try {
       const provider = this.ai.getActiveLlmProvider();
       if (!provider.isAvailable()) {
@@ -44,11 +63,11 @@ export class EwiAnalysisService {
       const system = await this.ai.loadPrompt(
         'ewi/investigation-analysis-system',
       );
-      const response = await retryOnRateLimit(
+      response = await retryOnRateLimit(
         () =>
           this.ai.complete({
             temperature: 0,
-            maxTokens: 8192,
+            maxTokens: EWI_ANALYSIS_MAX_TOKENS,
             metadata: {
               product: 'ewi',
               task: 'investigation-analysis',
@@ -103,7 +122,9 @@ export class EwiAnalysisService {
                   'unavailable',
                   'restricted',
                 ],
-                minQuestions: 100,
+                // Asks for a margin over the 100 the validator requires: a
+                // model asked for exactly 100 often stops a few short.
+                minQuestions: MIN_LEADING_QUESTIONS + 15,
               }),
             },
           }),
@@ -122,11 +143,13 @@ export class EwiAnalysisService {
       const message =
         error instanceof AnalysisValidationError
           ? `${error.code}: ${error.message}`
-          : error instanceof Error
-            ? error.message
-            : 'AI analysis failed';
+          : describeError(error);
+      // Length and finish reason tell a cut-off answer from a bad one.
+      const output = response
+        ? ` (finish=${response.finishReason ?? 'unknown'}, ${response.content.length} chars)`
+        : '';
       this.logger.warn(
-        `EWI analysis discarded model output and kept collected findings: ${message}`,
+        `EWI analysis discarded model output and kept collected findings: ${message}${output}`,
       );
       return {
         origin: 'deterministic',

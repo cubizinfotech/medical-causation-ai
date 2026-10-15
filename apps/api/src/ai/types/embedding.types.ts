@@ -29,6 +29,11 @@ export interface EmbeddingRequest {
   inputs: EmbeddingInput[];
   model?: string;
   dimensions?: number;
+  /**
+   * Caps the provider's retries (EMBEDDING_RETRY_MAX_ATTEMPTS) for a call
+   * that someone is waiting on, such as a search query.
+   */
+  maxAttempts?: number;
 }
 
 /**

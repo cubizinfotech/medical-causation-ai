@@ -25,6 +25,26 @@ describe('analysis-response.parser', () => {
     expect(output.conclusion).toBe('Conclusion');
   });
 
+  it('keeps alternative explanations and general-knowledge statements', () => {
+    const output = parseMedicalAnalysisJson(
+      JSON.stringify({
+        executiveSummary: 'Summary',
+        conclusion: 'Conclusion',
+        alternativeExplanations: [
+          { explanation: 'Hypertension', assessment: 'Major risk factor' },
+        ],
+        generalMedicalKnowledge: ['Hypertension raises stroke risk.'],
+      }),
+    );
+
+    expect(output.alternativeExplanations).toEqual([
+      { explanation: 'Hypertension', assessment: 'Major risk factor' },
+    ]);
+    expect(output.generalMedicalKnowledge).toEqual([
+      'Hypertension raises stroke risk.',
+    ]);
+  });
+
   it('should parse JSON wrapped in prose', () => {
     const output = parseMedicalAnalysisJson(
       'Here is the analysis:\n' +

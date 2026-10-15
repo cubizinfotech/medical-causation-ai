@@ -352,14 +352,40 @@ mkdir -p /var/www/medical-causation-ai/knowledge-base/{books,articles,reports,te
 df -h
 ```
 
-`df -h` must show free space larger than the folder you are copying. After the copy finishes:
+`df -h` must show free space larger than the folder you are copying. After the copy finishes, index the files. It can take a long time for many books, so run it in the background, where closing SSH does not stop it:
 
 ```bash
 cd /var/www/medical-causation-ai
-npm run reembed:kb:full
+nohup npm run index:kb > logs/index-kb.log 2>&1 &
+tail -f logs/index-kb.log      # Ctrl+C stops watching, not the indexing
 ```
 
-That reads `KNOWLEDGE_BASE_PATH` and stores embeddings in PostgreSQL. Do not start it while an upload is incomplete.
+`index:kb` finds the files under `KNOWLEDGE_BASE_PATH`, splits them into passages, embeds them with the configured `EMBEDDING_PROVIDER`, and stores them in PostgreSQL. Files already indexed are skipped, so it is safe to run again after adding books. A file that cannot be indexed (for example a book over `KNOWLEDGE_BASE_MAX_FILE_SIZE_MB`) is reported and skipped; the rest continue. Do not start it while an upload is incomplete.
+
+To index part of the library first, give one or more `--only` texts that appear in the file paths:
+
+```bash
+npm run index:kb -- --only "stroke articles" --only "mild tbi"
+```
+
+`npm run reembed:kb` is different: it only embeds passages that are already in the database. After changing `EMBEDDING_PROVIDER` or `AI_EMBEDDING_MODEL`, run it once: it replaces the vectors made by the old model a batch at a time, and analyses keep working while it runs. Until it has run, the API log warns `Library vectors were made with … but queries use …`, and analyses search the library by keyword only. (`reembed:kb:full` deletes every vector first, so the library cannot be searched by meaning until it finishes; it is rarely needed. Changing `EMBEDDING_DIMENSIONS` also needs a database migration.)
+
+To check the library, run this in pgAdmin (both numbers above 0 means analyses can search it, and the second query should list only the embedding model in `.env`):
+
+```sql
+SELECT (SELECT count(*) FROM documents.document_chunks) AS chunks,
+       (SELECT count(*) FROM vectors.chunk_embeddings) AS embeddings;
+SELECT provider, model, count(*) FROM vectors.chunk_embeddings GROUP BY 1, 2;
+```
+
+To check that searches find relevant passages, run a sample search. It prints passage titles and similarity scores, never passage text:
+
+```bash
+npm run check:retrieval
+npm run check:retrieval -- "Does whiplash cause cervical disc herniation?"
+```
+
+Passages marked `*` count as relevant. When fewer than `RAG_MIN_RELEVANT_CHUNKS` (default 3) are relevant, an analysis does not fail: it adds PubMed abstracts (when `FEATURE_LITERATURE_SEARCH=true`) and the AI's general medical knowledge, and the report labels which statements come from which source.
 
 ### Uploaded medical records
 

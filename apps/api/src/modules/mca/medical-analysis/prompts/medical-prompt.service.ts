@@ -48,18 +48,35 @@ export class MedicalPromptService {
   async loadAll(): Promise<{
     system: string;
     medicalAnalysis: string;
+    supplementedSystem: string;
+    supplementedAnalysis: string;
     evidenceEvaluation: string;
     jsonOutput: string;
   }> {
-    const [system, medicalAnalysis, evidenceEvaluation, jsonOutput] =
-      await Promise.all([
-        this.load(MEDICAL_ANALYSIS_PROMPTS.SYSTEM),
-        this.load(MEDICAL_ANALYSIS_PROMPTS.MEDICAL_ANALYSIS),
-        this.load(MEDICAL_ANALYSIS_PROMPTS.EVIDENCE_EVALUATION),
-        this.load(MEDICAL_ANALYSIS_PROMPTS.JSON_OUTPUT),
-      ]);
+    const [
+      system,
+      medicalAnalysis,
+      supplementedSystem,
+      supplementedAnalysis,
+      evidenceEvaluation,
+      jsonOutput,
+    ] = await Promise.all([
+      this.load(MEDICAL_ANALYSIS_PROMPTS.SYSTEM),
+      this.load(MEDICAL_ANALYSIS_PROMPTS.MEDICAL_ANALYSIS),
+      this.load(MEDICAL_ANALYSIS_PROMPTS.SUPPLEMENTED_SYSTEM),
+      this.load(MEDICAL_ANALYSIS_PROMPTS.SUPPLEMENTED_ANALYSIS),
+      this.load(MEDICAL_ANALYSIS_PROMPTS.EVIDENCE_EVALUATION),
+      this.load(MEDICAL_ANALYSIS_PROMPTS.JSON_OUTPUT),
+    ]);
 
-    return { system, medicalAnalysis, evidenceEvaluation, jsonOutput };
+    return {
+      system,
+      medicalAnalysis,
+      supplementedSystem,
+      supplementedAnalysis,
+      evidenceEvaluation,
+      jsonOutput,
+    };
   }
 
   render(template: string, variables: Record<string, string>): string {

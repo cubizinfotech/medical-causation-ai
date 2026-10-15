@@ -2,6 +2,7 @@ export {
   estimateTokens,
   hashQuestion,
   buildQueryText,
+  buildKeywordSearchQuery,
   reciprocalRankFusion,
   normalizeForDedup,
   resolveCategoryFromDocumentType,

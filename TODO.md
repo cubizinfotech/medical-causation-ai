@@ -6,7 +6,7 @@
 - [x] MCA report print and PDF download (the PDF is an image of the on-screen report)
 - [x] MCA medical-record upload with OCR for scanned pages, a chronology cited to the page, defense issues (bad facts), and a bills summary (medical specials)
 - [x] MCA demand letter draft in Word from a finished analysis
-- [x] Knowledge-base indexing into PostgreSQL (`npm run reembed:kb:full`) when the document files are on disk
+- [x] Knowledge-base indexing into PostgreSQL (`npm run index:kb`) when the document files are on disk
 - [x] EWI investigation with sample research data: intake, live progress, findings, questions, and Word download (`/ewi`)
 - [x] EWI live public sources with `RESEARCH_PROVIDER=live`: NPI Registry, CMS Open Payments, OpenAlex, and CourtListener (with Daubert/Frye rulings)
 - [x] EWI check of an uploaded CV against those sources
@@ -23,7 +23,7 @@
 
 ## Pending
 
-- [ ] Copy the local knowledge-base documents to the droplet and run `npm run reembed:kb:full` there (files are gitignored; steps are in `DEPLOYMENT.md`)
+- [ ] Copy the local knowledge-base documents to the droplet and run `npm run index:kb` there (files are gitignored; steps are in `DEPLOYMENT.md` section 16)
 - [ ] Paid databases and other research sources for EWI (credentials, subscriptions, and legal access); four free public sources are live
 - [ ] EWI request and email screens (the API exists; the website does not)
 - [ ] Sharing cases inside one law firm (today each case is visible only to the user who created it)

@@ -7,12 +7,39 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Worker } from 'bullmq';
 import { RedisService } from '@redis/redis.service';
+import { describeAiFailure, describeError } from '@ai/utils';
 import { QUEUE_PREFIXES } from '@platform/jobs/job.types';
 import { workerOptions } from '@platform/jobs/worker-options';
 import { MEDICAL_ANALYSIS_QUEUE_NAME } from './medical-analysis-job.constants';
 import { MedicalAnalysisJobService } from './medical-analysis-job.service';
 import type { MedicalAnalysisJobPayload } from './medical-analysis-job.types';
 import { MedicalAnalysisService } from '../services/medical-analysis.service';
+import { AnalysisSafetyException } from '../exceptions';
+import { AnalysisResponseParseError } from '../utils';
+
+/** What the attorney is told when an analysis job fails. */
+export function describeAnalysisFailure(error: unknown): {
+  code: string;
+  message: string;
+} {
+  if (
+    error instanceof AnalysisResponseParseError ||
+    error instanceof AnalysisSafetyException
+  ) {
+    return {
+      code: 'ANALYSIS_NOT_VERIFIED',
+      message:
+        "The AI's answer did not pass the citation and format checks, so no report was produced. Please run the analysis again.",
+    };
+  }
+  return (
+    describeAiFailure(error, 'the analysis') ?? {
+      code: 'ANALYSIS_FAILED',
+      message:
+        'Something went wrong and the analysis did not complete. Please try again. If it keeps happening, contact support.',
+    }
+  );
+}
 
 @Injectable()
 export class MedicalAnalysisProcessor implements OnModuleInit, OnModuleDestroy {
@@ -38,7 +65,9 @@ export class MedicalAnalysisProcessor implements OnModuleInit, OnModuleDestroy {
     );
 
     this.worker.on('failed', (job, error) => {
-      this.logger.error(`Job ${job?.id ?? 'unknown'} failed: ${error.message}`);
+      this.logger.error(
+        `Job ${job?.id ?? 'unknown'} failed: ${describeError(error)}`,
+      );
     });
 
     this.logger.log('Medical analysis worker started');
@@ -60,11 +89,14 @@ export class MedicalAnalysisProcessor implements OnModuleInit, OnModuleDestroy {
       await this.jobService.markCompleted(jobId, result);
       this.logger.log(`Medical analysis job ${jobId} completed`);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown analysis error';
-      this.logger.error(`Medical analysis job ${jobId} failed: ${message}`);
+      // The user sees a plain explanation; the log keeps the technical
+      // detail, with keys redacted and no case data.
+      const failure = describeAnalysisFailure(error);
+      this.logger.error(
+        `Medical analysis job ${jobId} failed (${failure.code}): ${describeError(error)}`,
+      );
       try {
-        await this.jobService.markFailed(jobId, message);
+        await this.jobService.markFailed(jobId, failure.message);
       } catch (markError) {
         const markMessage =
           markError instanceof Error ? markError.message : String(markError);

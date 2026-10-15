@@ -8,7 +8,7 @@ For the product overview, see [how-it-works.md](./how-it-works.md). For the Expe
 
 1. The attorney fills in the case form, optionally uploads the client's medical records (PDF), and clicks **Run AI Analysis**.
 2. The website sends the case to the API. The API saves it, puts a job on a Redis queue, and replies immediately with a `jobId`.
-3. A background worker inside the API picks up the job. It reads any uploaded records into a dated chronology cited to the page, totals the bills it finds in them, searches the indexed medical books, gives the chronology and the best passages to the AI model, and checks that every citation points to a real passage or record entry.
+3. A background worker inside the API picks up the job. It reads any uploaded records into a dated chronology cited to the page, totals the bills it finds in them, searches the indexed medical books, gives the chronology and the best passages to the AI model, and checks that every citation points to a real passage or record entry. When the books have too little on the question, it adds published-study abstracts from PubMed and lets the model use general medical knowledge, which the report labels as such.
 4. While the worker runs, it pushes progress to the browser over a WebSocket. The browser also polls every 4 seconds as a backup.
 5. When the job finishes, the full report is saved in PostgreSQL. The attorney clicks **View Report**, and the report page loads it from the database.
 6. From the finished report, **Draft demand letter** turns the chronology and the bills into a Word settlement demand letter, with the facts and figures the attorney adds.
@@ -33,8 +33,12 @@ sequenceDiagram
     K->>R: Take the job
     K->>AI: Embed the case description
     K->>P: Vector search + keyword search over chunks
-    K->>AI: Ask the LLM, giving only the retrieved passages
-    K->>K: Reject citations to passages it was not given
+    opt Fewer than RAG_MIN_RELEVANT_CHUNKS relevant passages
+        K->>AI: Plan PubMed queries
+        K->>K: Search PubMed, keep abstracts as citable evidence
+    end
+    K->>AI: Ask the LLM, giving the retrieved passages (and abstracts)
+    K->>K: Reject citations to sources it was not given
     loop every step
         K->>R: Update job record
         K->>P: Copy status to analysis_cases
@@ -56,7 +60,9 @@ MCA can only cite what is in the database. The medical books in `knowledge-base/
 npm run index:kb
 ```
 
-Indexing reads each PDF, splits the text into chunks, turns each chunk into a 768-number embedding, and stores the chunks in `documents.document_chunks` and the embeddings in `vectors.chunk_embeddings`. If nothing is indexed, every analysis fails at step 4 below with an insufficient-evidence error. That is intentional: the AI is never asked to answer without sources.
+Indexing reads each PDF, splits the text into chunks, turns each chunk into a 768-number embedding, and stores the chunks in `documents.document_chunks` and the embeddings in `vectors.chunk_embeddings`. Search compares a case only with vectors made by the configured embedding model; after changing `EMBEDDING_PROVIDER` or `AI_EMBEDDING_MODEL`, run `npm run reembed:kb`. `npm run check:retrieval` shows what a sample search finds.
+
+If the library has nothing relevant (not indexed, or about other topics), analyses still finish, but the report says plainly that they rest on PubMed abstracts or on the AI's general medical knowledge, and caps the confidence score when no source supports the causal link. Index the library to get analyses cited to the firm's own books.
 
 ## Step by step
 
@@ -133,16 +139,16 @@ The worker is part of the same API process (concurrency 1, so one analysis at a 
 | 14% | Medical records (`records`) | Only when records are attached: their page text is loaded from `cases.case_record_pages`. |
 | 16–34% | Chronology (`chronology`) | `ChronologyExtractionService` sends the readable pages to the LLM in batches of about `CHRONOLOGY_BATCH_CHARS` characters and checks every event it returns. See "How the chronology is built" below. A failed batch is listed as a warning; it never fails the analysis. |
 | 34–37% | Bills (`chronology`) | `BillingExtractionService` reads the pages that look like bills into a ledger of charges. See "How the bills summary is built" below. A failed batch is listed as a warning; it never fails the analysis. |
-| 38% | Private knowledge base (`private-kb`) | `RetrievalService.retrieve()` searches the indexed books. See "How the search works" below. |
-| | Safety check | `validateRetrievalHasContext()`. If no passages were found, the job **fails** here with an insufficient-evidence message. |
-| 45% | Evidence (`evidence`) | `AnalysisPromptBuilder` builds the system and user prompts from the files in [medical-analysis/prompts/](../apps/api/src/modules/mca/medical-analysis/prompts/) (system, analysis, evidence evaluation, JSON output). Every library passage gets a chunk ID and every chronology entry a `rec-N` ID, and the set of allowed IDs is remembered. |
-| 62% | Reasoning (`reasoning`) | The LLM (`AI_PROVIDER`, with `AI_FALLBACK_PROVIDER` used when it refuses the call) is asked for a JSON answer at temperature 0.2. A rate limit is waited out (up to a minute, three tries). The answer is parsed and **every cited chunk ID is checked against the allowed set**. An empty answer, broken JSON, or an invented citation triggers a retry with a corrective instruction, up to 3 attempts in total. The same JSON also carries a `literatureSearch` block: 2–3 short PubMed queries plus the injury and condition terms. |
-| 74% | Public literature (`public-lit`) | `CaseLiteratureService` searches PubMed with those queries, or with keyword queries built from the diagnosis if the block is missing. See "How the literature search works" below. A failed search is recorded in the report; it never fails the analysis. |
-| 82% | Summary (`summary`) | `responseMapper` turns the LLM output into the result shape. `ReportEnrichmentService` then adds the timeline, risk factors, private references with book and page, the PubMed studies, and cross-examination questions. |
+| 38% | Private knowledge base (`private-kb`) | `RetrievalService.retrieve()` searches the indexed books and measures coverage: how many passages are similar enough to the case to count as relevant. A failed search counts as no passages; it never fails the analysis. See "How the search works" below. |
+| 41% | Public literature (`public-lit`), only when coverage is too thin | Fewer than `RAG_MIN_RELEVANT_CHUNKS` (default 3) relevant passages: the analysis is *supplemented*. A short AI call plans PubMed queries, and the abstracts found become citable evidence (`pmid-N` IDs). Only the relevant library passages are kept. |
+| 45% | Evidence (`evidence`) | `AnalysisPromptBuilder` builds the system and user prompts from the files in [medical-analysis/prompts/](../apps/api/src/modules/mca/medical-analysis/prompts/). Library-backed analyses use `system` + `medical-analysis` (sources only); supplemented ones use `supplemented-system` + `supplemented-analysis`, which also allow general medical knowledge in a separate `generalMedicalKnowledge` list. Every library passage gets a chunk ID, every abstract a `pmid-N` ID, and every chronology entry a `rec-N` ID, and the set of allowed IDs is remembered. Both prompt sets forbid concluding causation from timing alone and ask for `alternativeExplanations`. |
+| 62% | Reasoning (`reasoning`) | The LLM (`AI_PROVIDER`, with `AI_FALLBACK_PROVIDER` used when it refuses the call) is asked for a JSON answer at temperature 0.2, with `MCA_ANALYSIS_MAX_TOKENS` (default 8,192) for the answer. A rate limit is waited out (up to a minute, three tries). The answer is parsed and **every cited ID is checked against the allowed set**. An empty answer, broken JSON, or an invented citation triggers a retry with a corrective instruction, up to 3 attempts in total; an answer cut off for length is retried with a request to shorten it. Links, PMIDs, and DOIs in the text that are not among the given sources are removed. The same JSON also carries a `literatureSearch` block: 2–3 short PubMed queries plus the injury and condition terms. |
+| 74% | Public literature (`public-lit`), library-backed analyses only | `CaseLiteratureService` searches PubMed with those queries, or with keyword queries built from the diagnosis if the block is missing. See "How the literature search works" below. A failed search is recorded in the report; it never fails the analysis. |
+| 82% | Summary (`summary`) | `responseMapper` turns the LLM output into the result shape. The *evidence basis* records what the analysis rests on (library, PubMed, client records, general knowledge); with no cited library passage or study, the confidence score is capped at 39 and a limitation says why. `ReportEnrichmentService` then adds the timeline, risk factors, private references with book and page, the PubMed studies, and cross-examination questions. |
 | 95% | Report (`report`) | Final assembly and logging. |
 | 100% | Completed | `markCompleted()` stores the full result in the Redis record and in `analysis_cases.result` (JSON), then pushes the final `job:update` including the result. |
 
-If any step throws, the worker calls `markFailed()`. The status becomes `failed` and the error message is shown on the analysis page.
+If any step throws, the worker calls `markFailed()`. The status becomes `failed` and the analysis page shows a plain-language message (for example "The AI service is busy right now…" or "…is not set up correctly… contact your administrator"). The technical detail, with API keys removed and no case details, goes to the API log only.
 
 #### How the chronology is built
 
@@ -191,25 +197,26 @@ If the provider rate-limits a call, the chronology, bills, and demand-letter cal
 
 [integrations/medical-literature/](../apps/api/src/integrations/medical-literature/), called from [case-literature.service.ts](../apps/api/src/modules/mca/medical-analysis/services/case-literature.service.ts):
 
-1. **Queries.** The analysis model suggests them in the same call, so the search adds no AI cost. Only medical terms are allowed: PubMed syntax, years and age phrases are stripped before anything is sent.
+1. **Queries.** For a library-backed analysis, the analysis model suggests them in the same call, so the search adds no AI cost. For a supplemented one, the search runs first, so a separate short AI call (400-token answer) plans the queries; keyword queries from the diagnosis would miss exposures such as "benzene". Only medical terms are allowed: PubMed syntax, years and age phrases are stripped before anything is sent.
 2. **PubMed search.** NCBI E-utilities, sorted by PubMed's Best Match relevance, top 20 per query. Requests are spaced to stay under NCBI's limit (3 per second, 10 with `PUBMED_API_KEY`) and retried once on a rate limit, server error, or network drop.
 3. **Filtering.** Retracted papers, letters, editorials, preprints, non-English records, and records without an abstract are dropped.
 4. **Ranking.** Results from all queries are merged. Titles that name both the injury and the claimed condition, causation wording ("risk after", "cohort"), and stronger designs (meta-analysis, cohort) rank higher; treatment studies and studies of the reverse direction ("collision *after* stroke") rank lower. When at least three studies name the claimed condition, the rest are dropped. The top 8 are kept.
 5. **Abstracts.** Europe PMC supplies the abstract's conclusion and free full-text links. If it fails, the studies still appear without excerpts.
 
-The report shows each study with its design, authors, journal, PMID, DOI, and links, plus the exact queries (each opens the same search on PubMed). It states that **the AI analysis did not read these studies**; the analysis relies only on the firm library. `FEATURE_LITERATURE_SEARCH=false` turns the search off. PubMed's ranking varies slightly between calls, so two runs of the same case can list slightly different studies.
+The report shows each study with its design, authors, journal, PMID, DOI, and links, plus the exact queries (each opens the same search on PubMed). In a library-backed analysis the AI did not read these studies. In a supplemented analysis it was given the abstract excerpts, and the evidence it cites links to the study's PubMed page; studies without an abstract are listed but never offered as evidence. `FEATURE_LITERATURE_SEARCH=false` turns the search off (a supplemented analysis then rests on general medical knowledge, and the report says so). PubMed's ranking varies slightly between calls, so two runs of the same case can list slightly different studies.
 
 #### How the search works
 
 [retrieval.service.ts](../apps/api/src/modules/rag/services/retrieval.service.ts) and [hybrid-knowledge-base.retriever.ts](../apps/api/src/modules/rag/retrievers/hybrid-knowledge-base.retriever.ts):
 
-1. The case fields are combined into one query text.
-2. The query text is embedded with the same model used for indexing (`EMBEDDING_PROVIDER`, `AI_EMBEDDING_MODEL`).
+1. The case fields are combined into one query text, and the medical terms of the question, injury, diagnosis, and symptoms into a keyword query.
+2. The query text is embedded with the configured model (`EMBEDDING_PROVIDER`, `AI_EMBEDDING_MODEL`), but only if the library holds vectors from that same model: vectors from different models cannot be compared even when they have the same size. If they do not match, or the embedding call fails, the search runs by keyword only and the API log says why.
 3. Two searches run in parallel in PostgreSQL ([chunk-search.repository.ts](../apps/api/src/modules/rag/repositories/chunk-search.repository.ts)):
-   - **Meaning search**: pgvector cosine distance (`embedding <=> query`). It keeps the top `RAG_VECTOR_TOP_K` results with similarity of at least `RAG_MIN_SIMILARITY_SCORE`.
-   - **Keyword search**: PostgreSQL full-text search (`to_tsvector`, `plainto_tsquery`, `ts_rank`). It keeps the top `RAG_KEYWORD_TOP_K` results.
+   - **Meaning search**: pgvector cosine distance (`embedding <=> query`) over the HNSW index, among vectors of the query's model. It keeps the top `RAG_VECTOR_TOP_K` results with similarity of at least `RAG_MIN_SIMILARITY_SCORE`.
+   - **Keyword search**: PostgreSQL full-text search with an OR of the medical terms (`websearch_to_tsquery`, ranked by `ts_rank_cd`), so a passage needs some of the terms, not every word of the case. It keeps the top `RAG_KEYWORD_TOP_K` results.
 4. The two lists are merged with **Reciprocal Rank Fusion** (`RAG_RRF_K`). A passage that ranks well in both lists rises to the top.
 5. A reranker (`RAG_RERANKER`) keeps the best `RAG_TOP_K` passages, and the context builder trims them to `RAG_MAX_CONTEXT_TOKENS`.
+6. **Coverage.** Passages with a similarity of at least `RAG_RELEVANCE_MIN_SIMILARITY` count as relevant (set per model when empty: 0.75 for gemini-embedding, 0.45 for text-embedding-3, measured on this library). Keyword matches alone do not count, because they cannot show a passage is on topic.
 
 ### 5. The browser follows progress
 
@@ -258,7 +265,8 @@ The form starts from the case (date of loss, the accident description as the fac
 
 ## Things to know
 
-- **The PubMed studies are for attorney review, not AI evidence.** The analysis cites only the firm library; the literature section lists real, linked studies found afterwards. Reports saved before the live search existed show a warning that their references were demo examples.
+- **The report says what each statement rests on.** The *Evidence Basis* section names the sources (library passages, PubMed abstracts, client records) and whether general medical knowledge was used; each cited item is labelled Firm library, PubMed (linked), or Client record; *Alternative Explanations* marks each item as cited evidence or AI reasoning; and *Uncited AI Reasoning* lists the statements that come from general medical knowledge only.
+- **The PubMed studies.** In a library-backed analysis they are for attorney review: the analysis cites only the firm library, and the literature section lists real, linked studies found afterwards. In a supplemented analysis their abstracts were evidence the AI could cite. Reports saved before the live search existed show a warning that their references were demo examples.
 - **Cross-examination questions are templates**, personalized with the question and diagnosis (`generateCrossExamination`). They are not written by the AI.
 - **Citations from the AI are verified**: library passages and record entries are both checked against what the model was given.
 - **OCR reads typed and printed scans well, handwriting poorly.** Low-confidence pages are flagged; check entries from them against the page. OCR uses the server's CPU, so a 200-page scan adds a few minutes to the analysis.

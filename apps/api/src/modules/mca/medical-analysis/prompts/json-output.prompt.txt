@@ -21,7 +21,16 @@ Return ONLY valid JSON matching this schema (no markdown, no extra text):
   "neutralEvidence": [
     { "chunkId": "string", "excerpt": "string", "reasoning": "string" }
   ],
-  "aiReasoning": "string — step-by-step causation reasoning using only retrieved evidence",
+  "aiReasoning": "string — step-by-step causation reasoning; cite sources by id",
+  "alternativeExplanations": [
+    {
+      "explanation": "string — another cause that could explain the condition",
+      "assessment": "string — how it compares with the accident as a cause, given the facts of this case",
+      "basis": "cited_evidence|general_knowledge",
+      "chunkIds": ["string — catalog ids that support this item; [] for general_knowledge"]
+    }
+  ],
+  "generalMedicalKnowledge": ["string — see the rule below"],
   "confidenceScore": 0,
   "confidenceExplanation": "string — why this score (0-100), based on evidence quality and consistency",
   "limitations": ["string — gaps, insufficient evidence, caveats"],
@@ -43,4 +52,8 @@ Rules:
 - If you cannot match a citation to one exact allowed chunkId, omit that evidence item or citation entirely.
 - Never fabricate chunkIds, page numbers, or document names
 - If evidence is insufficient, set confidenceScore below 40 and explain in limitations
+- Do not base the conclusion on timing alone
+- alternativeExplanations is required: list each alternative cause suggested by the case details or records (such as a pre-existing condition or risk factor), and the other common causes of the condition, with an assessment of each. Use [] only if there is truly none.
+- generalMedicalKnowledge: {{generalKnowledgeRule}}
+- Keep the answer concise: at most 10 items in each evidence list, excerpts under 50 words, reasoning under 80 words per item
 - literatureSearch is used to search PubMed, a public database, for published studies on this causation question. Use only medical concepts: never the patient's age, sex, dates, names, or places. Keep queries short (PubMed requires every word to match) and do not use quotation marks, field tags, or AND/OR.

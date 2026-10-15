@@ -10,4 +10,7 @@ export type {
   BuiltContext,
   RetrievalResult,
   RetrievalLogEntry,
+  RetrievalCoverage,
+  EmbeddingSpace,
+  VectorSearchSkipReason,
 } from './rag.types';

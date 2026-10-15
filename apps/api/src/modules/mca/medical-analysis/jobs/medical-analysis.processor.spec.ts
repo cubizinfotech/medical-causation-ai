@@ -1,5 +1,14 @@
-import { MedicalAnalysisProcessor } from './medical-analysis.processor';
+import {
+  ProviderUnavailableException,
+  RateLimitExceededException,
+} from '@ai/exceptions';
+import {
+  MedicalAnalysisProcessor,
+  describeAnalysisFailure,
+} from './medical-analysis.processor';
 import type { MedicalAnalysisJobPayload } from './medical-analysis-job.types';
+import { AnalysisSafetyException } from '../exceptions';
+import { AnalysisResponseParseError } from '../utils';
 
 const request = {
   medicalQuestion: 'Did the collision materially cause the cervical strain?',
@@ -60,10 +69,57 @@ describe('MedicalAnalysisProcessor', () => {
       ).process({ jobId: 'job-2', caseId: 'case-2', request }),
     ).rejects.toThrow('knowledge base unavailable');
 
+    // The user sees a plain message, never the internal error text.
     expect(jobService.markFailed).toHaveBeenCalledWith(
       'job-2',
-      'knowledge base unavailable',
+      expect.stringMatching(/did not complete\. Please try again/),
     );
+    const [, saved] = jobService.markFailed.mock.calls[0] as [string, string];
+    expect(saved).not.toContain('knowledge base unavailable');
     expect(jobService.markCompleted).not.toHaveBeenCalled();
+  });
+});
+
+describe('describeAnalysisFailure', () => {
+  it('explains AI provider problems without provider text', () => {
+    const busy = describeAnalysisFailure(
+      new RateLimitExceededException('gemini', 30000),
+    );
+    expect(busy.code).toBe('AI_BUSY');
+
+    const quota = describeAnalysisFailure(
+      new RateLimitExceededException('gemini', undefined, true),
+    );
+    expect(quota.code).toBe('AI_QUOTA_EXHAUSTED');
+
+    const badKey = describeAnalysisFailure(
+      new ProviderUnavailableException(
+        'gemini',
+        'API key not valid. key=AIzaSySecretValue1234567890123456789',
+        'auth',
+      ),
+    );
+    expect(badKey.code).toBe('AI_CONFIGURATION');
+    expect(badKey.message).not.toMatch(/AIza|API key not valid/);
+
+    expect(
+      describeAnalysisFailure(
+        new ProviderUnavailableException('gemini', 'timed out', 'timeout'),
+      ).code,
+    ).toBe('AI_TIMEOUT');
+    expect(
+      describeAnalysisFailure(new ProviderUnavailableException('gemini', '503'))
+        .code,
+    ).toBe('AI_UNAVAILABLE');
+  });
+
+  it('explains an answer that failed the citation checks', () => {
+    expect(
+      describeAnalysisFailure(new AnalysisSafetyException('unknown chunkId x'))
+        .code,
+    ).toBe('ANALYSIS_NOT_VERIFIED');
+    expect(
+      describeAnalysisFailure(new AnalysisResponseParseError('bad json')).code,
+    ).toBe('ANALYSIS_NOT_VERIFIED');
   });
 });

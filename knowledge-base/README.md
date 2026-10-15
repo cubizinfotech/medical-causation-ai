@@ -62,12 +62,15 @@ The PDFs stay on your computer. They are not in Git. From the repository root on
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\upload-knowledge-base.ps1
 ```
 
-The script reads `knowledge-base` next to the repository, not a fixed drive letter. For a different server, set `MCA_SSH_TARGET` (for example `deploy@YOUR_SERVER`) before you run it. When the upload finishes, index the files on the server:
+The script reads `knowledge-base` next to the repository, not a fixed drive letter. For a different server, set `MCA_SSH_TARGET` (for example `deploy@YOUR_SERVER`) before you run it. When the upload finishes, index the files on the server (in the background, so closing SSH does not stop it):
 
 ```bash
 cd /var/www/medical-causation-ai
-npm run reembed:kb:full
+nohup npm run index:kb > logs/index-kb.log 2>&1 &
+tail -f logs/index-kb.log
 ```
+
+`npm run reembed:kb:full` only re-embeds files that are already indexed (after changing the embedding provider or model); it does not read new files.
 
 More server detail is in [DEPLOYMENT.md](../DEPLOYMENT.md). Expert Witness Investigation does not use this folder.
 

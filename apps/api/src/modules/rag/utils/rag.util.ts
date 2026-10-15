@@ -51,6 +51,64 @@ export function buildQueryText(fields: {
   return parts.join('\n');
 }
 
+/** Words that say nothing about the medical topic of a causation question. */
+const KEYWORD_STOPWORDS = new Set(
+  (
+    'about above after again against also although among another approximately ' +
+    'because been before being between both cause caused causes causing causal ' +
+    'causation claimed claims client could developed develop diagnosed ' +
+    'during each either following from have having history into likely ' +
+    'medical medically month months later onset other patient patients possible ' +
+    'probable probably reasonable reasonably related relationship result resulted ' +
+    'results should since some still such sustained than that their them then ' +
+    'there these they this those through under until upon very week weeks ' +
+    'were what when where whether which while with within without would year ' +
+    'years contribute contributed contributes contributing contribution degree ' +
+    'certainty male female gender woman years-old ' +
+    'three four five seven eight nine eleven twelve twenty thirty'
+  ).split(/\s+/),
+);
+
+const MAX_KEYWORD_TERMS = 24;
+
+/**
+ * Medical terms for the keyword half of hybrid search, as a websearch-style
+ * OR query. The whole case text as one AND query (plainto_tsquery) matches
+ * almost no passage, because a passage would need every word of the case.
+ * Patient demographics and history are left out: they add noise, not topic.
+ */
+export function buildKeywordSearchQuery(fields: {
+  question: string;
+  injury?: string;
+  diagnosis?: string;
+  symptoms?: string;
+}): string {
+  const text = [
+    fields.diagnosis,
+    fields.question,
+    fields.injury,
+    fields.symptoms,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  const terms: string[] = [];
+  for (const word of text.split(/[^a-z0-9-]+/)) {
+    const term = word.replace(/^-+|-+$/g, '');
+    if (
+      term.length < 4 ||
+      /\d/.test(term) ||
+      KEYWORD_STOPWORDS.has(term) ||
+      terms.includes(term)
+    ) {
+      continue;
+    }
+    terms.push(term);
+    if (terms.length >= MAX_KEYWORD_TERMS) break;
+  }
+  return terms.join(' or ');
+}
+
 /**
  * Reciprocal Rank Fusion for hybrid search score merging.
  */

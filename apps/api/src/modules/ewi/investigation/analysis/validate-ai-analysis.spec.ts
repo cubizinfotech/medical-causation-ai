@@ -189,6 +189,57 @@ describe('validateAiAnalysis', () => {
     expect(wording.questions[0]?.sourceRefs).toEqual(['f1']);
     expect(wording.sectionSummaries?.[0]?.section).toBe('publications');
   });
+
+  function withStatuses(sectionStatus: string, findingStatus: string) {
+    return JSON.stringify({
+      summary: 'Could not verify Development fixture: sample citation.',
+      conclusions: [
+        {
+          text: 'Could not verify Development fixture: sample citation.',
+          sourceRefs: ['f1'],
+        },
+      ],
+      sectionSummaries: [
+        {
+          section: 'publications',
+          text: 'Publication findings include Development fixture: sample citation.',
+          status: sectionStatus,
+          sourceRefs: ['f1'],
+        },
+      ],
+      investigationFindings: [
+        {
+          text: 'Could not verify Development fixture: sample citation.',
+          status: findingStatus,
+          sourceRefs: ['f1'],
+        },
+      ],
+      questions: groundedQuestionBank(),
+    });
+  }
+
+  it('reads same-meaning status spellings without upgrading them', () => {
+    const wording = validateAiAnalysis(
+      withStatuses('Not Verified', 'unverified'),
+      packet,
+    );
+    expect(wording.sectionSummaries?.[0]?.status).toBe('not_verified');
+    expect(wording.investigationFindings?.[0]?.status).toBe('not_verified');
+  });
+
+  it('reads an unknown section status (never shown) as the most cautious one', () => {
+    const wording = validateAiAnalysis(
+      withStatuses('no_record_collected', 'not_verified'),
+      packet,
+    );
+    expect(wording.sectionSummaries?.[0]?.status).toBe('not_verified');
+  });
+
+  it('still rejects an unknown status on a finding that is shown', () => {
+    expect(() =>
+      validateAiAnalysis(withStatuses('not_verified', 'probably_true'), packet),
+    ).toThrow(/got "probably_true"/);
+  });
 });
 
 describe('assertGrounded', () => {

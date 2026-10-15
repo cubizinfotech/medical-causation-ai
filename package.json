@@ -27,6 +27,7 @@
     "index:kb": "npm run index:kb --workspace=api",
     "reembed:kb": "npm run reembed:kb --workspace=api",
     "reembed:kb:full": "npm run reembed:kb:full --workspace=api",
+    "check:retrieval": "npm run check:retrieval --workspace=api --",
     "prisma:migrate": "npm run prisma:migrate --workspace=api",
     "prisma:generate": "npm run prisma:generate --workspace=api",
     "seed:demo-users": "npm run seed:demo-users --workspace=api",

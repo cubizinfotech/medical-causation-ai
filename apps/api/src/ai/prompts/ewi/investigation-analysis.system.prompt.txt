@@ -67,4 +67,4 @@ Required coverage in sectionSummaries (summarize only what the packet contains; 
 20. missing_unverified
 21. investigation_findings
 
-questions must contain at least 100 leading questions grounded in collected findingKey/sourceRef values.
+questions must contain at least 115 leading questions (fewer than 100 is rejected) grounded in collected findingKey/sourceRef values.

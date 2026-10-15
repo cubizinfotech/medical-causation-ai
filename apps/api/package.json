@@ -23,6 +23,7 @@
     "index:kb": "ts-node -r tsconfig-paths/register scripts/run-indexing.ts",
     "reembed:kb": "ts-node -r tsconfig-paths/register scripts/run-indexing.ts --reembed-only",
     "reembed:kb:full": "ts-node -r tsconfig-paths/register scripts/run-indexing.ts --reembed-only --replace-embeddings",
+    "check:retrieval": "ts-node -r tsconfig-paths/register scripts/check-retrieval.ts",
     "prisma:migrate": "node scripts/prisma-with-env.cjs migrate deploy",
     "prisma:migrate:dev": "node scripts/prisma-with-env.cjs migrate dev",
     "seed:demo-users": "ts-node -r tsconfig-paths/register scripts/seed-demo-users.ts",

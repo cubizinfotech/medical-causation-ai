@@ -33,4 +33,8 @@ export type {
   CrossExamQuestion,
   CrossExamCategory,
   ResearchSourcesSummary,
+  EvidenceBasis,
+  EvidenceBasisMode,
+  AlternativeExplanation,
+  AnalysisPromptMode,
 } from './medical-analysis.types';

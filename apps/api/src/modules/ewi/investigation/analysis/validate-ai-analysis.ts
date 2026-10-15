@@ -188,15 +188,39 @@ function readString(value: unknown, field: string): string {
   return value.trim();
 }
 
+/**
+ * Same-meaning spellings models use for the status labels. None maps to a
+ * stronger label than it says, so nothing is upgraded to verified.
+ */
+const ASSESSMENT_ALIASES: Record<string, string> = {
+  unverified: 'not_verified',
+  no_record: 'not_found',
+  not_available: 'unavailable',
+};
+
 function readAssessment(value: unknown, field: string): EwiAssessment {
-  const assessment = readString(value, field);
+  const written = readString(value, field)
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  const assessment = ASSESSMENT_ALIASES[written] ?? written;
   if (!ASSESSMENT_SET.has(assessment)) {
     throw new AnalysisValidationError(
       'malformed',
-      `${field} must be one of: ${EWI_ASSESSMENTS.join(', ')}`,
+      `${field} must be one of: ${EWI_ASSESSMENTS.join(', ')} (got "${assessment.slice(0, 40)}")`,
     );
   }
   return assessment as EwiAssessment;
+}
+
+/**
+ * A section's status from the model is never shown: mergeSectionWording
+ * keeps the status derived from the sources. An unknown label there is
+ * read as the most cautious one instead of discarding all the wording.
+ */
+function readSectionStatus(value: unknown): EwiAssessment {
+  return typeof value === 'string' && ASSESSMENT_SET.has(value)
+    ? (value as EwiAssessment)
+    : 'not_verified';
 }
 
 function readRefs(value: unknown): string[] {
@@ -311,7 +335,7 @@ function readSectionSummaries(value: unknown): EwiAnalysisSectionSummary[] {
     return {
       section: section as EwiAnalysisSectionId,
       text: readString(record.text, 'sectionSummaries.text'),
-      status: readAssessment(record.status, 'sectionSummaries.status'),
+      status: readSectionStatus(record.status),
       sourceRefs: readOptionalRefs(
         record.sourceRefs,
         'sectionSummaries.sourceRefs',
@@ -487,7 +511,7 @@ export function assertGrounded(
     if (!corpus.includes(value)) {
       throw new AnalysisValidationError(
         'unsupported_claim',
-        'AI output included a number that was not collected.',
+        `AI ${label} included a number that was not collected.`,
       );
     }
   }
