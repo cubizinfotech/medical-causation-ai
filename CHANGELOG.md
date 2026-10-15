@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (2026-10-15)
+
+- `npm run reembed:kb:full` stopped with "No stored chunks found for re-embedding" at a scanned PDF with no readable text, leaving every later document without embeddings. Re-embedding now skips documents with no passages and continues after a failed document (it lists the failures; run `npm run reembed:kb` again to retry them).
+- A file whose text cannot be read (a scan OCR did not read) is now marked `failed` with that reason, instead of `indexed` with 0 passages.
+- `npm run index:kb -- --only <text>` from the repository root ignored `--only` and indexed the whole library: npm read it as its own option. The root script now passes arguments through.
+
 ### Fixed (2026-10-14): MCA analyses failing with "No retrieved evidence available"
 
 - Library search found nothing for four reasons, all fixed:

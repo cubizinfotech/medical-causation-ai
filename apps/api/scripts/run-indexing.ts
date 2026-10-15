@@ -52,10 +52,20 @@ async function main(): Promise<void> {
       }
 
       const results = await indexing.reembedAllMissingEmbeddings();
-      console.log(`Re-embedded ${results.length} document(s).`);
+      const failed = results.filter((result) => result.error);
+      console.log(
+        `Re-embedded ${results.length - failed.length} document(s)${failed.length > 0 ? `; ${failed.length} failed` : ''}.`,
+      );
       for (const result of results) {
         console.log(
-          `  ${result.knowledgeDocumentId}: embeddings=${result.embeddingCount} duration=${result.processingDurationMs}ms`,
+          result.error
+            ? `  ${result.knowledgeDocumentId}: failed: ${result.error}`
+            : `  ${result.knowledgeDocumentId}: embeddings=${result.embeddingCount} duration=${result.processingDurationMs}ms`,
+        );
+      }
+      if (failed.length > 0) {
+        console.log(
+          '\nRun npm run reembed:kb again to retry the failed documents; the others are done.',
         );
       }
     } else {

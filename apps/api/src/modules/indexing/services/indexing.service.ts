@@ -152,6 +152,15 @@ export class IndexingService implements IIndexingService {
         chunkDrafts,
       );
 
+      // A scan that OCR could not read gives no passages. Marked as indexed,
+      // it looked searchable and later stopped re-embedding; mark it failed
+      // with the reason instead.
+      if (storedChunks.length === 0) {
+        throw new Error(
+          'No readable text: the file looks scanned or empty and OCR did not read it, so it cannot be searched.',
+        );
+      }
+
       const externalToInternal = new Map(
         storedChunks.map((chunk) => [chunk.externalChunkId, chunk.id]),
       );
@@ -228,7 +237,7 @@ export class IndexingService implements IIndexingService {
    * Embeds chunks that have no vector, or a vector from another provider or
    * model (after EMBEDDING_PROVIDER or AI_EMBEDDING_MODEL changes). Old
    * vectors are replaced one batch at a time, so search keeps working while
-   * this runs.
+   * this runs. A document that fails is reported and the rest continue.
    */
   async reembedAllMissingEmbeddings(): Promise<IndexDocumentResult[]> {
     const documents = await this.documentRepository.findAllIndexed();
@@ -236,18 +245,44 @@ export class IndexingService implements IIndexingService {
     const isCurrent = this.embeddingService.isCurrentEmbedding();
 
     for (const document of documents) {
+      // Nothing to embed (e.g. a scan OCR could not read). Indexing marks
+      // such files failed now; older rows can still say indexed.
+      if (document.chunkCount === 0) {
+        this.logger.warn(
+          `Skipping "${document.filename}": it has no readable passages to embed. Run npm run index:kb to re-check the file.`,
+        );
+        continue;
+      }
+
       const current =
         await this.embeddingRepository.findCurrentEmbeddedChunkIds(
           document.id,
           isCurrent,
         );
 
-      if (current.size >= document.chunkCount && current.size > 0) {
+      if (current.size >= document.chunkCount) {
         continue;
       }
 
-      const result = await this.reembedDocument(document, current);
-      results.push(result);
+      const startTime = Date.now();
+      try {
+        results.push(await this.reembedDocument(document, current));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Re-embedding "${document.filename}" failed; continuing with the other documents: ${message}`,
+        );
+        results.push({
+          documentId: document.id,
+          knowledgeDocumentId: document.knowledgeDocumentId,
+          status: INDEX_STATUS.FAILED,
+          skipped: false,
+          chunkCount: document.chunkCount,
+          embeddingCount: current.size,
+          processingDurationMs: Date.now() - startTime,
+          error: message,
+        });
+      }
     }
 
     return results;
