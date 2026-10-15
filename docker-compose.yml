@@ -74,7 +74,9 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     ports:
-      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+      # 127.0.0.1 locally. Set PGADMIN_BIND=0.0.0.0 on the server to open
+      # http://<server-ip>:5050. Do not put the public IP here.
+      - "${PGADMIN_BIND:-127.0.0.1}:${PGADMIN_PORT:-5050}:80"
     depends_on:
       postgres:
         condition: service_healthy
