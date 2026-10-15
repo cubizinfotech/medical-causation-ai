@@ -103,7 +103,7 @@ You need a working embedding key (`OPENROUTER_API_KEY` when `EMBEDDING_PROVIDER=
 | Attorney | gopalhingu123@gmail.com |
 | Attorney | dcs@dorothyclaysims.com |
 
-Locally both use the password `password` (or `DEMO_USER_PASSWORD` when set). On the server the seed refuses `NODE_ENV=production` unless `ALLOW_DEMO_SEED=true` and a `DEMO_USER_PASSWORD` of 12+ characters are set. For anyone else, use:
+Locally both use the password `password` (or `DEMO_USER_PASSWORD` when set). On the server the seed refuses `NODE_ENV=production` unless `ALLOW_DEMO_SEED=true` and a non-empty `DEMO_USER_PASSWORD` are set. For anyone else, use:
 
 ```bash
 npm run user:create -- jane@firm.example attorney "Jane Doe"

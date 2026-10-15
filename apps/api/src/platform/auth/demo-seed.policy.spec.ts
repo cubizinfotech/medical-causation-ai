@@ -7,16 +7,14 @@ describe('demo seed policy', () => {
     ).toThrow(/ALLOW_DEMO_SEED/);
   });
 
-  it('needs a real password in production', () => {
+  it('uses DEMO_USER_PASSWORD in production when seeding is allowed', () => {
     expect(() => demoSeedPassword('production', 'true', undefined)).toThrow(
       /DEMO_USER_PASSWORD/,
     );
-    expect(() => demoSeedPassword('production', 'true', 'short')).toThrow(
+    expect(() => demoSeedPassword('production', 'true', '')).toThrow(
       /DEMO_USER_PASSWORD/,
     );
-    expect(demoSeedPassword('production', 'true', 'a-long-password-1')).toBe(
-      'a-long-password-1',
-    );
+    expect(demoSeedPassword('production', 'true', 'password')).toBe('password');
   });
 
   it('uses the simple demo password locally unless one is set', () => {

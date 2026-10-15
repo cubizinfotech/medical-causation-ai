@@ -518,7 +518,7 @@ npm run dev:web
 
 Leave these off on the public server until you decide otherwise:
 
-- Demo accounts: `npm run seed:demo-users` refuses `NODE_ENV=production` unless `ALLOW_DEMO_SEED=true` and `DEMO_USER_PASSWORD` (12+ characters) are set. Create real people instead:
+- Demo accounts: `npm run seed:demo-users` refuses `NODE_ENV=production` unless `ALLOW_DEMO_SEED=true` and a non-empty `DEMO_USER_PASSWORD` are set. Create real people instead:
 
   ```bash
   npm run user:create -- jane@firm.example attorney "Jane Doe"

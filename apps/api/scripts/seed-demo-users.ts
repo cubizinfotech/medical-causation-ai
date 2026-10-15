@@ -1,6 +1,7 @@
 /**
  * Default accounts. Existing accounts are never changed. Refused in
- * production unless ALLOW_DEMO_SEED=true and DEMO_USER_PASSWORD is set.
+ * production unless ALLOW_DEMO_SEED=true and DEMO_USER_PASSWORD is set
+ * (any non-empty value, including "password").
  * Other people: npm run user:create.
  */
 import { PrismaClient } from '@prisma/client';
