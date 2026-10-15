@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
+import { extname, join, relative, resolve } from 'node:path';
 import type { StorageSettings } from '@config/config.types';
 import { targetsFromEvidence } from '../../correspondence/ewi-request-from-evidence';
 import { EwiRequestWorkflowService } from '../../correspondence/ewi-request-workflow.service';
@@ -12,6 +12,14 @@ import {
 import { ExpertDocumentsService } from '../../documents/expert-documents.service';
 import type { CreateExpertInvestigationDto } from '../dto/create-expert-investigation.dto';
 import type { EwiInvestigationResult } from '../jobs/ewi-investigation-job.types';
+import { EwiPdfReportService } from '../../report/ewi-pdf-report.service';
+import { EWI_REPORT_TEMPLATE_VERSION } from '../../report/ewi-report.version';
+
+interface ReportFile {
+  fileName: string;
+  mimeType: string;
+  buffer: Buffer;
+}
 
 @Injectable()
 export class InvestigationHistoryService {
@@ -22,6 +30,7 @@ export class InvestigationHistoryService {
     private readonly config: ConfigService,
     private readonly requestWorkflow: EwiRequestWorkflowService,
     private readonly documents: ExpertDocumentsService,
+    private readonly pdfReport: EwiPdfReportService,
   ) {}
 
   async create(
@@ -67,7 +76,7 @@ export class InvestigationHistoryService {
     }
   }
 
-  /** Deletes the investigation, its uploaded files, and its Word report. */
+  /** Deletes the investigation, its uploaded files, and its report file. */
   async deleteHistory(
     id: string,
     ownerUserId: string,
@@ -97,24 +106,85 @@ export class InvestigationHistoryService {
     return !row || row.status === 'cancelled';
   }
 
-  async getReport(
-    id: string,
-    ownerUserId: string,
-  ): Promise<{
-    fileName: string;
-    mimeType: string;
-    buffer: Buffer;
-  }> {
+  async getReport(id: string, ownerUserId: string): Promise<ReportFile> {
     const row = await this.getHistory(id, ownerUserId);
     if (!row.reportStorageKey || !row.reportFileName || !row.reportMimeType) {
       throw new NotFoundException(`Report for investigation "${id}" not found`);
     }
-    const buffer = await readFile(this.reportPath(row.reportStorageKey));
-    return {
-      fileName: row.reportFileName,
-      mimeType: row.reportMimeType,
-      buffer,
-    };
+    const path = this.reportPath(row.reportStorageKey);
+    const rebuilt = await this.rebuildOutdatedReport(
+      row,
+      row.reportStorageKey,
+      path,
+    );
+    return (
+      rebuilt ?? {
+        fileName: row.reportFileName,
+        mimeType: row.reportMimeType,
+        buffer: await readFile(path),
+      }
+    );
+  }
+
+  /**
+   * A report saved with an older template is rebuilt from the stored
+   * investigation, so wording changes reach reports made before them. A
+   * Word report saved before the PDF template is replaced by the PDF. If
+   * the rebuild fails, the saved file is returned unchanged.
+   */
+  private async rebuildOutdatedReport(
+    row: InvestigationView,
+    storageKey: string,
+    path: string,
+  ): Promise<ReportFile | null> {
+    const result = row.result;
+    if (!result || row.reportTemplateVersion === EWI_REPORT_TEMPLATE_VERSION) {
+      return null;
+    }
+    try {
+      const report = await this.pdfReport.build({
+        expertName: result.expertName,
+        city: result.city,
+        specialty: result.specialty,
+        evidence: result.evidence,
+        discrepancies: result.discrepancies,
+        questions: result.questions,
+        generatedAt: result.generatedAt,
+        summary: result.summary,
+        analysis: result.analysis?.document,
+        legalResearch: result.legalResearch,
+        onlinePresence: result.onlinePresence,
+        professionalBackground: result.professionalBackground,
+        identity: result.identity ?? null,
+        cvCheck: result.cvCheck ?? null,
+      });
+      const newKey =
+        storageKey.slice(0, storageKey.length - extname(storageKey).length) +
+        reportExtension(report.fileName);
+      const newPath = this.reportPath(newKey);
+      await writeFile(newPath, report.buffer);
+      await this.repo.updateReportFile(row.id, {
+        fileName: report.fileName,
+        mimeType: report.mimeType,
+        storageKey: newKey,
+        byteSize: report.buffer.byteLength,
+        templateVersion: report.templateVersion,
+      });
+      if (newPath !== path) await rm(path, { force: true });
+      this.logger.log(
+        `Rebuilt the report of investigation ${row.id} with template ${report.templateVersion}`,
+      );
+      return {
+        fileName: report.fileName,
+        mimeType: report.mimeType,
+        buffer: report.buffer,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Could not rebuild the report of investigation ${row.id}; serving the saved file: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
   }
 
   updateFromJob(
@@ -139,7 +209,10 @@ export class InvestigationHistoryService {
     if (!(await this.repo.findByJobId(jobId))) return null;
     const directory = join(this.reportsDirectory(), 'investigations');
     await mkdir(directory, { recursive: true });
-    const storageKey = join(directory, `${jobId}.docx`);
+    const storageKey = join(
+      directory,
+      `${jobId}${reportExtension(report.fileName)}`,
+    );
     await writeFile(storageKey, report.buffer);
     const completed = await this.repo.markCompleted(jobId, result, {
       fileName: report.fileName,
@@ -207,4 +280,10 @@ export class InvestigationHistoryService {
       join(process.cwd(), 'knowledge-base', 'ewi', 'reports')
     );
   }
+}
+
+/** The saved file's extension, from the report's file name (".pdf"). */
+function reportExtension(fileName: string): string {
+  const extension = extname(fileName).toLowerCase();
+  return /^\.[a-z0-9]{1,8}$/.test(extension) ? extension : '.pdf';
 }

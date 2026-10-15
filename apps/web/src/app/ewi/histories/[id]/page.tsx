@@ -129,12 +129,20 @@ export default function EwiHistoryDetailPage() {
     setDownloadError(null);
     setDownloading(true);
     try {
-      await ewiClient.downloadReport(detail.id, detail.reportFileName);
+      const savedAs = await ewiClient.downloadReport(
+        detail.id,
+        detail.reportFileName,
+      );
+      // A Word report saved before the PDF template was just rebuilt as a
+      // PDF: refresh the file name shown here.
+      if (savedAs !== detail.reportFileName) {
+        void queryClient.invalidateQueries({ queryKey: ewiKeys.history(id) });
+      }
     } catch (error) {
       setDownloadError(
         toUserFacingError(
           error,
-          "The Word report could not be downloaded. Please retry.",
+          "The PDF report could not be downloaded. Please retry.",
         ),
       );
     } finally {
@@ -164,21 +172,21 @@ export default function EwiHistoryDetailPage() {
           </p>
           <Button onClick={() => void download()} disabled={downloading}>
             <Download className="h-4 w-4" />
-            {downloading ? "Downloading…" : "Download Word Report"}
+            {downloading ? "Downloading…" : "Download PDF Report"}
           </Button>
         </>
       ) : detail.status === "completed" ? (
         <EmptyReportNote>
-          The investigation completed, but the Word report file is not available
+          The investigation completed, but the PDF report file is not available
           for download.
         </EmptyReportNote>
       ) : inProgress ? (
         <EmptyReportNote>
-          The Word report will be available when report generation finishes.
+          The PDF report will be available when report generation finishes.
         </EmptyReportNote>
       ) : (
         <EmptyReportNote>
-          No Word report was generated for this investigation.
+          No PDF report was generated for this investigation.
         </EmptyReportNote>
       )}
       {downloadError ? (
@@ -223,7 +231,7 @@ export default function EwiHistoryDetailPage() {
           {detail.reportFileName ? (
             <Button onClick={() => void download()} disabled={downloading}>
               <Download className="h-4 w-4" />
-              {downloading ? "Downloading…" : "Download Word Report"}
+              {downloading ? "Downloading…" : "Download PDF Report"}
             </Button>
           ) : null}
           <Button variant="outline" onClick={retrySameExpert}>

@@ -75,6 +75,8 @@ export interface InvestigationView {
   reportFileName: string | null;
   reportMimeType: string | null;
   reportStorageKey: string | null;
+  /** Template version the saved report was built with. */
+  reportTemplateVersion?: string | null;
   createdAt: Date;
   updatedAt: Date;
   completedAt: Date | null;
@@ -579,6 +581,26 @@ export class ExpertInvestigationRepository {
     await this.prisma.investigation.delete({ where: { id } });
   }
 
+  /**
+   * Records a saved report rebuilt with a newer template. The file name,
+   * type, and path change when the format does (a Word report became a PDF).
+   */
+  async updateReportFile(
+    investigationId: string,
+    data: {
+      fileName: string;
+      mimeType: string;
+      storageKey: string;
+      byteSize: number;
+      templateVersion: string;
+    },
+  ): Promise<void> {
+    await this.prisma.investigationReport.update({
+      where: { investigationId },
+      data,
+    });
+  }
+
   private async requireByJobId(jobId: string) {
     const current = await this.prisma.investigation.findUnique({
       where: { jobId },
@@ -619,7 +641,12 @@ export class ExpertInvestigationRepository {
     updatedAt: Date;
     completedAt: Date | null;
     expert: { name: string; city: string; specialty: string };
-    report: { fileName: string; mimeType: string; storageKey: string } | null;
+    report: {
+      fileName: string;
+      mimeType: string;
+      storageKey: string;
+      templateVersion?: string;
+    } | null;
   }): InvestigationView {
     return {
       id: row.id,
@@ -639,6 +666,7 @@ export class ExpertInvestigationRepository {
       reportFileName: row.report?.fileName ?? null,
       reportMimeType: row.report?.mimeType ?? null,
       reportStorageKey: row.report?.storageKey ?? null,
+      reportTemplateVersion: row.report?.templateVersion ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       completedAt: row.completedAt,

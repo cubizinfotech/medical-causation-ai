@@ -36,7 +36,7 @@ export default function EwiHistoriesView() {
             Investigation Histories
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Past expert witness investigations and Word reports.
+            Past expert witness investigations and PDF reports.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

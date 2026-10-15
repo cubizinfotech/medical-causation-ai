@@ -32,7 +32,7 @@ import {
   buildProfessionalBackgroundDossier,
   type ProfessionalBackgroundDossier,
 } from '../../research/professional-background';
-import type { EwiWordReportService } from '../../report/ewi-word-report.service';
+import type { EwiPdfReportService } from '../../report/ewi-pdf-report.service';
 import { buildGroundedCrossExamQuestions } from '../../report/ewi-report-questions';
 import type { CrossExamQuestion } from '../../research/cross-exam-question.generator';
 import {
@@ -99,7 +99,7 @@ export interface InvestigationWorkflowCheckpoint {
 
 export interface InvestigationWorkflowDependencies {
   research: InvestigationResearchPort;
-  report: Pick<EwiWordReportService, 'build'>;
+  report: Pick<EwiPdfReportService, 'build'>;
   analyze?: (packet: AnalysisPacket) => Promise<EwiAnalysisRecord>;
   /** Reads the claims in the uploaded CV (AI). Optional. */
   readCv?: (
@@ -497,7 +497,7 @@ export async function executeInvestigationWorkflow(
       continue;
     }
 
-    await report(dependencies, stage, progress, 'Building the Word report…');
+    await report(dependencies, stage, progress, 'Building the PDF report…');
     await persistCheckpoint(stage.id);
   }
 

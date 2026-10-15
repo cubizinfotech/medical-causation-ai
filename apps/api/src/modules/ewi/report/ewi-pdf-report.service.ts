@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DocxReportRenderer } from '@platform/report/docx-report.renderer';
+import { PdfReportRenderer } from '@platform/report/pdf/pdf-report.renderer';
 import type { ReportArtifact } from '@platform/report/report.types';
 import type {
   ExpertEvidenceItem,
@@ -33,14 +33,15 @@ export interface EwiReportInput {
 
 export interface EwiReportOutput extends ReportArtifact {
   buffer: Buffer;
-  format: 'docx';
+  format: 'pdf';
   templateId: string;
   templateVersion: string;
 }
 
+/** The EWI investigation report as a PDF, laid out like the MCA report. */
 @Injectable()
-export class EwiWordReportService {
-  constructor(private readonly renderer: DocxReportRenderer) {}
+export class EwiPdfReportService {
+  constructor(private readonly renderer: PdfReportRenderer) {}
 
   async build(input: EwiReportInput): Promise<EwiReportOutput> {
     const model = buildEwiReportDocument(input);
@@ -48,7 +49,7 @@ export class EwiWordReportService {
     return {
       fileName: rendered.fileName,
       mimeType: rendered.mimeType,
-      format: 'docx',
+      format: 'pdf',
       templateId: model.templateId,
       templateVersion: model.templateVersion,
       buffer: rendered.buffer,

@@ -25,7 +25,7 @@ const WORKFLOW = [
   "Enter expert name, city, and specialty",
   "Automated research across credentials, legal, and public sources",
   "Review findings, inconsistencies, and questions",
-  "Download the Word report for case prep",
+  "Download the PDF report for case prep",
 ] as const;
 
 export default function EwiDashboardPage() {
@@ -52,8 +52,8 @@ export default function EwiDashboardPage() {
           </h1>
           <p className="mt-3 text-base text-muted-foreground sm:text-lg">
             Research an opposing expert&apos;s credentials, publications, legal
-            history, and public footprint — then generate a Microsoft Word
-            report with evidence-based cross-examination questions.
+            history, and public footprint — then generate a PDF report with
+            evidence-based cross-examination questions.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button asChild size="lg">

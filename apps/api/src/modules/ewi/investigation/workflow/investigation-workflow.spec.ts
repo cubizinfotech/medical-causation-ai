@@ -24,11 +24,10 @@ describe('investigation workflow', () => {
   const report = {
     build: jest.fn(() =>
       Promise.resolve({
-        fileName: 'report.docx',
-        mimeType:
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        buffer: Buffer.from('docx'),
-        format: 'docx' as const,
+        fileName: 'report.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('pdf'),
+        format: 'pdf' as const,
         templateId: 'ewi/investigation-report',
         templateVersion: '1.0.0',
       }),
@@ -71,7 +70,16 @@ describe('investigation workflow', () => {
       ['awards', 'military_claims'],
     ]);
     expect(outcome.result.evidence).toEqual([]);
-    expect(outcome.result.summary).toMatch(/Nothing was inferred/);
+    // The summary says plainly that nothing was found; it does not list a
+    // "could not verify" line for every source.
+    expect(outcome.result.summary).toMatch(
+      /No records about this expert were found in the sources searched/,
+    );
+    expect(outcome.result.summary).not.toMatch(
+      /Could not verify|Nothing was inferred/,
+    );
+    // Each unavailable source is still recorded, in the analysis and the source list.
+    expect(outcome.result.analysis.document.missing.length).toBeGreaterThan(0);
     expect(outcome.result.summary).not.toMatch(
       /award recipient|received a medal/i,
     );
@@ -84,7 +92,6 @@ describe('investigation workflow', () => {
       /award recipient|received a medal/i,
     );
     expect(outcome.result.analysis.origin).toBe('deterministic');
-    expect(outcome.result.summary).toMatch(/could not be verified/i);
     expect(
       outcome.result.sourceStatuses.every(
         (status) =>

@@ -5,6 +5,10 @@ import type {
 import type { ExpertDiscrepancy } from '../research/discrepancy-analyzer';
 import type { CrossExamQuestion } from '../research/cross-exam-question.generator';
 import type { EwiAnalysisDocument } from '../investigation/analysis/ewi-analysis.types';
+import {
+  NO_RECORDS_LINE,
+  presentableSummaryLines,
+} from '../investigation/analysis/summary-lines';
 import type { CvCheck, CvComparison } from '../cv/cv.types';
 import { CV_LABEL_TEXT } from '../cv/cv-comparison';
 import type { InconsistencyLabel } from '../research/verification-labels';
@@ -36,6 +40,7 @@ import {
 import type {
   ReportBlock,
   ReportDocumentModel,
+  ReportIconName,
   ReportSectionModel,
 } from '@platform/report/report-document';
 import {
@@ -44,104 +49,269 @@ import {
   EWI_REPORT_TEMPLATE_VERSION,
 } from './ewi-report.version';
 
-const EMPTY =
-  'No record was collected for this section. The information could not be verified. No qualification was inferred.';
+const EMPTY = 'No records for this section were found in the sources searched.';
 
 export interface EwiReportSectionSpec {
   id: string;
   title: string;
   number: number;
+  /** Header icon of the section's card. */
+  icon?: ReportIconName;
+  /** Sections 1–5 are shown on the cover. */
+  placement?: ReportSectionModel['placement'];
 }
 
 /**
- * Final EWI Word report outline (attorney review).
+ * Final EWI report outline (attorney review). Sections 1–5 are on the PDF's
+ * cover; the rest are cards, in this order.
  * Content is built only from collected evidence and dossiers.
  */
 export const EWI_REPORT_SECTIONS: EwiReportSectionSpec[] = [
-  { id: 'expert-name', number: 1, title: '1. Expert Name' },
-  { id: 'city', number: 2, title: '2. City' },
-  { id: 'specialty', number: 3, title: '3. Specialty' },
-  { id: 'investigation-date', number: 4, title: '4. Investigation Date' },
-  { id: 'summary', number: 5, title: '5. Executive Summary' },
-  { id: 'background', number: 6, title: '6. Expert Background' },
+  {
+    id: 'expert-name',
+    number: 1,
+    title: '1. Expert Name',
+    placement: 'cover-fact',
+  },
+  {
+    id: 'city',
+    number: 2,
+    title: '2. City',
+    placement: 'cover-fact',
+  },
+  {
+    id: 'specialty',
+    number: 3,
+    title: '3. Specialty',
+    placement: 'cover-fact',
+  },
+  {
+    id: 'investigation-date',
+    number: 4,
+    title: '4. Investigation Date',
+    placement: 'cover-fact',
+  },
+  {
+    id: 'summary',
+    number: 5,
+    title: '5. Executive Summary',
+    placement: 'cover-summary',
+  },
+  {
+    id: 'background',
+    number: 6,
+    title: '6. Expert Background',
+    icon: 'user',
+  },
   {
     id: 'inconsistencies',
     number: 7,
     title: '7. Inconsistencies in Background',
+    icon: 'alert-triangle',
   },
-  { id: 'cv-comparison', number: 8, title: '8. CV Comparison' },
-  { id: 'education', number: 9, title: '9. Education and Degrees' },
+  {
+    id: 'cv-comparison',
+    number: 8,
+    title: '8. CV Comparison',
+    icon: 'git-compare',
+  },
+  {
+    id: 'education',
+    number: 9,
+    title: '9. Education and Degrees',
+    icon: 'graduation-cap',
+  },
   {
     id: 'university-accreditation',
     number: 10,
     title: '10. University Accreditation',
+    icon: 'school',
   },
-  { id: 'licenses', number: 11, title: '11. Licenses' },
+  {
+    id: 'licenses',
+    number: 11,
+    title: '11. Licenses',
+    icon: 'badge-check',
+  },
   {
     id: 'board-actions',
     number: 12,
     title: '12. State Licensing/Board Actions',
+    icon: 'shield-alert',
   },
-  { id: 'board-certifications', number: 13, title: '13. Board Certifications' },
+  {
+    id: 'board-certifications',
+    number: 13,
+    title: '13. Board Certifications',
+    icon: 'award',
+  },
   {
     id: 'certification-orgs',
     number: 14,
     title: '14. Certification Organizations',
+    icon: 'building',
   },
-  { id: 'memberships', number: 15, title: '15. Memberships' },
-  { id: 'publications', number: 16, title: '16. Publications' },
-  { id: 'grants', number: 17, title: '17. Grants' },
-  { id: 'patents', number: 18, title: '18. Patents' },
+  {
+    id: 'memberships',
+    number: 15,
+    title: '15. Memberships',
+    icon: 'users',
+  },
+  {
+    id: 'publications',
+    number: 16,
+    title: '16. Publications',
+    icon: 'book-open',
+  },
+  {
+    id: 'grants',
+    number: 17,
+    title: '17. Grants',
+    icon: 'coins',
+  },
+  {
+    id: 'patents',
+    number: 18,
+    title: '18. Patents',
+    icon: 'lightbulb',
+  },
   {
     id: 'awards-military',
     number: 19,
     title: '19. Awards/Military Claims',
+    icon: 'medal',
   },
-  { id: 'websites', number: 20, title: '20. Expert Websites' },
-  { id: 'ime', number: 21, title: '21. IME/Advertising' },
-  { id: 'directories', number: 22, title: '22. Expert Directories' },
-  { id: 'orders', number: 23, title: '23. Orders' },
-  { id: 'pleadings', number: 24, title: '24. Pleadings/Motions' },
-  { id: 'depositions', number: 25, title: '25. Depositions' },
+  {
+    id: 'websites',
+    number: 20,
+    title: '20. Expert Websites',
+    icon: 'globe',
+  },
+  {
+    id: 'ime',
+    number: 21,
+    title: '21. IME/Advertising',
+    icon: 'megaphone',
+  },
+  {
+    id: 'directories',
+    number: 22,
+    title: '22. Expert Directories',
+    icon: 'book-user',
+  },
+  {
+    id: 'orders',
+    number: 23,
+    title: '23. Orders',
+    icon: 'scroll-text',
+  },
+  {
+    id: 'pleadings',
+    number: 24,
+    title: '24. Pleadings/Motions',
+    icon: 'file-text',
+  },
+  {
+    id: 'depositions',
+    number: 25,
+    title: '25. Depositions',
+    icon: 'mic',
+  },
   {
     id: 'testimony-inconsistencies',
     number: 26,
     title: '26. Testimony Inconsistencies',
+    icon: 'message-square-warning',
   },
   {
     id: 'admissibility-challenges',
     number: 27,
     title: '27. Daubert/Frye Challenges',
+    icon: 'scale',
   },
-  { id: 'income-bias', number: 28, title: '28. Income/Bias' },
-  { id: 'lawsuits', number: 29, title: '29. Lawsuits/Malpractice' },
-  { id: 'criminal', number: 30, title: '30. Criminal Records' },
-  { id: 'social', number: 31, title: '31. Social Media' },
-  { id: 'videos', number: 32, title: '32. Videos/Transcripts' },
-  { id: 'news', number: 33, title: '33. News/Blogs' },
-  { id: 'university-rules', number: 34, title: '34. University Rules' },
+  {
+    id: 'income-bias',
+    number: 28,
+    title: '28. Income/Bias',
+    icon: 'banknote',
+  },
+  {
+    id: 'lawsuits',
+    number: 29,
+    title: '29. Lawsuits/Malpractice',
+    icon: 'landmark',
+  },
+  {
+    id: 'criminal',
+    number: 30,
+    title: '30. Criminal Records',
+    icon: 'fingerprint',
+  },
+  {
+    id: 'social',
+    number: 31,
+    title: '31. Social Media',
+    icon: 'share',
+  },
+  {
+    id: 'videos',
+    number: 32,
+    title: '32. Videos/Transcripts',
+    icon: 'video',
+  },
+  {
+    id: 'news',
+    number: 33,
+    title: '33. News/Blogs',
+    icon: 'newspaper',
+  },
+  {
+    id: 'university-rules',
+    number: 34,
+    title: '34. University Rules',
+    icon: 'clipboard-list',
+  },
   {
     id: 'corporate',
     number: 35,
     title: '35. Corporate Affiliations',
+    icon: 'briefcase',
   },
-  { id: 'patient-reviews', number: 36, title: '36. Patient Reviews' },
+  {
+    id: 'patient-reviews',
+    number: 36,
+    title: '36. Patient Reviews',
+    icon: 'star',
+  },
   {
     id: 'office-location',
     number: 37,
     title: '37. Office/Location Findings',
+    icon: 'map-pin',
   },
-  { id: 'misc', number: 38, title: '38. Miscellaneous Findings' },
+  {
+    id: 'misc',
+    number: 38,
+    title: '38. Miscellaneous Findings',
+    icon: 'layers',
+  },
   {
     id: 'overall-findings',
     number: 39,
     title: '39. Overall Research Findings',
+    icon: 'list-checks',
   },
-  { id: 'source-index', number: 40, title: '40. Source Index' },
+  {
+    id: 'source-index',
+    number: 40,
+    title: '40. Source Index',
+    icon: 'link',
+  },
   {
     id: 'questions',
     number: 41,
     title: '41. Cross-Examination Questions',
+    icon: 'gavel',
   },
 ];
 
@@ -180,18 +350,18 @@ export function buildEwiReportDocument(input: {
     input.professionalBackground ??
     buildProfessionalBackgroundDossier({ evidence: input.evidence });
 
-  const sections: ReportSectionModel[] = EWI_REPORT_SECTIONS.map((spec) => {
+  const built: ReportSectionModel[] = EWI_REPORT_SECTIONS.map((spec) => {
     switch (spec.id) {
       case 'expert-name':
-        return simpleFieldSection(spec, `Expert name: ${input.expertName}`);
+        return simpleFieldSection(spec, input.expertName);
       case 'city':
-        return simpleFieldSection(spec, `City: ${input.city}`);
+        return simpleFieldSection(spec, input.city);
       case 'specialty':
-        return simpleFieldSection(spec, `Specialty: ${input.specialty}`);
+        return simpleFieldSection(spec, input.specialty);
       case 'investigation-date':
         return simpleFieldSection(
           spec,
-          `Investigation date: ${formatInvestigationDate(input.generatedAt)}`,
+          formatInvestigationDate(input.generatedAt),
         );
       case 'summary':
         return summarySection(spec, input);
@@ -372,6 +542,14 @@ export function buildEwiReportDocument(input: {
         };
     }
   });
+  const sections = built.map((section, index) => {
+    const { icon, placement } = EWI_REPORT_SECTIONS[index];
+    return {
+      ...section,
+      ...(icon ? { icon } : {}),
+      ...(placement ? { placement } : {}),
+    };
+  });
 
   const safeName = input.expertName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   return {
@@ -381,12 +559,24 @@ export function buildEwiReportDocument(input: {
     title: 'Expert Witness Investigation Report',
     subtitle: `${input.expertName} — ${input.city} — ${input.specialty}`,
     headerLabel: 'Expert Witness Investigation',
-    fileName: `ewi-${safeName || 'expert'}-report.docx`,
+    fileName: `ewi-${safeName || 'expert'}-report.pdf`,
     generatedAt: input.generatedAt,
-    mimeType:
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    format: 'docx',
+    mimeType: 'application/pdf',
+    format: 'pdf',
     includeTableOfContents: true,
+    highlights: [
+      countLabel(input.evidence.length, 'collected item', 'collected items'),
+      countLabel(
+        input.discrepancies.length + (input.analysis?.conflicts.length ?? 0),
+        'inconsistency',
+        'inconsistencies',
+      ),
+      countLabel(
+        input.questions.length,
+        'cross-examination question',
+        'cross-examination questions',
+      ),
+    ],
     metadata: {
       expertName: input.expertName,
       city: input.city,
@@ -399,6 +589,10 @@ export function buildEwiReportDocument(input: {
     },
     sections,
   };
+}
+
+function countLabel(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
 }
 
 function formatInvestigationDate(iso: string): string {
@@ -565,36 +759,20 @@ function admissibilitySection(
   return { id: spec.id, title: spec.title, blocks };
 }
 
+/**
+ * The summary on the cover. The subject is in the cover details, the counts
+ * are its badges, and the disclaimer has its own card, so none repeat here.
+ */
 function summarySection(
   spec: EwiReportSectionSpec,
-  input: {
-    summary?: string;
-    analysis?: EwiAnalysisDocument;
-    expertName: string;
-    city: string;
-    specialty: string;
-    evidence: ExpertEvidenceItem[];
-    questions: CrossExamQuestion[];
-  },
+  input: { summary?: string; analysis?: EwiAnalysisDocument },
 ): ReportSectionModel {
   const text =
-    input.summary?.trim() ||
-    input.analysis?.summary ||
-    'The investigation could not verify a qualification from the collected sources.';
-  const blocks: ReportBlock[] = [
-    {
-      text: `Subject: ${input.expertName}, ${input.city}, ${input.specialty}.`,
-    },
-    ...text
-      .split('\n')
-      .filter((line) => line.trim())
-      .map((line) => ({ text: line })),
-    {
-      text: `${input.evidence.length} collected evidence item(s) and ${input.questions.length} cross-examination question(s) are included.`,
-      style: 'note',
-    },
-    { text: EWI_REPORT_DISCLAIMER, style: 'note' },
-  ];
+    input.summary?.trim() || input.analysis?.summary || NO_RECORDS_LINE;
+  const blocks: ReportBlock[] = presentableSummaryLines(
+    text,
+    input.analysis?.missing,
+  ).map((line) => ({ text: line }));
   return { id: spec.id, title: spec.title, blocks };
 }
 
@@ -1233,6 +1411,7 @@ function overallFindingsSection(
     for (const finding of input.analysis.investigationFindings) {
       blocks.push({
         text: `[${finding.status}] ${finding.text}`,
+        style: 'item',
       });
       blocks.push({
         text: `Source refs: ${finding.sourceRefs.join(', ')}`,
@@ -1240,24 +1419,19 @@ function overallFindingsSection(
       });
     }
   } else if (input.summary) {
-    blocks.push({ text: input.summary });
+    for (const line of presentableSummaryLines(
+      input.summary,
+      input.analysis?.missing,
+    )) {
+      blocks.push({ text: line });
+    }
   } else {
     blocks.push({
       text: `${input.evidence.length} evidence item(s) and ${input.discrepancies.length} inconsistency entr${input.discrepancies.length === 1 ? 'y' : 'ies'} were collected.`,
     });
   }
-  for (const missing of input.analysis?.missing ?? []) {
-    blocks.push({
-      text: `Gap [${missing.assessment}] ${missing.category}: ${missing.note}`,
-      style: 'note',
-    });
-    if (missing.sourceRefs.length) {
-      blocks.push({
-        text: `Source refs: ${missing.sourceRefs.join(', ')}`,
-        style: 'citation',
-      });
-    }
-  }
+  // Sources that returned nothing are not listed one by one here: a line per
+  // source ("Gap [unavailable] …") filled the report with negatives.
   return { id: spec.id, title: spec.title, blocks };
 }
 
@@ -1317,7 +1491,7 @@ function sourceIndexSection(
         : (item.access ?? 'public');
     blocks.push({
       text: `${index + 1}. [${item.sourceId}] ${item.title} — access: ${access}; status: ${item.informationStatus ?? 'unverified'}`,
-      style: 'citation',
+      style: 'item',
     });
     if (item.url) {
       blocks.push({ text: item.url, link: item.url, style: 'citation' });
@@ -1349,7 +1523,10 @@ function questionsSection(
     },
   ];
   for (const question of questions) {
-    blocks.push({ text: `${question.number}. ${question.question}` });
+    blocks.push({
+      text: `${question.number}. ${question.question}`,
+      style: 'item',
+    });
     blocks.push({
       text: `Basis: ${question.evidenceBasis}`,
       style: 'citation',
@@ -1387,20 +1564,10 @@ function professionalGroupSection(
 ): ReportSectionModel {
   markProfessionalClaimed(tracker, records);
   const blocks: ReportBlock[] = [];
+  // An empty section gets one neutral line; which sources were unavailable
+  // is shown once, in the source list, not repeated in every section.
   if (records.length === 0) {
     blocks.push({ text: EMPTY, style: 'note' });
-  }
-  const unavailable = dossier.sourceAttempts.filter(
-    (attempt) =>
-      attempt.status === 'unavailable' ||
-      attempt.outcome === 'unavailable' ||
-      attempt.outcome === 'no_result',
-  );
-  if (unavailable.length > 0 && records.length === 0) {
-    blocks.push({
-      text: 'Unavailable or empty professional sources for this section were recorded as such. Those sources were not treated as completed negative findings.',
-      style: 'note',
-    });
   }
   for (const record of records) {
     blocks.push(...professionalRecordBlocks(record));
@@ -1416,20 +1583,10 @@ function presenceGroupSection(
 ): ReportSectionModel {
   markPresenceClaimed(tracker, records);
   const blocks: ReportBlock[] = [];
-  const unavailable = dossier.sourceAttempts.filter(
-    (attempt) =>
-      attempt.status === 'unavailable' ||
-      attempt.outcome === 'unavailable' ||
-      attempt.outcome === 'authentication_required',
-  );
+  // An empty section gets one neutral line; which sources were unavailable
+  // is shown once, in the source list, not repeated in every section.
   if (records.length === 0) {
     blocks.push({ text: EMPTY, style: 'note' });
-  }
-  if (unavailable.length > 0 && records.length === 0) {
-    blocks.push({
-      text: 'Unavailable online presence sources for this section were recorded as unavailable. Those sources were not treated as completed searches.',
-      style: 'note',
-    });
   }
   for (const record of records) {
     blocks.push(...presenceRecordBlocks(record));

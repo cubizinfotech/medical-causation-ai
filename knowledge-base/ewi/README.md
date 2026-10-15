@@ -5,7 +5,7 @@ Place EWI-specific reference documents here (guidelines, templates, sample packs
 Folders:
 - articles/
 - reports/
-- templates/  — Word report template assets (optional)
+- templates/  — report template assets (optional)
 - uploads/
 - books/
 

@@ -1,6 +1,6 @@
 /**
  * Common report infrastructure types.
- * Product modules (MCA PDF/HTML, EWI Word) implement builders against these shapes.
+ * Product modules (MCA PDF/HTML, EWI PDF) implement builders against these shapes.
  */
 export type ReportFormat = 'docx' | 'pdf' | 'html' | 'json';
 

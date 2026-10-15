@@ -79,10 +79,10 @@ describe('investigation workflow with an uploaded CV', () => {
     const build = jest.fn((input: unknown) => {
       void input;
       return Promise.resolve({
-        fileName: 'report.docx',
+        fileName: 'report.pdf',
         mimeType: 'application/octet-stream',
         buffer: Buffer.from(''),
-        format: 'docx' as const,
+        format: 'pdf' as const,
         templateId: 'ewi/investigation-report',
         templateVersion: '2.1.0',
       });
@@ -163,10 +163,10 @@ describe('investigation workflow with an uploaded CV', () => {
         report: {
           build: () =>
             Promise.resolve({
-              fileName: 'report.docx',
+              fileName: 'report.pdf',
               mimeType: 'application/octet-stream',
               buffer: Buffer.from(''),
-              format: 'docx' as const,
+              format: 'pdf' as const,
               templateId: 'ewi/investigation-report',
               templateVersion: '2.1.0',
             }),

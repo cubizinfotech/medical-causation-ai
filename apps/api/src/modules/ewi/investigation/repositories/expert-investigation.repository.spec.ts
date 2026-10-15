@@ -80,16 +80,15 @@ describe('ExpertInvestigationRepository persistence rules', () => {
       questions: [],
       questionCount: 0,
       sourceStatuses: [],
-      reportFileName: 'report.docx',
+      reportFileName: 'report.pdf',
       generatedAt: '2026-09-23T00:00:00.000Z',
       disclaimer: 'test',
     } as unknown as EwiInvestigationResult;
 
     await repo.markCompleted('job-1', result, {
-      fileName: 'report.docx',
-      mimeType:
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      storageKey: 'reports/job-1.docx',
+      fileName: 'report.pdf',
+      mimeType: 'application/pdf',
+      storageKey: 'reports/job-1.pdf',
       byteSize: 12,
     });
 

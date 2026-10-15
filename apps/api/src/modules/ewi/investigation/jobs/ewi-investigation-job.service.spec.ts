@@ -64,7 +64,7 @@ describe('EwiInvestigationJobService', () => {
       progress: 90,
     });
     await service.markCompleted(jobId, {} as never, {
-      fileName: 'r.docx',
+      fileName: 'r.pdf',
       mimeType: 'x',
       buffer: Buffer.from(''),
     });
@@ -81,7 +81,7 @@ describe('EwiInvestigationJobService', () => {
     store.clear();
 
     await service.markCompleted(jobId, {} as never, {
-      fileName: 'r.docx',
+      fileName: 'r.pdf',
       mimeType: 'x',
       buffer: Buffer.from(''),
     });

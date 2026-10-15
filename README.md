@@ -4,7 +4,7 @@ This application helps personal injury attorneys do two kinds of legal research.
 
 **Medical Causation Analysis (MCA)** studies whether a trauma or accident medically contributed to an injury or disease. The attorney enters the case and can upload the client's medical records (PDF, scanned pages are read with OCR). The app builds a page-cited medical chronology, a bills summary, and a list of "bad facts" the defense may raise, searches the firm's indexed medical library and PubMed, and writes an on-screen report with citations. A draft demand letter can be downloaded in Word. It does not diagnose patients and it is not a hospital record system.
 
-**Expert Witness Investigation (EWI)** researches an opposing expert from a name, city, and medical specialty (optionally an NPI number and their CV), then produces a Microsoft Word report with cross-examination questions. By default it uses sample research records. With `RESEARCH_PROVIDER=live`, it searches free public sources (NPI Registry, CMS Open Payments, OpenAlex, CourtListener) and confirms the expert's identity before attributing anything. Paid research sites are not connected.
+**Expert Witness Investigation (EWI)** researches an opposing expert from a name, city, and medical specialty (optionally an NPI number and their CV), then produces a PDF report, laid out like the MCA report, with cross-examination questions. By default it uses sample research records. With `RESEARCH_PROVIDER=live`, it searches free public sources (NPI Registry, CMS Open Payments, OpenAlex, CourtListener) and confirms the expert's identity before attributing anything. Paid research sites are not connected.
 
 Both products share one website, one API, PostgreSQL, and Redis. Their screens and data stay separate, and every case belongs to the user who created it.
 
@@ -17,7 +17,7 @@ Both products share one website, one API, PostgreSQL, and Redis. Their screens a
 | [docs/digitalocean.md](./docs/digitalocean.md) | Short command list for that server |
 | [docs/how-it-works.md](./docs/how-it-works.md) | Purpose and the two user flows |
 | [docs/mca-workflow.md](./docs/mca-workflow.md) | MCA step by step: button click, queue, search, AI, report |
-| [docs/ewi-workflow.md](./docs/ewi-workflow.md) | EWI step by step: button click, stages, Word report download |
+| [docs/ewi-workflow.md](./docs/ewi-workflow.md) | EWI step by step: button click, stages, PDF report download |
 | [docs/index.html](./docs/index.html) | The same overview in a browser |
 | [.env.example](./.env.example) | Every setting, grouped and explained |
 | [TODO.md](./TODO.md) | What is done and what is still pending |

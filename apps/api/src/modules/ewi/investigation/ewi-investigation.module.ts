@@ -12,7 +12,7 @@ import { ExpertResearchOrchestrator } from '../research/expert-research.orchestr
 import { LegalResearchService } from '../research/legal';
 import { OnlinePresenceResearchService } from '../research/online-presence';
 import { ProfessionalBackgroundResearchService } from '../research/professional-background';
-import { EwiWordReportService } from '../report/ewi-word-report.service';
+import { EwiPdfReportService } from '../report/ewi-pdf-report.service';
 import { EwiAnalysisService } from './analysis/ewi-analysis.service';
 import { ExpertInvestigationRepository } from './repositories/expert-investigation.repository';
 import { InvestigationHistoryService } from './services/investigation-history.service';
@@ -41,7 +41,7 @@ import { ExpertCvService } from '../cv/expert-cv.service';
     LegalResearchService,
     OnlinePresenceResearchService,
     ProfessionalBackgroundResearchService,
-    EwiWordReportService,
+    EwiPdfReportService,
     EwiAnalysisService,
     ExpertInvestigationRepository,
     InvestigationHistoryService,

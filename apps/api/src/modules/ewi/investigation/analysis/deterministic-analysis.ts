@@ -2,6 +2,7 @@ import { EXPERT_RESEARCH_CATALOG } from '@integrations/expert-research';
 import type { ExpertEvidenceItem } from '@integrations/expert-research';
 import type { ExpertResearchSourceResult } from '@integrations/expert-research';
 import { DiscrepancyAnalyzer } from '../../research/discrepancy-analyzer';
+import { NO_RECORDS_LINE } from './summary-lines';
 import type {
   AnalysisFinding,
   AnalysisPacket,
@@ -95,13 +96,14 @@ export function buildDeterministicAnalysis(
     sourceRefs: item.sourceRefs,
   }));
 
+  // Sources that returned nothing stay in `missing` and the source list;
+  // one "could not verify" line per source made the summary unreadable.
   const summary = [
     `Investigation of ${packet.expertName} (${packet.specialty}).`,
     'This summary uses collected source statements only. It does not confirm a qualification that those statements do not support.',
     packet.findings.length === 0
-      ? 'No research items were collected. The information could not be verified.'
+      ? NO_RECORDS_LINE
       : `${packet.findings.length} item(s) were collected. Not verified and conflicting items could not be verified.`,
-    ...missing.map((item) => item.note),
   ].join('\n');
 
   const conclusions = [

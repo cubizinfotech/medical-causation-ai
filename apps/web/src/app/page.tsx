@@ -41,7 +41,7 @@ export default function ProductChooserPage() {
           </div>
           <h2 className="text-xl font-semibold">Expert Witness Investigation</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Research opposing experts and generate a Microsoft Word report with
+            Research opposing experts and generate a PDF report with
             100+ evidence-based cross-examination questions.
           </p>
           <Button asChild className="mt-6">

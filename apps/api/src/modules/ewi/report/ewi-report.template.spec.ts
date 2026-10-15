@@ -4,11 +4,27 @@ import {
   buildEwiReportDocument,
 } from './ewi-report.template';
 import { EWI_REPORT_TEMPLATE_VERSION } from './ewi-report.version';
-import { EwiWordReportService } from './ewi-word-report.service';
-import { DocxReportRenderer } from '@platform/report/docx-report.renderer';
+import { EwiPdfReportService } from './ewi-pdf-report.service';
+import { PdfReportRenderer } from '@platform/report/pdf/pdf-report.renderer';
+import { PdfParser } from '@modules/document-processing/parsers/pdf.parser';
+import { buildDeterministicAnalysis } from '../investigation/analysis/deterministic-analysis';
+
+/** The PDF's text, page by page, as the app's own PDF reader extracts it. */
+async function pdfPages(buffer: Buffer): Promise<string[]> {
+  const parsed = await new PdfParser().parse({
+    filePath: 'report.pdf',
+    buffer,
+    filename: 'report.pdf',
+    extension: 'pdf',
+    fileSize: buffer.byteLength,
+    createdAt: new Date(),
+    modifiedAt: new Date(),
+  });
+  return parsed.pages.map((page) => page.text);
+}
 
 describe('EWI report template', () => {
-  const renderer = new DocxReportRenderer();
+  const renderer = new PdfReportRenderer();
 
   it('includes the full 41-section outline with metadata, TOC, version, and disclaimer', () => {
     const document = buildEwiReportDocument({
@@ -36,17 +52,97 @@ describe('EWI report template', () => {
     );
     expect(
       document.sections.find((s) => s.id === 'expert-name')?.blocks[0]?.text,
-    ).toMatch(/Jane Doe/);
+    ).toBe('Jane Doe');
+    expect(document.format).toBe('pdf');
+    expect(document.mimeType).toBe('application/pdf');
+    expect(document.fileName).toBe('ewi-jane-doe-report.pdf');
+    expect(document.highlights).toEqual([
+      '0 collected items',
+      '0 inconsistencies',
+      '0 cross-examination questions',
+    ]);
+    // Sections 1–5 are on the cover; every other section is a card with an icon.
+    expect(
+      document.sections.slice(0, 5).map((section) => section.placement),
+    ).toEqual([
+      'cover-fact',
+      'cover-fact',
+      'cover-fact',
+      'cover-fact',
+      'cover-summary',
+    ]);
+    for (const section of document.sections.slice(5)) {
+      expect(section.placement).toBeUndefined();
+      expect(section.icon).toBeDefined();
+    }
+    // The cover shows the subject and the counts, and the disclaimer has
+    // its own card, so the summary does not repeat them.
+    const summaryText = document.sections
+      .find((section) => section.id === 'summary')
+      ?.blocks.map((block) => block.text)
+      .join('\n');
+    expect(summaryText).not.toMatch(/Subject:|cross-examination question/);
+    expect(summaryText).not.toContain(document.metadata?.disclaimer);
     expect(
       document.sections
         .find((section) => section.id === 'board-certifications')
         ?.blocks.map((block) => block.text)
         .join(' '),
-    ).toMatch(/could not be verified/i);
+    ).toBe('No records for this section were found in the sources searched.');
     expect(
       document.sections.find((section) => section.id === 'questions')?.blocks[0]
         ?.text,
     ).toMatch(/facts were not invented/i);
+  });
+
+  it('does not list a "could not verify" line for each source that returned nothing', () => {
+    const analysis = buildDeterministicAnalysis({
+      expertName: 'Jane Doe',
+      specialty: 'Neurology',
+      findings: [],
+      sourceAttempts: ['npi_registry', 'courtlistener', 'lexisnexis'].map(
+        (providerId) => ({
+          sourceRef: `source:${providerId}`,
+          providerId,
+          category: providerId,
+          status: providerId === 'lexisnexis' ? 'unavailable' : 'ok',
+          access: providerId === 'lexisnexis' ? 'restricted' : 'public',
+          itemCount: 0,
+        }),
+      ),
+    });
+    expect(analysis.missing).toHaveLength(3);
+    // A summary saved before the per-source lines were dropped.
+    const savedSummary = [
+      analysis.summary,
+      ...analysis.missing.map((item) => item.note),
+    ].join('\n');
+
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-09-23T00:00:00.000Z',
+      summary: savedSummary,
+      analysis,
+    });
+    const sectionText = (id: string) =>
+      document.sections
+        .find((section) => section.id === id)
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+
+    expect(sectionText('summary')).toContain(
+      'No records about this expert were found in the sources searched.',
+    );
+    for (const id of ['summary', 'overall-findings']) {
+      expect(sectionText(id)).not.toMatch(
+        /Could not verify|Nothing was inferred|Gap \[/,
+      );
+    }
   });
 
   it('keeps restricted source text out of the report and does not claim a PDF was saved', () => {
@@ -306,7 +402,7 @@ describe('EWI report template', () => {
     );
   });
 
-  it('writes a Word document whose bytes are a docx package with at least 100 questions', async () => {
+  it('writes a PDF with a cover, contents, and at least 100 boxed questions', async () => {
     const evidence = [
       {
         sourceId: 'pubmed' as const,
@@ -333,18 +429,38 @@ describe('EWI report template', () => {
       summary: 'The collected publication record could not be verified.',
     });
     const rendered = await renderer.render(document);
+    const pages = await pdfPages(rendered.buffer);
+    const all = pages.join('\n');
 
     expect(questions.length).toBeGreaterThanOrEqual(100);
-    expect(rendered.buffer.subarray(0, 2).toString()).toBe('PK');
-    expect(rendered.buffer.byteLength).toBeGreaterThan(1000);
+    expect(rendered.buffer.subarray(0, 5).toString()).toBe('%PDF-');
     expect(rendered.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
-    expect(rendered.mimeType).toContain('wordprocessingml');
+    expect(rendered.mimeType).toBe('application/pdf');
+    expect(rendered.fileName).toBe('ewi-jane-doe-report.pdf');
+    expect(pages.length).toBeGreaterThan(5);
+    expect(pages[0]).toContain('EXPERT WITNESS INVESTIGATION REPORT');
+    expect(pages[0]).toContain('Jane Doe');
+    expect(pages[0]).toContain('1. EXPERT NAME');
+    expect(pages[0]).toContain(
+      'The collected publication record could not be verified.',
+    );
+    expect(all).toContain('Contents');
+    expect(all).toContain('41. Cross-Examination Questions');
+    expect(all).toContain(`1. ${questions[0].question.slice(0, 40)}`);
+    expect(all).toContain(
+      `${questions.length}. ${questions[questions.length - 1].question.slice(0, 30)}`,
+    );
+    expect(all).toContain('(continued)');
+    expect(all).toContain('Disclaimer');
+    pages.forEach((page, index) =>
+      expect(page).toContain(`Page ${index + 1} of ${pages.length}`),
+    );
   });
 });
 
-describe('EwiWordReportService', () => {
-  it('builds a professionally formatted docx through the shared renderer', async () => {
-    const service = new EwiWordReportService(new DocxReportRenderer());
+describe('EwiPdfReportService', () => {
+  it('builds the PDF report through the shared renderer', async () => {
+    const service = new EwiPdfReportService(new PdfReportRenderer());
     const evidence = [
       {
         sourceId: 'social' as const,
@@ -374,11 +490,14 @@ describe('EwiWordReportService', () => {
       summary: 'Collected social listing could not be verified.',
     });
 
-    expect(artifact.format).toBe('docx');
+    expect(artifact.format).toBe('pdf');
+    expect(artifact.mimeType).toBe('application/pdf');
     expect(artifact.templateId).toBe('ewi/investigation-report');
     expect(artifact.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
-    expect(artifact.fileName).toMatch(/ewi-jane-doe-report\.docx/);
-    expect(artifact.buffer.subarray(0, 2).toString()).toBe('PK');
-    expect(artifact.buffer.byteLength).toBeGreaterThan(2000);
+    expect(artifact.fileName).toBe('ewi-jane-doe-report.pdf');
+    expect(artifact.buffer.subarray(0, 5).toString()).toBe('%PDF-');
+    const text = (await pdfPages(artifact.buffer)).join('\n');
+    expect(text).toContain('Public LinkedIn listing');
+    expect(text).toContain('https://linkedin.example/jane');
   });
 });

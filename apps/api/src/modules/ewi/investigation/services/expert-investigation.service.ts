@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ExpertResearchService } from '@integrations/expert-research';
 import type { ResearchProviderSettings } from '@config/config.types';
-import { EwiWordReportService } from '../../report/ewi-word-report.service';
+import { EwiPdfReportService } from '../../report/ewi-pdf-report.service';
 import { EwiAnalysisService } from '../analysis/ewi-analysis.service';
 import { ExpertCvService } from '../../cv/expert-cv.service';
 import type {
@@ -35,7 +35,7 @@ export class ExpertInvestigationService {
 
   constructor(
     private readonly research: ExpertResearchService,
-    private readonly reportService: EwiWordReportService,
+    private readonly reportService: EwiPdfReportService,
     private readonly analysis: EwiAnalysisService,
     private readonly config: ConfigService,
     private readonly investigations: ExpertInvestigationRepository,

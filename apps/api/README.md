@@ -11,7 +11,7 @@ NestJS application for Medical Causation Analysis (MCA) and Expert Witness Inves
 | `src/platform/` | Shared by both products: auth, audit, rate limits, jobs, storage, email, Word renderer, health |
 | `src/ai/` | AI providers (chat and embeddings) behind `AiService`, prompt templates |
 | `src/modules/mca/` | MCA: case jobs, records (upload, OCR, chronology, bills), report, demand letter |
-| `src/modules/ewi/` | EWI: investigation jobs, research stages, CV check, Word report, record requests |
+| `src/modules/ewi/` | EWI: investigation jobs, research stages, CV check, PDF report, record requests |
 | `src/modules/{knowledge-base,document-processing,indexing,rag}` | Medical library: read, chunk, embed, search |
 | `src/integrations/` | PubMed / Europe PMC, NPI Registry, Open Payments, OpenAlex, CourtListener |
 | `src/redis/` | Redis client, including `updateJson` for atomic job-record updates |
@@ -39,7 +39,7 @@ Every route needs `Authorization: Bearer <token>` except the two marked public. 
 | `POST /ewi/documents/cv`, `GET /ewi/documents/:id/file`, `DELETE /ewi/documents/:id` | Expert CV |
 | `POST /ewi/jobs`, `GET /ewi/jobs/:jobId` | Start an investigation, read its progress |
 | `GET /ewi/histories[/:id]`, `POST /ewi/histories/:id/cancel`, `DELETE /ewi/histories/:id` | Own investigations |
-| `GET /ewi/histories/:id/report` | Word report |
+| `GET /ewi/histories/:id/report` | PDF report |
 | `/ewi/requests/*` | Record-request letters (attorneys and paralegals; off unless `EWI_REQUEST_WORKFLOW_ENABLED`) |
 
 Live progress: Socket.IO namespaces `/medical-analysis` and `/ewi`. Connect with `auth: { token }`, then emit `subscribe` with `{ jobId }`; only the owner's jobs can be joined.

@@ -89,11 +89,10 @@ describe('investigation workflow with live identity and rulings', () => {
     const build = jest.fn((input: unknown) => {
       void input;
       return Promise.resolve({
-        fileName: 'report.docx',
-        mimeType:
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        buffer: Buffer.from('docx'),
-        format: 'docx' as const,
+        fileName: 'report.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('pdf'),
+        format: 'pdf' as const,
         templateId: 'ewi/investigation-report',
         templateVersion: '2.1.0',
       });
@@ -167,10 +166,10 @@ describe('investigation workflow with live identity and rulings', () => {
         report: {
           build: () =>
             Promise.resolve({
-              fileName: 'report.docx',
+              fileName: 'report.pdf',
               mimeType: 'application/octet-stream',
               buffer: Buffer.from(''),
-              format: 'docx' as const,
+              format: 'pdf' as const,
               templateId: 'ewi/investigation-report',
               templateVersion: '2.1.0',
             }),

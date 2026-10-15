@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-10-15): EWI report is a PDF laid out like the MCA report
+
+- The EWI report download is now a PDF instead of a Word file, laid out like the MCA report's PDF: a cover card with the expert's name, details (sections 1–4), the executive summary, and counts; a contents list whose page numbers link to each section; one card per section with its icon, records and cross-examination questions in boxes, and a "(continued)" header when a card runs onto the next page; a disclaimer card; page numbers in the footer.
+- Unlike the MCA export (a picture of the page), the EWI PDF is built on the server as text: it can be searched and copied, source links are clickable, and long reports (400+ questions, 60 pages) render without browser limits. Only web and mail links are clickable; any other link is printed as plain text.
+- Report template 3.0.0. A Word report saved before this change is rebuilt as a PDF the first time it is downloaded: the `.docx` file is replaced by a `.pdf` and the report record (name, type, path) is updated. If the rebuild fails, the saved Word file is sent.
+- The browser saves the download under the name the server sends, so an older investigation still listed with a `.docx` name downloads as `.pdf`. Buttons and page text say "PDF report".
+- The cover summary no longer repeats the subject line, the counts, or the disclaimer; they are in the cover details, the count badges, and the disclaimer card.
+- New API dependency: `pdfkit` (and `@types/pdfkit` for development). The font is Liberation Sans from `pdfjs-dist`, which the API already ships, so no font files were added. The deploy's `npm ci` installs it; no environment change is needed. The shared Word renderer was removed; the MCA demand letter keeps its own Word builder.
+
+### Changed (2026-10-15): EWI report without a "could not verify" line per source
+
+- The EWI Findings tab and the Word report no longer list a line for every source that returned nothing ("Could not verify web. web_search did not return a usable record. Nothing was inferred."). An investigation that found nothing says so in one sentence; the Sources tab still lists every source and its status.
+- Findings tab: analysis cards are shown only for sections with collected findings. Empty tabs use plain wording ("No legal matters were found in the sources searched.").
+- Word report (template 2.2.0): empty sections show "No records for this section were found in the sources searched.", without the extra notes about unavailable sources, and Overall Findings no longer adds a "Gap […]" line per source. A report saved with an older template is rebuilt from the stored investigation when it is downloaded, so existing reports get the new wording too.
+- Saved summaries are cleaned when shown, so investigations made before this change also display without those lines.
+
 ### Fixed (2026-10-15)
 
 - `npm run reembed:kb:full` stopped with "No stored chunks found for re-embedding" at a scanned PDF with no readable text, leaving every later document without embeddings. Re-embedding now skips documents with no passages and continues after a failed document (it lists the failures; run `npm run reembed:kb` again to retry them).

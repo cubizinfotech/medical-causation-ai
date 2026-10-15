@@ -12,7 +12,7 @@ import type {
 } from "@/features/ewi/types";
 import { cn } from "@/utils/cn";
 
-/** Same words and order as the Word report: conflicts first. */
+/** Same words and order as the PDF report: conflicts first. */
 const LABEL_TEXT: Record<EwiCvLabel, string> = {
   conflicting: "Conflicts",
   not_found: "Not found",

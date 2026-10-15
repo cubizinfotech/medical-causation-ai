@@ -1,6 +1,6 @@
-# EWI workflow: from "Start investigation" to the Word report
+# EWI workflow: from "Start investigation" to the PDF report
 
-This page follows one Expert Witness Investigation through the code: what the browser does, what the API does, where data is stored, and how the finished results and the Word report get back to the attorney.
+This page follows one Expert Witness Investigation through the code: what the browser does, what the API does, where data is stored, and how the finished results and the PDF report get back to the attorney.
 
 For the product overview, see [how-it-works.md](./how-it-works.md). For the causation-analysis flow, see [mca-workflow.md](./mca-workflow.md).
 
@@ -10,7 +10,7 @@ For the product overview, see [how-it-works.md](./how-it-works.md). For the caus
 2. The website sends this to the API. The API creates the investigation, puts a job on a Redis queue, and replies immediately with a `jobId` and `investigationId`.
 3. A background worker inside the API walks through 27 stages, from identification through research, cross-checks, inconsistencies, and summary to the report. It saves a checkpoint after each stage and stops if the attorney cancels. With `RESEARCH_PROVIDER=live`, the first research stage confirms the expert in the NPI Registry, and Open Payments, OpenAlex, and CourtListener are searched with that identity.
 4. The browser shows a live timeline, fed by a WebSocket plus polling every 4 seconds.
-5. At the end, the worker builds a Word file, saves it to disk, and saves the findings in PostgreSQL. The browser jumps to the results page, where **Download** streams the `.docx`.
+5. At the end, the worker builds a PDF report, saves it to disk, and saves the findings in PostgreSQL. The browser jumps to the results page, where **Download** streams the PDF.
 
 ```mermaid
 sequenceDiagram
@@ -40,15 +40,15 @@ sequenceDiagram
     end
     K->>K: Cross-check, find inconsistencies, analyze
     K->>AI: Rephrase findings (falls back to rule-based text)
-    K->>K: Build cross-exam questions and Word document
-    K->>D: Write {jobId}.docx
+    K->>K: Build cross-exam questions and the PDF report
+    K->>D: Write {jobId}.pdf
     K->>P: Save result, sources, findings, discrepancies, report record
     A-->>W: job:update (completed)
     W->>W: Redirect to /ewi/histories/:investigationId
     W->>A: GET /ewi/histories/:id
     U->>W: Click Download
     W->>A: GET /ewi/histories/:id/report
-    A->>D: Read the .docx
+    A->>D: Read the .pdf (rebuilt first if its template is older)
     A-->>W: File download
 ```
 
@@ -140,7 +140,7 @@ The stage list comes from [investigation-stages.ts](../apps/api/src/modules/ewi/
 | `analyze-financial` | Analyze income and bias | Groups financial and professional background records. **Percentages appear only when a source states them.** |
 | `summary` | Generate investigation summary | Runs the analysis described below. |
 | `questions` | Generate cross-examination questions | Questions are built from the collected items. |
-| report | Generate final report | Builds the Word document. |
+| report | Generate final report | Builds the PDF report. |
 
 #### Where the research data comes from
 
@@ -156,7 +156,7 @@ The stage list comes from [investigation-stages.ts](../apps/api/src/modules/ewi/
 | OpenAlex | Author profile (works, citations, h-index) and the top-cited, recent, and retracted works with the expert's author position. | Used only when the name, research topics, and an institution's location (the city, or a state from the query or NPI record) all fit, and only one profile fits. |
 | CourtListener | Opinions that contain the expert's full name and a specialty term. Those that also contain Daubert, Frye, Rule 702, or motion-to-exclude language are listed as admissibility challenges. | Full name and specialty term in the same opinion. The expert's role (witness, treating doctor, or party) is not assumed. |
 
-The identity check runs once per investigation and is shared by the other three sources ([identity-resolver.ts](../apps/api/src/integrations/expert-research/live/identity-resolver.ts)). Its result (confirmed, not confirmed with candidates, not found, or NPI mismatch) appears at the top of the results page and in section 6 of the Word report. Name variants are accepted but stated ("the registry lists Ravinder; the investigation used Ravi"). When the name is common or the expert practices in a nearby city, entering the NPI on the intake form confirms the identity directly.
+The identity check runs once per investigation and is shared by the other three sources ([identity-resolver.ts](../apps/api/src/integrations/expert-research/live/identity-resolver.ts)). Its result (confirmed, not confirmed with candidates, not found, or NPI mismatch) appears at the top of the results page and in section 6 of the PDF report. Name variants are accepted but stated ("the registry lists Ravinder; the investigation used Ravi"). When the name is common or the expert practices in a nearby city, entering the NPI on the intake form confirms the identity directly.
 
 Optional settings: `COURTLISTENER_API_TOKEN` (free account) lets the API read the opinion text around the expert's name, so rulings can be read from the court's words; without it only short search excerpts are available. `COURTLISTENER_TIMEOUT_MS` (default 60000) allows for slow full-text searches. `OPENALEX_API_KEY` (free, from openalex.org/settings/api) raises OpenAlex's daily limit tenfold and is recommended for live use; `OPENALEX_MAILTO` is the older contact-email option.
 
@@ -192,19 +192,19 @@ When a CV was uploaded, the **CV and profiles** stage reads it instead of asking
 | Expert witness work | CourtListener opinions | Never a conflict: published opinions cover few cases. |
 | Board certification, education | Nothing connected | Shown as Not checked, with where to confirm it. |
 
-Licenses, specialty, and payments are compared only when the NPI identity is confirmed. Conflicts and meaningful gaps are added to the inconsistencies (so they also feed the questions). The full check is saved with the result (`cvCheck`), shown in the **CV Check** tab with links to each CV page, and written to the "CV comparison" section of the Word report.
+Licenses, specialty, and payments are compared only when the NPI identity is confirmed. Conflicts and meaningful gaps are added to the inconsistencies (so they also feed the questions). The full check is saved with the result (`cvCheck`), shown in the **CV Check** tab with links to each CV page, and written to the "CV comparison" section of the PDF report.
 
-### 5. Finishing: the Word report and saved results
+### 5. Finishing: the PDF report and saved results
 
 When all stages are done, the workflow:
 
 1. Builds the final summary and inconsistency list, and the cross-examination questions. It uses the AI's questions if they passed validation and generated ones otherwise.
-2. Builds the Word file with `EwiWordReportService` ([report/](../apps/api/src/modules/ewi/report/), using the `docx` library). The template id and version are stored with the report.
+2. Builds the PDF with `EwiPdfReportService` ([report/](../apps/api/src/modules/ewi/report/)). The template (`ewi-report.template.ts`) fills the 41 sections; the shared renderer ([platform/report/pdf/](../apps/api/src/platform/report/pdf/), using `pdfkit`) lays them out like the MCA report: a cover with the expert's details, the executive summary, and counts; a contents list with page numbers; one card per section, records and questions in boxes; and the disclaimer. The text is real text, so it can be searched and copied, and source links are clickable. The template id and version are stored with the report.
 
 Then `markCompleted()`:
 
 - Stores the result in the Redis job record and sets status `completed` and progress 100.
-- Writes the file to **`knowledge-base/ewi/reports/investigations/{jobId}.docx`**. The folder comes from `KNOWLEDGE_BASE_EWI_PATH`, which defaults to `./knowledge-base/ewi`.
+- Writes the file to **`knowledge-base/ewi/reports/investigations/{jobId}.pdf`**. The folder comes from `KNOWLEDGE_BASE_EWI_PATH`, which defaults to `./knowledge-base/ewi`.
 - In one database transaction, saves the result on the investigation row together with the research sources, findings, discrepancies, and the report record (file name, type, size, storage path).
 - Pushes the final `job:update`.
 
@@ -214,7 +214,7 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 
 - When the status becomes `completed`, the investigation page **redirects automatically** to `/ewi/histories/{investigationId}`.
 - That page ([histories/[id]/page.tsx](../apps/web/src/app/ewi/histories/[id]/page.tsx)) calls `GET /ewi/histories/:id`. The API reads the investigation and its saved rows from PostgreSQL (checking ownership) and returns the summary, findings, inconsistencies, sources, and questions.
-- **Download** calls `GET /ewi/histories/:id/report`. The API reads the `.docx` from disk and sends it with `Content-Disposition: attachment`, so the browser saves it.
+- **Download** calls `GET /ewi/histories/:id/report`. The API reads the PDF from disk and sends it with `Content-Disposition: attachment`, so the browser saves it. A report saved with an older template version is first rebuilt from the saved investigation; this is how a Word report saved before version 3.0.0 becomes a PDF (the `.docx` is replaced). If the rebuild fails, the saved file is sent unchanged.
 - `/ewi/histories` lists past investigations. They can be cancelled (if running) or deleted.
 
 ## Cancel and retry
@@ -231,14 +231,14 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 | Queue entry | Redis, BullMQ queue `ewi-investigation` | Last 100 completed and 50 failed are kept |
 | Investigation, sources, findings, discrepancies, report record | PostgreSQL `ewi` schema | Permanent until deleted |
 | NPI identity result, source statuses | PostgreSQL, `ewi.investigation_analyses` payload | Permanent until deleted |
-| Word file | `knowledge-base/ewi/reports/investigations/{jobId}.docx` | Permanent until deleted |
+| PDF report | `knowledge-base/ewi/reports/investigations/{jobId}.pdf` | Permanent until deleted |
 | Uploaded CV | `EWI_DOCUMENTS_PATH/{userId}/{documentId}.pdf` (default `data/ewi-documents`); page text in `ewi.expert_document_pages` | Until the investigation is deleted; unused uploads after `MCA_RECORDS_STAGED_TTL_HOURS` |
 | CV check (claims and comparisons) | PostgreSQL, `ewi.investigation_analyses` payload | Permanent until deleted |
 
 ## Things to know
 
 - **Research data.** With `RESEARCH_PROVIDER=mock`, every finding comes from fixtures. With `live`, the NPI Registry, Open Payments, OpenAlex, and CourtListener are real; every other source is unavailable until an adapter is built (see [TODO.md](../TODO.md)). Open Payments covers payments from drug and device makers only, not legal or expert-witness fees.
-- **Deleting an investigation** removes its database rows, the uploaded CV, the Word report file, and the queued or running job. A running job notices and stops.
+- **Deleting an investigation** removes its database rows, the uploaded CV, the report file, and the queued or running job. A running job notices and stops.
 - **Limits.** A user can start 10 jobs a minute and `JOB_DAILY_LIMIT_PER_USER` (default 50) analyses plus investigations per day.
 - **The request and email workflow** (FOIA, university, and follow-up letters under `/ewi/requests`) exists in the API but has no screens yet, and it is turned off by default (`EWI_REQUEST_WORKFLOW_ENABLED=false`).
 - **One job at a time.** EWI has its own queue and worker, separate from MCA, but each runs one job at a time.
@@ -268,6 +268,6 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 | Daubert/Frye rulings | `apps/api/src/modules/ewi/research/legal/expert-challenge.ts` |
 | Identity card, challenge list | `apps/web/src/components/ewi/expert-identity-card.tsx`, `admissibility-challenges.tsx` |
 | Inconsistencies and questions | `apps/api/src/modules/ewi/research/` |
-| Word report | `apps/api/src/modules/ewi/report/ewi-word-report.service.ts` |
+| PDF report | `apps/api/src/modules/ewi/report/ewi-pdf-report.service.ts`, `ewi-report.template.ts`; renderer in `apps/api/src/platform/report/pdf/` |
 | History, report file storage | `apps/api/src/modules/ewi/investigation/services/investigation-history.service.ts` |
 | WebSocket gateway | `apps/api/src/modules/ewi/investigation/gateway/ewi-investigation.gateway.ts` |

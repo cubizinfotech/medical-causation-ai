@@ -12,4 +12,4 @@ Requirements:
 - Cite findingKey and/or source URLs / sourceRef values on every important claim.
 - Generate at least 115 leading questions from actual evidence (fewer than 100 is rejected). If evidence is weak, unavailable, restricted, or not verified, set uncertaintyNote accordingly.
 - Do not invent cases, dates, publications, credentials, quotes, court findings, income, social posts, testimony, or statistics.
-- If a category has no record, say it could not be verified / not found / unavailable / restricted as appropriate.
+- If a category has no record, give its section the matching status (not_found / unavailable / restricted) and one short sentence. In the summary, describe what was collected; do not list the categories or sources that returned no record, because the report lists every source and its status separately.

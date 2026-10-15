@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/config";
 import { ApiError, parseApiResponse } from "@/features/common/api";
 import { openPdfPage } from "@/features/common/pdf-viewer";
+import { reportDownloadName } from "./utils/download-name";
 import type { ExpertInvestigationFormValues } from "./schemas/expert-form.schema";
 import type {
   CreateEwiJobResponse,
@@ -85,7 +86,12 @@ export class EwiClient {
     return openPdfPage(`/ewi/documents/${id}/file`, pageNumber, "CV");
   }
 
-  async downloadReport(id: string, fileName: string): Promise<void> {
+  /**
+   * Saves the PDF report and returns the name it was saved under. A report
+   * saved as Word before the PDF template is rebuilt as a PDF on download,
+   * so the name comes from the response, not from the stored file name.
+   */
+  async downloadReport(id: string, fileName: string): Promise<string> {
     const response = await apiFetch(`/ewi/histories/${id}/report`);
     if (!response.ok) {
       await parseApiResponse<never>(response);
@@ -94,17 +100,23 @@ export class EwiClient {
     if (blob.size === 0) {
       throw new ApiError("The report file was empty or could not be read.", 502);
     }
+    const name = reportDownloadName(
+      response.headers.get("Content-Disposition"),
+      fileName,
+      blob.type || response.headers.get("Content-Type") || "",
+    );
     const url = URL.createObjectURL(blob);
     try {
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = fileName || "ewi-report.docx";
+      anchor.download = name;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
     } finally {
       URL.revokeObjectURL(url);
     }
+    return name;
   }
 }
 

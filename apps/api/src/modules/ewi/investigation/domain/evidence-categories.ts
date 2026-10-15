@@ -1,7 +1,7 @@
 /**
  * Collected-item categories for the ewi schema.
  * Keep this list aligned with EwiEvidenceCategory in schema.prisma.
- * Inconsistencies, cross-examination questions, and the Word report
+ * Inconsistencies, cross-examination questions, and the PDF report
  * stay on their existing tables.
  */
 export const EWI_EVIDENCE_CATEGORIES = [

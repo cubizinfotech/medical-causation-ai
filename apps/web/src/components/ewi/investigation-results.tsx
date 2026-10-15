@@ -18,6 +18,10 @@ import type {
   EwiProfessionalRecord,
   EwiSourceStatus,
 } from "@/features/ewi/types";
+import {
+  presentableSummaryLines,
+  sectionsWithFindings,
+} from "@/features/ewi/utils/summary-lines";
 
 const CREDENTIAL_CATEGORIES = new Set([
   "education",
@@ -198,6 +202,13 @@ function InvestigationResultTabs({
   const cvConflicts =
     result?.cvCheck?.comparisons.filter((row) => row.label === "conflicting")
       .length ?? 0;
+  const summaryLines = presentableSummaryLines(
+    summary,
+    result?.analysis?.document?.missing,
+  );
+  const sections = sectionsWithFindings(
+    result?.analysis?.document?.sectionSummaries,
+  );
   const financial = professional?.financial ?? [];
   const paymentTotals = financial.find(isOpenPaymentsTotals);
   const otherFinancial = financial.filter(
@@ -231,19 +242,18 @@ function InvestigationResultTabs({
 
       <TabsContent value="findings">
         <ResultPanel title="Investigation findings">
-          {summary ? (
+          {summaryLines.length > 0 ? (
             <p className="mb-4 whitespace-pre-wrap text-sm text-muted-foreground">
-              {summary}
+              {summaryLines.join("\n")}
             </p>
           ) : (
             <EmptyCopy>
               No narrative summary was stored for this investigation.
             </EmptyCopy>
           )}
-          {result?.analysis?.document?.sectionSummaries &&
-          result.analysis.document.sectionSummaries.length > 0 ? (
+          {sections.length > 0 ? (
             <ul className="mb-4 space-y-3 text-sm">
-              {result.analysis.document.sectionSummaries.map((section) => (
+              {sections.map((section) => (
                 <li
                   key={section.section}
                   className="rounded-lg border border-border p-3"
@@ -267,8 +277,8 @@ function InvestigationResultTabs({
           ) : null}
           {evidence.length === 0 ? (
             <EmptyCopy>
-              No findings were collected. Nothing was inferred from an empty
-              source.
+              No records about this expert were found in the sources searched.
+              The Sources tab shows what was checked.
             </EmptyCopy>
           ) : (
             <ul className="space-y-4">
@@ -380,7 +390,7 @@ function InvestigationResultTabs({
         <ResultPanel title="Legal research">
           {!legal || legal.matters.length === 0 ? (
             <EmptyCopy>
-              No legal matter was collected. Nothing was inferred.
+              No legal matters were found in the sources searched.
             </EmptyCopy>
           ) : (
             <div className="space-y-6 text-sm">
@@ -566,8 +576,8 @@ function InvestigationResultTabs({
         <ResultPanel title="Income and bias indicators">
           {financial.length === 0 ? (
             <EmptyCopy>
-              No public financial or bias-related records were collected.
-              Nothing was inferred.
+              No public financial or bias-related records were found in the
+              sources searched.
             </EmptyCopy>
           ) : (
             <div className="space-y-4 text-sm">
@@ -695,12 +705,12 @@ function InvestigationResultTabs({
       </TabsContent>
 
       <TabsContent value="report">
-        <ResultPanel title="Final Word report">
+        <ResultPanel title="Final PDF report">
           {reportSlot ? (
             reportSlot
           ) : (
             <EmptyCopy>
-              Use Download Word Report from the investigation header when a
+              Use Download PDF Report from the investigation header when a
               report file is available.
             </EmptyCopy>
           )}
