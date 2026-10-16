@@ -99,9 +99,10 @@ MCA and EWI never import each other; both use `platform/` and the shared library
 | `npm run validate` | Lint, type check, tests, and build (the same checks CI runs) |
 | `npm test` | API unit tests (`npm test --workspace=web` for the website) |
 | `npm run prisma:migrate` | Apply new database migrations |
-| `npm run index:kb` | Index new or changed files in `knowledge-base/` for the library search |
+| `npm run index:kb` | Index new, changed, or previously failed files in `knowledge-base/` (laptop or server) |
 | `npm run reembed:kb` | Re-embed the indexed library after changing the embedding provider or model (replaces old vectors in place) |
 | `npm run check:retrieval` | Run sample library searches and show how well the library covers them |
+| `npm run clear:histories` | Show how many MCA and EWI histories exist. Add `-- --yes` to delete them and their generated files. The medical library stays |
 | `npm run seed:demo-users` | The 2 default sign-ins (gopalhingu123, dcs) |
 | `npm run user:create -- <email> <role> "<Name>"` | Create a real account |
 

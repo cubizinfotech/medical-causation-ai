@@ -8,7 +8,7 @@ Next.js website for Medical Causation Analysis (MCA) and Expert Witness Investig
 |--------|------------------|
 | `src/app/` | Pages: `/` home, `/login`, `/profile`, `/mca/*` (case, analysis, histories, report, demand letter), `/ewi/*` (intake, investigation, histories), `/terms`, `/privacy` |
 | `src/components/` | `mca/`, `ewi/`, `profile/`, `layout/` (header, user menu), `ui/` (buttons, inputs, dialogs) |
-| `src/features/` | API clients, form schemas, job hooks, browser storage; `auth/` holds the session ([features/README.md](./src/features/README.md)) |
+| `src/features/` | API clients, form schemas, job hooks, browser storage; `auth/` holds the session |
 | `src/lib/config/` | API address (`api-url.ts`) and `apiFetch`, the one function that talks to the API |
 | `src/utils/` | `cn` (class names) and date formatting |
 

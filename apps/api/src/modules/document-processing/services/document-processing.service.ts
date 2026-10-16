@@ -183,12 +183,7 @@ export class DocumentProcessingService implements IDocumentProcessingService {
       this.ocrSettings.autoOcr &&
       (options.forceOcr || Boolean(parserOutput.needsOcr));
 
-    if (shouldOcr && buffer.length === 0) {
-      warnings.push(
-        'OCR was skipped for this large PDF so the file is not loaded entirely into memory. Pages that already have a text layer are still indexed.',
-      );
-      ocrStatus = 'not_required';
-    } else if (shouldOcr) {
+    if (shouldOcr) {
       ocrAttempted = true;
       const { pages: ocrPages, ocr } =
         await this.ocrService.recognizeDocumentPages(
@@ -202,7 +197,11 @@ export class DocumentProcessingService implements IDocumentProcessingService {
                   charCount: parserOutput.rawText.length,
                 },
               ],
-          { pdf: extension === 'pdf' ? buffer : undefined },
+          extension === 'pdf'
+            ? buffer.length > 0
+              ? { pdf: buffer }
+              : { pdfPath: input.filePath }
+            : {},
         );
       pages = ocrPages;
       ocrStatus = ocr.status;
