@@ -182,6 +182,59 @@ export function validateCvClaims(
   return kept;
 }
 
+const PUBLICATION_HEADING = /\bPUBLICATIONS\b/i;
+const PUBLICATION_STOP =
+  /\b(PUBLISHED ABSTRACTS|OTHER PRESENTATIONS|PROFESSION-RELATED|CLASSROOM TEACHING|OTHER WORK EXPERIENCE)\b/i;
+
+/**
+ * Numbered entries under a PUBLICATIONS heading. These stay even when the
+ * AI pass misses them. Conference abstracts under a later heading are not
+ * treated as journal publications.
+ */
+export function extractBibliographyClaims(
+  pages: Array<{ pageNumber: number; text: string }>,
+): Array<Omit<CvClaim, 'id'>> {
+  const claims: Array<Omit<CvClaim, 'id'>> = [];
+  let inSection = false;
+  for (const page of pages) {
+    const text = page.text.replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    let body = text;
+    if (!inSection) {
+      const start = body.search(PUBLICATION_HEADING);
+      if (start === -1) continue;
+      body = body.slice(start);
+      inSection = true;
+    }
+    const stop = body.search(PUBLICATION_STOP);
+    if (stop > 0) {
+      body = body.slice(0, stop);
+      inSection = false;
+    }
+    const entries = body.split(/\s(?=\d{1,3}\.\s)/);
+    for (const entry of entries) {
+      const cleaned = entry.replace(/^\d{1,3}\.\s*/, '').trim();
+      if (cleaned.length < 40) continue;
+      if (!/\b(?:19|20)\d{2}\b/.test(cleaned)) continue;
+      const quote = cleaned.slice(0, 180);
+      if (!quoteOnPage(quote, page.text)) continue;
+      const journal = cleaned.match(/\b([A-Z][A-Za-z& ]{2,60}),\s+\d/)?.[1];
+      claims.push({
+        category: 'publication',
+        statement: cleaned.slice(0, 300),
+        details: {
+          title: cleaned.slice(0, 240),
+          ...(journal ? { journal: journal.trim() } : {}),
+        },
+        page: page.pageNumber,
+        quote,
+      });
+    }
+    if (!inSection) break;
+  }
+  return claims;
+}
+
 /** Removes repeats, caps long publication lists, and assigns ids. */
 export function finalizeCvClaims(
   drafts: Array<Omit<CvClaim, 'id'>>,

@@ -257,15 +257,18 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     },
     true,
   ),
-  source({
-    id: 'justia',
-    name: 'Justia',
-    category: 'legal',
-    accessClass: 'public',
-    requirement: 'manual',
-    summary:
-      'Public Justia case links the user supplies or a future permitted API. No case is invented and no restricted page is scraped.',
-  }),
+  source(
+    {
+      id: 'justia',
+      name: 'Justia',
+      category: 'legal',
+      accessClass: 'public',
+      requirement: 'free_api',
+      summary:
+        'Public Justia case search by the expert’s full name. A page that cannot be read is reported as not searched, not as no cases.',
+    },
+    true,
+  ),
   source({
     id: 'state_court_records',
     name: 'State court records',

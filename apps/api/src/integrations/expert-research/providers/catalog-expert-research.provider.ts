@@ -158,7 +158,7 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
         return this.emptyResult(
           'unavailable',
           retrievedAt,
-          `${this.definition.name} is restricted. No request was sent.${
+          `Not searched. ${this.definition.name} is restricted. No request was sent.${
             this.definition.id === 'lexisnexis'
               ? ' LexisNexis PDFs are not stored.'
               : ''
@@ -173,14 +173,14 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
         return this.emptyResult(
           'unavailable',
           retrievedAt,
-          `${this.definition.name} requires authorized access. No request was sent.`,
+          `Not searched. ${this.definition.name} requires authorized access. No request was sent.`,
           'unavailable',
         );
       }
       return this.emptyResult(
         'unavailable',
         retrievedAt,
-        `${this.definition.name} live adapter is not connected. ${UNAVAILABLE_MESSAGE}`,
+        `Not searched. ${this.definition.name} live adapter is not connected. ${UNAVAILABLE_MESSAGE}`,
         'unavailable',
       );
     }

@@ -6,6 +6,7 @@ import type {
 import { CourtListenerClient } from './courtlistener.client';
 import { CourtListenerResearchProvider } from './courtlistener.provider';
 import { ExpertIdentityResolver } from './identity-resolver';
+import { JustiaResearchProvider } from './justia.provider';
 import { NpiRegistryClient } from './npi-registry.client';
 import { NpiRegistryResearchProvider } from './npi-registry.provider';
 import { OpenAlexClient } from './openalex.client';
@@ -72,6 +73,13 @@ export function createLiveSourceProviders(
           mailto: settings.openAlexMailto,
         }),
       ),
+    );
+  }
+  const justia = definition('justia');
+  if (justia) {
+    providers.set(
+      justia.id,
+      new JustiaResearchProvider(justia, fetchImpl, settings.timeoutMs),
     );
   }
   const courts = definition('courtlistener');

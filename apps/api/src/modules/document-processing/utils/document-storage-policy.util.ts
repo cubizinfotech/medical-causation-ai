@@ -14,6 +14,11 @@ export interface DocumentStoragePolicyInput {
   access?: 'public' | 'restricted' | 'unavailable';
   /** Explicit caller flag that content storage is permitted. */
   storagePermitted?: boolean;
+  /**
+   * When true, a future Lexis adapter may store order and motion PDFs.
+   * Default is off. Westlaw stays blocked.
+   */
+  lexisStorageEnabled?: boolean;
 }
 
 export interface DocumentStoragePolicyResult {
@@ -45,10 +50,22 @@ export function evaluateDocumentStorage(
   const extension = input.extension.toLowerCase().replace(/^\./, '');
 
   if (RESTRICTED_PROVIDERS.has(provider)) {
+    const lexis =
+      provider === 'lexisnexis' || provider === 'lexis';
+    if (lexis && input.lexisStorageEnabled === true) {
+      return {
+        decision: 'store_allowed',
+        reason:
+          'Lexis storage is enabled for this deployment. Keep only documents the subscription permits.',
+        mayPersistFile: true,
+        mayPersistExtractedText: true,
+      };
+    }
     return {
       decision: 'rejected',
-      reason:
-        'LexisNexis/Westlaw documents require authorized access and PDFs must not be stored.',
+      reason: lexis
+        ? 'LexisNexis PDFs are not stored until LEXIS_STORAGE_ENABLED is set. No request is sent by this check.'
+        : 'Westlaw documents require authorized access and PDFs must not be stored.',
       mayPersistFile: false,
       mayPersistExtractedText: false,
     };

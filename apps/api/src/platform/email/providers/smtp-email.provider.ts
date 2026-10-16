@@ -79,6 +79,8 @@ export async function createSmtpTransport(
     host: settings.host,
     port: settings.port,
     secure: settings.secure,
+    // Port 587 is STARTTLS. secure=false alone does not require the upgrade.
+    requireTLS: !settings.secure && settings.port === 587,
     auth: settings.user
       ? { user: settings.user, pass: settings.password }
       : undefined,

@@ -14,6 +14,7 @@ function settings(overrides: Partial<EmailSettings> = {}): EmailSettings {
     user: '',
     password: '',
     secure: false,
+    resendApiKey: '',
     maxAttempts: 3,
     retryDelayMs: 0,
     ...overrides,
@@ -30,7 +31,7 @@ describe('selectEmailProvider', () => {
     ).toBe('console');
   });
 
-  it('allows SMTP only to a local host outside production', () => {
+  it('allows a confirmed SMTP host in development and still blocks an unconfirmed From address', () => {
     expect(
       selectEmailProvider(
         settings({
@@ -46,8 +47,19 @@ describe('selectEmailProvider', () => {
         settings({
           provider: 'smtp',
           deliveryEnabled: true,
-          host: 'smtp.client.example',
+          host: 'smtp.gmail.com',
           from: 'records@client.example',
+        }),
+        'development',
+      ),
+    ).toBe('smtp');
+    expect(
+      selectEmailProvider(
+        settings({
+          provider: 'smtp',
+          deliveryEnabled: true,
+          host: 'smtp.gmail.com',
+          from: 'noreply@localhost',
         }),
         'development',
       ),
@@ -79,6 +91,30 @@ describe('selectEmailProvider', () => {
     ).toBe('console');
     expect(isConfirmedSender('noreply@localhost')).toBe(false);
     expect(isConfirmedSender('user@example.com')).toBe(false);
+  });
+
+  it('sends with Resend when delivery is on, the sender is confirmed, and a key is set', () => {
+    expect(
+      selectEmailProvider(
+        settings({
+          provider: 'resend',
+          deliveryEnabled: true,
+          from: 'records@client.example',
+          resendApiKey: 're_test',
+        }),
+        'production',
+      ),
+    ).toBe('resend');
+    expect(
+      selectEmailProvider(
+        settings({
+          provider: 'resend',
+          deliveryEnabled: true,
+          from: 'records@client.example',
+        }),
+        'development',
+      ),
+    ).toBe('console');
   });
 
   it('selects the transactional seam only when delivery is enabled', () => {

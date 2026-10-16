@@ -16,6 +16,7 @@ export const emailConfig = (): EmailSettings => {
     user: process.env.SMTP_USER ?? '',
     password: process.env.SMTP_PASSWORD ?? '',
     secure: process.env.SMTP_SECURE === 'true',
+    resendApiKey: process.env.RESEND_API_KEY?.trim() ?? '',
     maxAttempts: readInt(process.env.EMAIL_MAX_ATTEMPTS, 3, 1, 5),
     retryDelayMs: readInt(process.env.EMAIL_RETRY_DELAY_MS, 500, 0, 60_000),
   };
@@ -23,7 +24,13 @@ export const emailConfig = (): EmailSettings => {
 
 function readProvider(value: string | undefined): EmailProviderName {
   const provider = (value ?? 'console').trim().toLowerCase();
-  if (provider === 'smtp' || provider === 'transactional') return provider;
+  if (
+    provider === 'smtp' ||
+    provider === 'resend' ||
+    provider === 'transactional'
+  ) {
+    return provider;
+  }
   return 'console';
 }
 

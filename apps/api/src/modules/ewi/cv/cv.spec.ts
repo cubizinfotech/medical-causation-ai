@@ -6,6 +6,7 @@ import type {
 import type { LoadedExpertDocument } from '../documents/expert-documents.types';
 import {
   buildCvBatches,
+  extractBibliographyClaims,
   finalizeCvClaims,
   formatCvBatch,
   parseCvReply,
@@ -322,5 +323,21 @@ describe('CV comparison', () => {
         )
         .every((row) => row.label === 'unable_to_verify'),
     ).toBe(true);
+  });
+});
+
+describe('extractBibliographyClaims', () => {
+  it('keeps numbered publications and stops before abstracts', () => {
+    const page =
+      'PUBLICATIONS 1. Hanlon RE, Demery JA (1998). Axial movements are relatively preserved. Cortex, 34, 731-741. 2. Demery JA (2001). Profound amnesia and confabulation following traumatic brain injury. Neurocase, 7, 295-302. PUBLISHED ABSTRACTS 1. Demery JA (1999). A poster that is not a journal article. Journal of the International Neuropsychological Society, 5, 139.';
+    const claims = extractBibliographyClaims([
+      { pageNumber: 7, text: page },
+    ]);
+    expect(claims).toHaveLength(2);
+    expect(claims[0].category).toBe('publication');
+    expect(claims[0].page).toBe(7);
+    expect(claims.map((claim) => claim.statement).join(' ')).not.toMatch(
+      /poster/i,
+    );
   });
 });

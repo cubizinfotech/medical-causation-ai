@@ -67,3 +67,6 @@ knowledge-base/ewi/reports/investigations/
 
 # Client medical records uploaded for MCA cases (patient data)
 /data/
+
+# Client emails and attachments. Includes credentials and medical records.
+/client-email/

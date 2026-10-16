@@ -111,6 +111,12 @@ function labelText(label: string | undefined): string {
 }
 
 function sourceStatusLabel(source: EwiSourceStatus): string {
+  if (
+    source.message?.startsWith("Not searched") ||
+    source.message?.includes("No request was sent")
+  ) {
+    return "Not searched";
+  }
   if (source.checked === false) {
     if (source.attemptStatus === "skipped") {
       return "Skipped (not a completed check)";
@@ -136,7 +142,9 @@ function sourceStatusLabel(source: EwiSourceStatus): string {
   if (source.status === "unavailable" || source.status === "skipped") {
     return "Unavailable";
   }
-  if (source.itemCount === 0) return "Checked — no results";
+  if (source.itemCount === 0) {
+    return "Searched — no matching record (this does not prove none exists)";
+  }
   return "Checked";
 }
 
@@ -537,38 +545,37 @@ function InvestigationResultTabs({
 
       <TabsContent value="presence">
         <ResultPanel title="Online presence">
-          {!presence || presence.records.length === 0 ? (
-            <EmptyCopy>
-              No public online presence record was collected. Nothing was
-              inferred.
-            </EmptyCopy>
-          ) : (
-            <div className="space-y-4 text-sm">
+          <div className="space-y-4 text-sm">
               <PresenceGroup
                 title="Websites and locations"
                 records={[
-                  ...presence.websites,
-                  ...presence.otherPublicSites,
-                  ...presence.locations,
-                  ...presence.patientReviews,
+                  ...(presence?.websites ?? []),
+                  ...(presence?.otherPublicSites ?? []),
+                  ...(presence?.locations ?? []),
+                  ...(presence?.patientReviews ?? []),
                 ]}
               />
               <PresenceGroup
-                title="Directories"
-                records={presence.directories}
+                title="Expert directories and advertising"
+                records={presence?.directories ?? []}
               />
-              <PresenceGroup title="IME" records={presence.ime} />
+              <PresenceGroup
+                title="IME advertising"
+                records={presence?.ime ?? []}
+              />
               <PresenceGroup
                 title="Videos and presentations"
-                records={presence.videos}
+                records={presence?.videos ?? []}
               />
-              <PresenceGroup title="Social media" records={presence.social} />
+              <PresenceGroup
+                title="Social media"
+                records={presence?.social ?? []}
+              />
               <PresenceGroup
                 title="News and blogs"
-                records={presence.newsAndBlogs}
+                records={presence?.newsAndBlogs ?? []}
               />
             </div>
-          )}
         </ResultPanel>
       </TabsContent>
 
@@ -576,8 +583,9 @@ function InvestigationResultTabs({
         <ResultPanel title="Income and bias indicators">
           {financial.length === 0 ? (
             <EmptyCopy>
-              No public financial or bias-related records were found in the
-              sources searched.
+              No public financial record was collected from the sources that
+              were searched. A blank section is not proof that no income
+              exists.
             </EmptyCopy>
           ) : (
             <div className="space-y-4 text-sm">
@@ -815,7 +823,17 @@ function PresenceGroup({
   title: string;
   records: EwiPresenceRecord[];
 }) {
-  if (records.length === 0) return null;
+  if (records.length === 0) {
+    return (
+      <div>
+        <p className="font-medium">{title}</p>
+        <p className="mt-1 text-muted-foreground">
+          Not searched, or no public record was collected. This is not a
+          finding that nothing exists in this category.
+        </p>
+      </div>
+    );
+  }
   return (
     <div>
       <p className="font-medium">{title}</p>

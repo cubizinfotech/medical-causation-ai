@@ -1,5 +1,6 @@
 import type { OutboundEmail } from '../email.types';
 import { EmailDeliveryError } from '../email.errors';
+import { ResendEmailProvider } from './resend-email.provider';
 import { SmtpEmailProvider, type SmtpTransport } from './smtp-email.provider';
 import { TransactionalEmailProvider } from './transactional-email.provider';
 
@@ -101,6 +102,40 @@ describe('email providers', () => {
     await expect(provider.send(message)).rejects.toMatchObject({
       retryable: false,
       message: 'SMTP authentication or authorization failed (EAUTH).',
+    });
+  });
+
+  it('sends through Resend and treats HTTP 429 as retryable', async () => {
+    const fetchImpl = jest.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: 're_msg' }), { status: 200 }),
+      ),
+    );
+    const provider = new ResendEmailProvider(
+      { resendApiKey: 're_test' },
+      fetchImpl as unknown as typeof fetch,
+    );
+    await expect(provider.send(message)).resolves.toEqual({
+      provider: 'resend',
+      messageId: 're_msg',
+      delivered: true,
+    });
+    const calls = fetchImpl.mock.calls as unknown as Array<
+      [string, { body?: string }]
+    >;
+    const init = calls[0]?.[1];
+    const body = JSON.parse(init?.body ?? '{}') as { from?: string };
+    expect(body.from).toBe(message.from);
+
+    const limited = new ResendEmailProvider(
+      { resendApiKey: 're_test' },
+      jest.fn(() =>
+        Promise.resolve(new Response('busy', { status: 429 })),
+      ) as unknown as typeof fetch,
+    );
+    await expect(limited.send(message)).rejects.toMatchObject({
+      retryable: true,
+      code: 'transient',
     });
   });
 

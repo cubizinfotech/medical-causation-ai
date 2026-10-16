@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'url';
 import { PARSER_TYPES } from '../constants';
 import type { IDocumentParser, ParserInput, ParserOutput } from '../interfaces';
 import {
@@ -29,10 +30,13 @@ export class PdfParser implements IDocumentParser {
 
     try {
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-      const data = new Uint8Array(input.buffer);
+      const source =
+        input.buffer.length > 0
+          ? { data: new Uint8Array(input.buffer) }
+          : { url: pathToFileURL(input.filePath).href };
 
       const loadingTask = pdfjs.getDocument({
-        data,
+        ...source,
         useSystemFonts: true,
         disableFontFace: true,
       });

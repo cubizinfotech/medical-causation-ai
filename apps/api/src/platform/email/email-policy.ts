@@ -5,9 +5,9 @@ const UNCONFIRMED_FROM = new Set(['noreply@localhost']);
 
 /**
  * Chooses the adapter that may run.
- * Outside production, SMTP is limited to a local catch-all such as Mailpit.
- * Any other host is logged and not sent. Transactional delivery stays a seam
- * until a vendor adapter is confirmed.
+ * SMTP sends when delivery is on, the From address is a real mailbox, and the
+ * host is set. A local host such as Mailpit is allowed without that check.
+ * An unconfirmed From address is logged instead of sent.
  */
 export function selectEmailProvider(
   settings: EmailSettings,
@@ -17,15 +17,19 @@ export function selectEmailProvider(
     return 'console';
   }
   if (settings.provider === 'transactional') return 'transactional';
+  if (settings.provider === 'resend') {
+    return isConfirmedSender(settings.from) && settings.resendApiKey
+      ? 'resend'
+      : 'console';
+  }
   if (settings.provider !== 'smtp') return 'console';
 
   const host = settings.host.trim().toLowerCase();
-  const local = LOCAL_HOSTS.has(host);
-  if (nodeEnv === 'production') {
-    if (!local && isConfirmedSender(settings.from) && host) return 'smtp';
-    return 'console';
+  if (!host) return 'console';
+  if (LOCAL_HOSTS.has(host)) {
+    return nodeEnv === 'production' ? 'console' : 'smtp';
   }
-  return local ? 'smtp' : 'console';
+  return isConfirmedSender(settings.from) ? 'smtp' : 'console';
 }
 
 export function isConfirmedSender(from: string): boolean {

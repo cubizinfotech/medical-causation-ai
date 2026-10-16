@@ -8,6 +8,7 @@ export {
   resolveCategoryFromFolder,
   generateDocumentId,
   computeChecksum,
+  computeFileChecksum,
   buildDocumentMetadata,
 } from './document-metadata.util';
 

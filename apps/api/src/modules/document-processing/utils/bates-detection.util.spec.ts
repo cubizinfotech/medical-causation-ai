@@ -37,6 +37,24 @@ describe('evaluateDocumentStorage', () => {
     expect(result.mayPersistExtractedText).toBe(false);
   });
 
+  it('stores a Lexis PDF only when storage is explicitly enabled', () => {
+    const blocked = evaluateDocumentStorage({
+      filename: 'order.pdf',
+      extension: 'pdf',
+      sourceProvider: 'lexisnexis',
+      lexisStorageEnabled: false,
+    });
+    expect(blocked.decision).toBe('rejected');
+    const allowed = evaluateDocumentStorage({
+      filename: 'order.pdf',
+      extension: 'pdf',
+      sourceProvider: 'lexisnexis',
+      lexisStorageEnabled: true,
+    });
+    expect(allowed.decision).toBe('store_allowed');
+    expect(allowed.mayPersistFile).toBe(true);
+  });
+
   it('keeps restricted sources metadata-only', () => {
     const result = evaluateDocumentStorage({
       filename: 'sealed.pdf',

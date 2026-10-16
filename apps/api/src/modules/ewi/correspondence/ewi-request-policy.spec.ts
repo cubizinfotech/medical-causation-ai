@@ -13,6 +13,7 @@ const baseEmail = {
   user: '',
   password: '',
   secure: false,
+  resendApiKey: '',
   maxAttempts: 3,
   retryDelayMs: 500,
 };

@@ -14,6 +14,7 @@ describe('emailConfig', () => {
     'SMTP_USER',
     'SMTP_PASSWORD',
     'SMTP_SECURE',
+    'RESEND_API_KEY',
     'EMAIL_MAX_ATTEMPTS',
     'EMAIL_RETRY_DELAY_MS',
   ];
@@ -60,6 +61,16 @@ describe('emailConfig', () => {
     expect(config.password).toBe('from-env');
     expect(config.secure).toBe(true);
     expect(config.fromName).toBe('Records');
+  });
+
+  it('reads the Resend provider without enabling delivery by itself', () => {
+    process.env.EMAIL_PROVIDER = 'resend';
+    process.env.RESEND_API_KEY = 're_test';
+    process.env.EMAIL_FROM = 'records@client.example';
+    const config = emailConfig();
+    expect(config.provider).toBe('resend');
+    expect(config.resendApiKey).toBe('re_test');
+    expect(config.deliveryEnabled).toBe(false);
   });
 
   it('treats an unknown provider as console', () => {

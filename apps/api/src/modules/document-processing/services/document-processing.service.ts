@@ -1,11 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'crypto';
 import { readFile } from 'fs/promises';
 import type { StorageSettings } from '@config/config.types';
 import type { OcrSettings } from '@config/ocr.config';
 import { KnowledgeBaseService } from '@modules/knowledge-base/services/knowledge-base.service';
-import { getFileExtension } from '@modules/knowledge-base/utils';
+import { computeFileChecksum, getFileExtension } from '@modules/knowledge-base/utils';
 import { validateDocument } from '@modules/knowledge-base/utils';
 import type { KnowledgeDocument } from '@modules/knowledge-base/types';
 import { ParserFactory } from '../parsers/parser.factory';
@@ -99,6 +98,7 @@ export class DocumentProcessingService implements IDocumentProcessingService {
       sourceProvider: input.sourceProvider,
       sourceUrl: input.sourceUrl,
       access: input.access,
+      lexisStorageEnabled: process.env.LEXIS_STORAGE_ENABLED === 'true',
     });
 
     if (storagePolicy.decision === 'rejected') {
@@ -107,11 +107,19 @@ export class DocumentProcessingService implements IDocumentProcessingService {
       );
     }
 
-    if (fileMeta.fileSize > this.storage.knowledgeBaseMaxFileSizeBytes) {
+    const pdfCeilingBytes = 2048 * 1024 * 1024;
+    const sizeLimit =
+      extension === 'pdf'
+        ? Math.max(
+            this.storage.knowledgeBaseMaxFileSizeBytes,
+            pdfCeilingBytes,
+          )
+        : this.storage.knowledgeBaseMaxFileSizeBytes;
+    if (fileMeta.fileSize > sizeLimit) {
       throw new DocumentTooLargeException(
         fileMeta.filename,
         fileMeta.fileSize,
-        this.storage.knowledgeBaseMaxFileSizeBytes,
+        sizeLimit,
       );
     }
 
@@ -134,15 +142,19 @@ export class DocumentProcessingService implements IDocumentProcessingService {
         discoveredAt: new Date(),
       };
 
-      const validation = validateDocument(kbDoc, this.storage);
+      const validation = validateDocument(kbDoc, {
+        ...this.storage,
+        knowledgeBaseMaxFileSizeBytes: sizeLimit,
+      });
       if (!validation.valid) {
         const messages = validation.errors.map((e) => e.message).join('; ');
         throw new ParsingFailedException(fileMeta.filename, messages);
       }
     }
 
-    const buffer = await readFile(input.filePath);
-    const checksum = createHash('sha256').update(buffer).digest('hex');
+    const streamPdf = extension === 'pdf' && fileMeta.fileSize > 8 * 1024 * 1024;
+    const buffer = streamPdf ? Buffer.alloc(0) : await readFile(input.filePath);
+    const checksum = await computeFileChecksum(input.filePath);
     const parser = this.parserFactory.getParser(extension);
 
     this.logger.debug(
@@ -171,7 +183,12 @@ export class DocumentProcessingService implements IDocumentProcessingService {
       this.ocrSettings.autoOcr &&
       (options.forceOcr || Boolean(parserOutput.needsOcr));
 
-    if (shouldOcr) {
+    if (shouldOcr && buffer.length === 0) {
+      warnings.push(
+        'OCR was skipped for this large PDF so the file is not loaded entirely into memory. Pages that already have a text layer are still indexed.',
+      );
+      ocrStatus = 'not_required';
+    } else if (shouldOcr) {
       ocrAttempted = true;
       const { pages: ocrPages, ocr } =
         await this.ocrService.recognizeDocumentPages(

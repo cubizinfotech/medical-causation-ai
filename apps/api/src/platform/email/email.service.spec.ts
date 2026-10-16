@@ -17,6 +17,7 @@ const baseSettings: EmailSettings = {
   user: '',
   password: 'test-only-not-a-real-secret',
   secure: false,
+  resendApiKey: '',
   maxAttempts: 3,
   retryDelayMs: 0,
 };

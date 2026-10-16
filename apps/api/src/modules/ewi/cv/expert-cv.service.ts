@@ -5,6 +5,7 @@ import { BACKGROUND_RATE_LIMIT_RETRY, retryOnRateLimit } from '@ai/utils';
 import { ExpertDocumentsService } from '../documents/expert-documents.service';
 import {
   buildCvBatches,
+  extractBibliographyClaims,
   finalizeCvClaims,
   formatCvBatch,
   parseCvReply,
@@ -78,17 +79,23 @@ export class ExpertCvService {
     };
 
     const batches = buildCvBatches(document, this.documents.batchChars);
+    const listed = extractBibliographyClaims(document.pages);
     if (!this.modelAvailable() || batches.length === 0) {
       warnings.push(
         batches.length === 0
           ? 'The CV has no readable text.'
-          : 'No AI model is available to read the CV, so its claims were not compared.',
+          : 'No AI model is available to read the CV. Numbered publications on the CV were still kept.',
       );
-      return { document: info, status: 'failed', claims: [], warnings };
+      return {
+        document: info,
+        status: listed.length > 0 ? 'partial' : 'failed',
+        claims: finalizeCvClaims(listed),
+        warnings,
+      };
     }
 
     const system = await this.ai.loadPrompt('ewi/cv-claims-system');
-    const drafts: Array<Omit<CvClaim, 'id'>> = [];
+    const drafts: Array<Omit<CvClaim, 'id'>> = [...listed];
     let failed = 0;
     for (const [index, batch] of batches.entries()) {
       try {

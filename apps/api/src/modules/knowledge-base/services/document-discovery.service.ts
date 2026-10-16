@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readdir, readFile, stat } from 'fs/promises';
+import { readdir, stat } from 'fs/promises';
 import type { Dirent } from 'fs';
 import { join, relative } from 'path';
 import type { StorageSettings } from '@config/config.types';
@@ -12,7 +12,7 @@ import type { KnowledgeDocument } from '../types';
 import type { IDocumentDiscoveryService } from '../interfaces';
 import {
   buildDocumentMetadata,
-  computeChecksum,
+  computeFileChecksum,
   getFileExtension,
   isSupportedExtension,
 } from '../utils';
@@ -38,6 +38,18 @@ export class DocumentDiscoveryService implements IDocumentDiscoveryService {
     for (const folder of KNOWLEDGE_BASE_FOLDER_LIST) {
       const folderDocs = await this.scanFolderInternal(folder, discoveredAt);
       documents.push(...folderDocs);
+    }
+
+    const originals = join(this.storage.knowledgeBase.root, 'originals');
+    try {
+      await this.walkDirectory(originals, 'books', async (filePath) => {
+        const doc = await this.processFile(filePath, 'books', discoveredAt);
+        if (doc) documents.push(doc);
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Could not scan originals: ${error instanceof Error ? error.message : error}`,
+      );
     }
 
     this.logger.log(
@@ -105,8 +117,7 @@ export class DocumentDiscoveryService implements IDocumentDiscoveryService {
   ): Promise<KnowledgeDocument | null> {
     try {
       const fileStat = await stat(filePath);
-      const buffer = await readFile(filePath);
-      const checksum = computeChecksum(buffer);
+      const checksum = await computeFileChecksum(filePath);
       const relativePath = relative(this.storage.knowledgeBase.root, filePath);
 
       return buildDocumentMetadata({

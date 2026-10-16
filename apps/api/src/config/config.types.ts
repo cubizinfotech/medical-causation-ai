@@ -134,14 +134,16 @@ export interface EwiDocumentsSettings {
   batchChars: number;
 }
 
-export type EmailProviderName = 'console' | 'smtp' | 'transactional';
+export type EmailProviderName = 'console' | 'smtp' | 'resend' | 'transactional';
 
 export interface EmailSettings {
   /**
-   * console logs mail. smtp transmits only when delivery is enabled and the
-   * host is allowed. transactional is reserved until a vendor is confirmed.
+   * console logs mail. smtp and resend transmit only when delivery is enabled.
+   * transactional is reserved until a vendor is confirmed.
    */
   provider: EmailProviderName;
+  /** Resend API key. Used only when provider is resend. */
+  resendApiKey: string;
   /** True only when EMAIL_DELIVERY_ENABLED or FEATURE_EMAIL is true. */
   deliveryEnabled: boolean;
   from: string;
