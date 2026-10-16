@@ -102,7 +102,7 @@ describe('EwiDocumentIntakeService', () => {
 
     expect(doc.storageStatus).toBe('rejected');
     expect(doc.normalizedText).toBe('');
-    expect(doc.warnings.join(' ')).toMatch(/not be stored/i);
+    expect(doc.warnings.join(' ')).toMatch(/not stored/i);
   });
 
   it('builds a searchable report TOC reference index', async () => {
