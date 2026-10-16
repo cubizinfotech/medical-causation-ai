@@ -12,6 +12,7 @@ import type { ConfigService } from '@nestjs/config';
 import type { EwiRequestWorkflowService } from '../../correspondence/ewi-request-workflow.service';
 import type { ExpertDocumentsService } from '../../documents/expert-documents.service';
 import type { EwiPdfReportService } from '../../report/ewi-pdf-report.service';
+import type { EwiWordReportService } from '../../report/ewi-word-report.service';
 import { EWI_REPORT_TEMPLATE_VERSION } from '../../report/ewi-report.version';
 import type {
   ExpertInvestigationRepository,
@@ -30,6 +31,7 @@ describe('InvestigationHistoryService reports', () => {
   const updateReportFile = jest.fn().mockResolvedValue(undefined);
   const markCompleted = jest.fn().mockResolvedValue(null);
   const build = jest.fn();
+  const buildWord = jest.fn();
 
   function service(row: Partial<InvestigationView> = {}) {
     return new InvestigationHistoryService(
@@ -53,6 +55,7 @@ describe('InvestigationHistoryService reports', () => {
       {} as EwiRequestWorkflowService,
       {} as ExpertDocumentsService,
       { build } as unknown as EwiPdfReportService,
+      { build: buildWord } as unknown as EwiWordReportService,
     );
   }
 
@@ -76,6 +79,7 @@ describe('InvestigationHistoryService reports', () => {
     updateReportFile.mockClear();
     markCompleted.mockClear();
     build.mockReset();
+    buildWord.mockReset();
   });
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -179,5 +183,40 @@ describe('InvestigationHistoryService reports', () => {
         storageKey: saved,
       }),
     );
+  });
+  it('exports a finished investigation as Word, built from the saved result', async () => {
+    buildWord.mockResolvedValue({
+      fileName: 'ewi-jane-doe-report.docx',
+      mimeType: WORD_MIME,
+      format: 'docx',
+      buffer: Buffer.from('word report'),
+    });
+
+    const report = await service({ status: 'completed' }).getWordReport(
+      'inv-1',
+      'user-1',
+    );
+
+    expect(buildWord).toHaveBeenCalledWith(
+      expect.objectContaining({ expertName: 'Jane Doe' }),
+    );
+    expect(report).toEqual({
+      fileName: 'ewi-jane-doe-report.docx',
+      mimeType: WORD_MIME,
+      buffer: Buffer.from('word report'),
+    });
+    // Nothing is written: the PDF stays the stored copy.
+    expect(updateReportFile).not.toHaveBeenCalled();
+    expect(build).not.toHaveBeenCalled();
+  });
+
+  it('does not export an investigation that has not finished', async () => {
+    await expect(
+      service({ status: 'running', result: null }).getWordReport(
+        'inv-1',
+        'user-1',
+      ),
+    ).rejects.toThrow(/no finished report/);
+    expect(buildWord).not.toHaveBeenCalled();
   });
 });

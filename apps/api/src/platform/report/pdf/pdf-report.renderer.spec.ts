@@ -1,6 +1,6 @@
 import type { ReportBlock, ReportDocumentModel } from '../report-document';
 import { PdfReportRenderer } from './pdf-report.renderer';
-import { safeLink } from './pdf-report-layout';
+import { safeLink } from '../report-text';
 import { wrapText } from './pdf-text';
 
 type PdfJs = typeof import('pdfjs-dist/legacy/build/pdf.mjs');

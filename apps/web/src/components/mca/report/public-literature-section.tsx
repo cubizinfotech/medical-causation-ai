@@ -18,7 +18,14 @@ function pubmedSearchUrl(query: string): string {
   return `https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(query)}`;
 }
 
-function StatusNote({ search }: { search?: LiteratureSearchSummary }) {
+function StatusNote({
+  search,
+  givenToAi,
+}: {
+  search?: LiteratureSearchSummary;
+  /** The abstracts were citable sources of a supplemented analysis. */
+  givenToAi: boolean;
+}) {
   if (!search) {
     return (
       <div className="flex gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
@@ -54,12 +61,25 @@ function StatusNote({ search }: { search?: LiteratureSearchSummary }) {
   return (
     <p className="text-sm text-muted-foreground">
       Peer-reviewed studies from PubMed on this causation question, ranked by
-      relevance. They were found for your review and{" "}
-      <span className="font-medium text-foreground">
-        were not used by the AI analysis above
-      </span>
-      , which relies only on the firm library. Read each study before citing
-      it.
+      relevance.{" "}
+      {givenToAi ? (
+        <>
+          Their abstracts{" "}
+          <span className="font-medium text-foreground">
+            were given to the AI as citable sources
+          </span>
+          ; evidence cited from them is marked PubMed.
+        </>
+      ) : (
+        <>
+          They were found for your review and{" "}
+          <span className="font-medium text-foreground">
+            were not used by the AI analysis above
+          </span>
+          , which relied on the firm library.
+        </>
+      )}{" "}
+      Read each study before citing it.
       {search.status === "no_results" && search.message
         ? ` ${search.message}`
         : null}
@@ -215,7 +235,10 @@ export function PublicLiteratureSection({
 
   return (
     <div className="space-y-4">
-      <StatusNote search={search} />
+      <StatusNote
+        search={search}
+        givenToAi={(result.evidenceBasis?.literatureArticles ?? 0) > 0}
+      />
       {search ? <SearchDetails search={search} /> : null}
       {result.publicReferences.length > 0 ? (
         <ol className="space-y-3">

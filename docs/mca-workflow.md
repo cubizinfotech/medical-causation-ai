@@ -234,7 +234,7 @@ Both channels feed the same `applyUpdate()` function, which drives the progress 
 - [history-detail-view.tsx](../apps/web/src/app/mca/histories/[id]/history-detail-view.tsx) calls `GET /medical-analysis/histories/:id`. The API reads the row from `cases.analysis_cases`, checking ownership. If the row still says queued or running, it first syncs from the Redis record. The result JSON is returned and rendered on screen.
 - `/mca/histories` lists the user's past cases from the same table, and a case can be deleted from there.
 
-The report header has **Print** and **Download PDF** (the PDF is an image of the on-screen report, made in the browser).
+The report header has **Export PDF**, **Export Word**, and **Print**. The PDF is an image of the on-screen report, made in the browser. The Word file is built on the server from the saved analysis (`GET /medical-analysis/histories/:id/report/word`, owner only) with the same sections in the same order, so it can be edited; **Export Word** appears on a saved case (`/mca/histories/:id`).
 
 ### 7. Drafting a demand letter
 

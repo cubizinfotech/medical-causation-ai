@@ -119,4 +119,55 @@ describe("MedicalReport", () => {
     expect(html).not.toContain("Alternative Explanations");
     expect(html).not.toContain("Uncited AI Reasoning");
   });
+
+  it("offers the Word export only for a saved case", () => {
+    const saved = renderToStaticMarkup(
+      createElement(MedicalReport, { result: result(), caseId: "case-1" }),
+    );
+    const unsaved = renderToStaticMarkup(
+      createElement(MedicalReport, { result: result() }),
+    );
+
+    expect(saved).toContain("Export PDF");
+    expect(saved).toContain("Export Word");
+    expect(unsaved).toContain("Export PDF");
+    expect(unsaved).not.toContain("Export Word");
+  });
+
+  it("says whether the listed PubMed studies were given to the AI", () => {
+    const search = {
+      status: "completed" as const,
+      provider: "PubMed" as const,
+      queries: ["traumatic brain injury stroke"],
+      queryMethod: "ai" as const,
+      abstractsAvailable: true,
+      searchedAt: "2026-10-14T13:40:00.000Z",
+    };
+    const basis = {
+      mode: "knowledge_base_and_literature" as const,
+      knowledgeBasePassages: 2,
+      relevantKnowledgeBasePassages: 1,
+      literatureArticles: 3,
+      recordEntries: 0,
+      usesGeneralKnowledge: false,
+      note: "Supplemented with PubMed abstracts.",
+    };
+    const supplemented = renderToStaticMarkup(
+      createElement(MedicalReport, {
+        result: result({ literatureSearch: search, evidenceBasis: basis }),
+      }),
+    );
+    const libraryOnly = renderToStaticMarkup(
+      createElement(MedicalReport, {
+        result: result({
+          literatureSearch: search,
+          evidenceBasis: { ...basis, mode: "knowledge_base", literatureArticles: 0 },
+        }),
+      }),
+    );
+
+    expect(supplemented).toContain("were given to the AI as citable sources");
+    expect(supplemented).not.toContain("were not used by the AI analysis");
+    expect(libraryOnly).toContain("were not used by the AI analysis above");
+  });
 });

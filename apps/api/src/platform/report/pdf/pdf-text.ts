@@ -1,19 +1,7 @@
+import { printableText } from '../report-text';
+
 /** Width of a string in points, in the font and size being laid out. */
 export type MeasureText = (text: string) => number;
-
-// Control characters (other than line breaks) and zero-width marks have no
-// glyph and would print as boxes.
-const INVISIBLE =
-  // eslint-disable-next-line no-control-regex
-  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200b\u2028\u2029\ufeff]/g;
-
-/** Text as it can be printed: line breaks normalized, invisible marks removed. */
-export function printableText(text: string): string {
-  return text
-    .replace(/\r\n?/g, '\n')
-    .replace(/\t/g, ' ')
-    .replace(INVISIBLE, '');
-}
 
 /** Characters after which a long URL or identifier may break. */
 const BREAK_AFTER = new Set(['/', '?', '&', '=', '#', '-', '_', '.', ',', ';']);

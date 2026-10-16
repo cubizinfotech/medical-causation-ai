@@ -36,10 +36,12 @@ Every route needs `Authorization: Bearer <token>` except the two marked public. 
 | `POST /medical-analysis/jobs`, `GET /medical-analysis/jobs/:jobId` | Start an analysis, read its progress |
 | `GET /medical-analysis/histories[/:id]`, `DELETE /medical-analysis/histories/:id` | Own analyses |
 | `POST /medical-analysis/histories/:id/demand-letter` | Draft demand letter (Word) |
+| `GET /medical-analysis/histories/:id/report/word` | The finished analysis as a Word report |
 | `POST /ewi/documents/cv`, `GET /ewi/documents/:id/file`, `DELETE /ewi/documents/:id` | Expert CV |
 | `POST /ewi/jobs`, `GET /ewi/jobs/:jobId` | Start an investigation, read its progress |
 | `GET /ewi/histories[/:id]`, `POST /ewi/histories/:id/cancel`, `DELETE /ewi/histories/:id` | Own investigations |
 | `GET /ewi/histories/:id/report` | PDF report |
+| `GET /ewi/histories/:id/report/word` | The same report as a Word file |
 | `/ewi/requests/*` | Record-request letters (attorneys and paralegals; off unless `EWI_REQUEST_WORKFLOW_ENABLED`) |
 
 Live progress: Socket.IO namespaces `/medical-analysis` and `/ewi`. Connect with `auth: { token }`, then emit `subscribe` with `{ jobId }`; only the owner's jobs can be joined.

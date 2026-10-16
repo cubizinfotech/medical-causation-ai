@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (2026-10-16): Export Word for MCA and EWI reports
+
+- **Export Word** sits next to the PDF button on a finished MCA analysis (`/mca/histories/:id`) and a finished EWI investigation (`/ewi/histories/:id`). The Word file has the PDF report's layout: a cover box with the case or expert details, the executive summary, and the count badges; a contents list (Word offers to fill in the page numbers when the file opens); one titled section per card, with records, evidence, and questions in bordered boxes; clickable source links (web and mail links only); the disclaimer; page numbers.
+- The file is built on the server from the saved analysis or investigation each time it is exported, and is not stored. Only the owner can export it (`GET /medical-analysis/histories/:id/report/word`, `GET /ewi/histories/:id/report/word`); an analysis or investigation that has not finished is refused.
+- MCA's Word report follows the on-screen report section by section (template `mca/causation-report` 1.0.0), from the evidence basis through the cross-examination questions, the legal disclaimer, and the terms. EWI's uses the same 41-section template as the PDF.
+- Control characters from scanned or external sources are removed before writing, since Word rejects them.
+- MCA "Published Medical Literature" said the studies "were not used by the AI analysis" even when a supplemented analysis had been given their abstracts as citable sources. It now says which applies, on screen and in Word.
+
 ### Changed (2026-10-15): EWI report is a PDF laid out like the MCA report
 
 - The EWI report download is now a PDF instead of a Word file, laid out like the MCA report's PDF: a cover card with the expert's name, details (sections 1–4), the executive summary, and counts; a contents list whose page numbers link to each section; one card per section with its icon, records and cross-examination questions in boxes, and a "(continued)" header when a card runs onto the next page; a disclaimer card; page numbers in the footer.

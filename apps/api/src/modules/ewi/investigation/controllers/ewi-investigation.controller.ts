@@ -114,6 +114,27 @@ export class EwiInvestigationController {
     return new StreamableFile(report.buffer);
   }
 
+  /** The same report as a Word file, built from the saved investigation. */
+  @Get('histories/:id/report/word')
+  async downloadWordReport(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: AuthedRequest,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const userId = requireRequestUser(request).id;
+    const report = await this.historyService.getWordReport(id, userId);
+    void this.audit.record({
+      product: 'ewi',
+      action: 'report.download',
+      actorId: userId,
+      resourceType: 'investigation',
+      resourceId: id,
+      metadata: { format: 'docx' },
+    });
+    res.set(downloadHeaders(report.fileName, report.mimeType));
+    return new StreamableFile(report.buffer);
+  }
+
   @Post('jobs')
   @JobRateLimit()
   @HttpCode(HttpStatus.ACCEPTED)

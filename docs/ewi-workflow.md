@@ -215,6 +215,7 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 - When the status becomes `completed`, the investigation page **redirects automatically** to `/ewi/histories/{investigationId}`.
 - That page ([histories/[id]/page.tsx](../apps/web/src/app/ewi/histories/[id]/page.tsx)) calls `GET /ewi/histories/:id`. The API reads the investigation and its saved rows from PostgreSQL (checking ownership) and returns the summary, findings, inconsistencies, sources, and questions.
 - **Download** calls `GET /ewi/histories/:id/report`. The API reads the PDF from disk and sends it with `Content-Disposition: attachment`, so the browser saves it. A report saved with an older template version is first rebuilt from the saved investigation; this is how a Word report saved before version 3.0.0 becomes a PDF (the `.docx` is replaced). If the rebuild fails, the saved file is sent unchanged.
+- **Export Word** calls `GET /ewi/histories/:id/report/word`. The API builds a Word file from the saved investigation with the same template as the PDF (`EwiWordReportService`, shared renderer in [platform/report/docx/](../apps/api/src/platform/report/docx/)). It is built on each export and not stored.
 - `/ewi/histories` lists past investigations. They can be cancelled (if running) or deleted.
 
 ## Cancel and retry

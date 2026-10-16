@@ -80,7 +80,7 @@ If you set `REDIS_PASSWORD`, add `-a "$REDIS_PASSWORD"` to that command.
 
 1. Open http://localhost:3000 and sign in as `gopalhingu123@gmail.com` with the password `password`. The home page offers Medical Causation Analysis and Expert Witness Investigation.
 2. MCA: open `/mca`, start a case or load an example, and watch progress. History is under `/mca/histories`. A live analysis calls the chat provider in `.env`. Leave the key empty if you only want to click through the screens.
-3. EWI: open `/ewi`, then **New Investigation**. Enter a name, city, and specialty. Progress is at `/ewi/investigation`. When it finishes, `/ewi/histories/:id` shows the summary, findings, questions, and **Download PDF Report**. Cancel mid-run if you want; retry starts a new job with the same intake.
+3. EWI: open `/ewi`, then **New Investigation**. Enter a name, city, and specialty. Progress is at `/ewi/investigation`. When it finishes, `/ewi/histories/:id` shows the summary, findings, questions, **Download PDF Report**, and **Export Word**. Cancel mid-run if you want; retry starts a new job with the same intake.
 
 Some EWI sources show as unavailable or restricted. That is the honest sample-data path.
 

@@ -351,7 +351,7 @@ export default function HistoryDetailView({ id }: { id: string }) {
               </Button>
             </CardContent>
           </Card>
-          <MedicalReport result={result} />
+          <MedicalReport result={result} caseId={history.id} />
         </div>
       ) : null}
 

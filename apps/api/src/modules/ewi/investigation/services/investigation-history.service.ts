@@ -12,13 +12,37 @@ import {
 import { ExpertDocumentsService } from '../../documents/expert-documents.service';
 import type { CreateExpertInvestigationDto } from '../dto/create-expert-investigation.dto';
 import type { EwiInvestigationResult } from '../jobs/ewi-investigation-job.types';
-import { EwiPdfReportService } from '../../report/ewi-pdf-report.service';
+import {
+  EwiPdfReportService,
+  type EwiReportInput,
+} from '../../report/ewi-pdf-report.service';
+import { EwiWordReportService } from '../../report/ewi-word-report.service';
 import { EWI_REPORT_TEMPLATE_VERSION } from '../../report/ewi-report.version';
 
 interface ReportFile {
   fileName: string;
   mimeType: string;
   buffer: Buffer;
+}
+
+/** The report template's input, from a saved investigation result. */
+function reportInput(result: EwiInvestigationResult): EwiReportInput {
+  return {
+    expertName: result.expertName,
+    city: result.city,
+    specialty: result.specialty,
+    evidence: result.evidence,
+    discrepancies: result.discrepancies,
+    questions: result.questions,
+    generatedAt: result.generatedAt,
+    summary: result.summary,
+    analysis: result.analysis?.document,
+    legalResearch: result.legalResearch,
+    onlinePresence: result.onlinePresence,
+    professionalBackground: result.professionalBackground,
+    identity: result.identity ?? null,
+    cvCheck: result.cvCheck ?? null,
+  };
 }
 
 @Injectable()
@@ -31,6 +55,7 @@ export class InvestigationHistoryService {
     private readonly requestWorkflow: EwiRequestWorkflowService,
     private readonly documents: ExpertDocumentsService,
     private readonly pdfReport: EwiPdfReportService,
+    private readonly wordReport: EwiWordReportService,
   ) {}
 
   async create(
@@ -127,6 +152,25 @@ export class InvestigationHistoryService {
   }
 
   /**
+   * The report as a Word file, built from the saved investigation when it
+   * is exported (the PDF is the stored copy).
+   */
+  async getWordReport(id: string, ownerUserId: string): Promise<ReportFile> {
+    const row = await this.getHistory(id, ownerUserId);
+    if (row.status !== 'completed' || !row.result) {
+      throw new NotFoundException(
+        `Investigation "${id}" has no finished report to export`,
+      );
+    }
+    const report = await this.wordReport.build(reportInput(row.result));
+    return {
+      fileName: report.fileName,
+      mimeType: report.mimeType,
+      buffer: report.buffer,
+    };
+  }
+
+  /**
    * A report saved with an older template is rebuilt from the stored
    * investigation, so wording changes reach reports made before them. A
    * Word report saved before the PDF template is replaced by the PDF. If
@@ -142,22 +186,7 @@ export class InvestigationHistoryService {
       return null;
     }
     try {
-      const report = await this.pdfReport.build({
-        expertName: result.expertName,
-        city: result.city,
-        specialty: result.specialty,
-        evidence: result.evidence,
-        discrepancies: result.discrepancies,
-        questions: result.questions,
-        generatedAt: result.generatedAt,
-        summary: result.summary,
-        analysis: result.analysis?.document,
-        legalResearch: result.legalResearch,
-        onlinePresence: result.onlinePresence,
-        professionalBackground: result.professionalBackground,
-        identity: result.identity ?? null,
-        cvCheck: result.cvCheck ?? null,
-      });
+      const report = await this.pdfReport.build(reportInput(result));
       const newKey =
         storageKey.slice(0, storageKey.length - extname(storageKey).length) +
         reportExtension(report.fileName);

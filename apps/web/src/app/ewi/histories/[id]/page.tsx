@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
-import { AlertCircle, Download, RefreshCw } from "lucide-react";
+import { AlertCircle, Download, FileText, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -34,8 +34,12 @@ export default function EwiHistoryDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const id = params.id;
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<{
+    message: string;
+    format: "pdf" | "word";
+  } | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [exportingWord, setExportingWord] = useState(false);
 
   const history = useQuery({
     queryKey: ewiKeys.history(id),
@@ -139,16 +143,56 @@ export default function EwiHistoryDetailPage() {
         void queryClient.invalidateQueries({ queryKey: ewiKeys.history(id) });
       }
     } catch (error) {
-      setDownloadError(
-        toUserFacingError(
+      setDownloadError({
+        message: toUserFacingError(
           error,
           "The PDF report could not be downloaded. Please retry.",
         ),
-      );
+        format: "pdf",
+      });
     } finally {
       setDownloading(false);
     }
   };
+
+  const exportWord = async () => {
+    setDownloadError(null);
+    setExportingWord(true);
+    try {
+      await ewiClient.downloadWordReport(
+        detail.id,
+        (detail.reportFileName || "ewi-report.docx").replace(
+          /\.[a-z0-9]+$/i,
+          ".docx",
+        ),
+      );
+    } catch (error) {
+      setDownloadError({
+        message: toUserFacingError(
+          error,
+          "The Word report could not be exported. Please retry.",
+        ),
+        format: "word",
+      });
+    } finally {
+      setExportingWord(false);
+    }
+  };
+
+  const retryDownload = () =>
+    void (downloadError?.format === "word" ? exportWord() : download());
+
+  const canExportWord = detail.status === "completed";
+  const wordButton = canExportWord ? (
+    <Button
+      variant="outline"
+      onClick={() => void exportWord()}
+      disabled={exportingWord}
+    >
+      <FileText className="h-4 w-4" />
+      {exportingWord ? "Exporting…" : "Export Word"}
+    </Button>
+  ) : null;
 
   const retrySameExpert = () => {
     saveExpertForm({
@@ -170,16 +214,22 @@ export default function EwiHistoryDetailPage() {
           <p className="text-muted-foreground">
             Report file: <span className="font-medium">{detail.reportFileName}</span>
           </p>
-          <Button onClick={() => void download()} disabled={downloading}>
-            <Download className="h-4 w-4" />
-            {downloading ? "Downloading…" : "Download PDF Report"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => void download()} disabled={downloading}>
+              <Download className="h-4 w-4" />
+              {downloading ? "Downloading…" : "Download PDF Report"}
+            </Button>
+            {wordButton}
+          </div>
         </>
       ) : detail.status === "completed" ? (
-        <EmptyReportNote>
-          The investigation completed, but the PDF report file is not available
-          for download.
-        </EmptyReportNote>
+        <>
+          <EmptyReportNote>
+            The investigation completed, but the PDF report file is not
+            available for download.
+          </EmptyReportNote>
+          {wordButton}
+        </>
       ) : inProgress ? (
         <EmptyReportNote>
           The PDF report will be available when report generation finishes.
@@ -193,12 +243,12 @@ export default function EwiHistoryDetailPage() {
         <Alert variant="destructive">
           <AlertTitle>Download failed</AlertTitle>
           <AlertDescription>
-            <p>{downloadError}</p>
+            <p>{downloadError.message}</p>
             <Button
               className="mt-2"
               size="sm"
               variant="outline"
-              onClick={() => void download()}
+              onClick={retryDownload}
             >
               Retry download
             </Button>
@@ -210,7 +260,8 @@ export default function EwiHistoryDetailPage() {
 
   return (
     <PageContainer className="py-10">
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      {/* Title above the actions, so the buttons keep to one row. */}
+      <div className="mb-6 flex flex-col gap-4">
         <div>
           <p className="text-sm text-muted-foreground">
             <Link href="/ewi" className="hover:underline">
@@ -227,13 +278,14 @@ export default function EwiHistoryDetailPage() {
             Investigation Findings
           </h1>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           {detail.reportFileName ? (
             <Button onClick={() => void download()} disabled={downloading}>
               <Download className="h-4 w-4" />
               {downloading ? "Downloading…" : "Download PDF Report"}
             </Button>
           ) : null}
+          {wordButton}
           <Button variant="outline" onClick={retrySameExpert}>
             Retry research
           </Button>
@@ -251,6 +303,7 @@ export default function EwiHistoryDetailPage() {
           </Button>
           <Button
             variant="destructive"
+            className="sm:ml-auto"
             disabled={remove.isPending}
             onClick={() => remove.mutate()}
           >
@@ -283,16 +336,16 @@ export default function EwiHistoryDetailPage() {
         </Alert>
       ) : null}
 
-      {downloadError && detail.reportFileName ? (
+      {downloadError ? (
         <Alert variant="destructive" className="mb-4">
           <AlertTitle>Download failed</AlertTitle>
           <AlertDescription>
-            <p>{downloadError}</p>
+            <p>{downloadError.message}</p>
             <Button
               className="mt-2"
               size="sm"
               variant="outline"
-              onClick={() => void download()}
+              onClick={retryDownload}
             >
               Retry download
             </Button>

@@ -5,6 +5,7 @@ import { RedisModule } from '@redis/redis.module';
 import { DatabaseModule } from '@database/database.module';
 import { AuthModule } from '@platform/auth/auth.module';
 import { AuditModule } from '@platform/audit/audit.module';
+import { ReportModule } from '@platform/report/report.module';
 import { MedicalLiteratureModule } from '@integrations/medical-literature';
 import { MedicalPromptService } from './prompts';
 import { AnalysisPromptBuilder, MedicalQueryBuilder } from './builders';
@@ -25,6 +26,8 @@ import { MedicalAnalysisProcessor } from './jobs/medical-analysis.processor';
 import { AnalysisCaseRepository } from './repositories/analysis-case.repository';
 import { DemandLetterController } from './demand-letter/demand-letter.controller';
 import { DemandLetterService } from './demand-letter/demand-letter.service';
+import { McaReportController } from './report/mca-report.controller';
+import { McaWordReportService } from './report/mca-word-report.service';
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -37,11 +40,13 @@ const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
     AuthModule,
     AuditModule,
     MedicalLiteratureModule,
+    ReportModule,
   ],
   controllers: [
     MedicalAnalysisController,
     CaseRecordsController,
     DemandLetterController,
+    McaReportController,
   ],
   providers: [
     MedicalPromptService,
@@ -56,6 +61,7 @@ const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
     ChronologyExtractionService,
     BillingExtractionService,
     DemandLetterService,
+    McaWordReportService,
     MedicalAnalysisService,
     AnalysisCaseRepository,
     AnalysisHistoryService,

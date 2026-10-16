@@ -14,6 +14,7 @@ import {
   type TextOp,
 } from './pdf-layout';
 import { truncateText } from './pdf-text';
+import { formatGeneratedAt, safeLink } from '../report-text';
 import {
   BOX,
   CARD,
@@ -591,25 +592,6 @@ function laid(
   return { lines: layout.wrap(text, style, width), style, link };
 }
 
-/**
- * Only web and mail links become clickable. Source URLs come from outside
- * services; any other scheme is printed as plain text.
- */
-export function safeLink(link: string | undefined): string | undefined {
-  const value = link?.trim();
-  if (!value) return undefined;
-  try {
-    const { protocol } = new URL(value);
-    return protocol === 'http:' ||
-      protocol === 'https:' ||
-      protocol === 'mailto:'
-      ? value
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function blockTexts(blocks: ReportBlock[]): string[] {
   return blocks.map((block) => block.text.trim()).filter(Boolean);
 }
@@ -648,15 +630,4 @@ function layoutClosingLine(
     top += TEXT.closing.leading;
   }
   layout.y = top;
-}
-
-/** "Oct 15, 2026, 9:10 AM UTC". The server's time zone is not the reader's. */
-export function formatGeneratedAt(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  }).format(date)} UTC`;
 }

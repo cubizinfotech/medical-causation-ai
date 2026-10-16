@@ -28,6 +28,7 @@ import {
   getPrivateSourceSummary,
 } from "@/features/mca/report/private-source-format";
 import { downloadReportPdf } from "@/features/mca/report/report-export";
+import { medicalAnalysisClient } from "@/features/mca/medical-analysis/medical-analysis.service";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,9 +71,18 @@ function SectionCard({
   );
 }
 
-export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
+export function MedicalReport({
+  result,
+  caseId,
+}: {
+  result: MedicalAnalysisResult;
+  /** The saved case: the Word export is built from it on the server. */
+  caseId?: string;
+}) {
   const reportRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingWord, setIsExportingWord] = useState(false);
+  const [wordError, setWordError] = useState<string | null>(null);
 
   const crossExamCount =
     result.metadata.crossExamQuestionCount ??
@@ -94,6 +104,22 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
     }
   };
 
+  const handleExportWord = async () => {
+    if (!caseId || isExportingWord) {
+      return;
+    }
+
+    setWordError(null);
+    setIsExportingWord(true);
+    try {
+      await medicalAnalysisClient.downloadWordReport(caseId);
+    } catch {
+      setWordError("The Word report could not be exported. Please retry.");
+    } finally {
+      setIsExportingWord(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="no-print flex flex-wrap gap-3">
@@ -105,6 +131,20 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
           )}
           {isExporting ? "Generating PDF…" : "Export PDF"}
         </Button>
+        {caseId ? (
+          <Button
+            variant="outline"
+            onClick={handleExportWord}
+            disabled={isExportingWord}
+          >
+            {isExportingWord ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
+            {isExportingWord ? "Generating Word…" : "Export Word"}
+          </Button>
+        ) : null}
         <Button variant="outline" onClick={() => window.print()}>
           <Printer className="h-4 w-4" />
           Print
@@ -112,6 +152,11 @@ export function MedicalReport({ result }: { result: MedicalAnalysisResult }) {
         <Button variant="outline" asChild>
           <Link href="/mca/case">New Case</Link>
         </Button>
+        {wordError ? (
+          <p role="alert" className="w-full text-sm text-destructive">
+            {wordError}
+          </p>
+        ) : null}
       </div>
 
       <div

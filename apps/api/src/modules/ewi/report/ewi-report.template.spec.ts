@@ -6,6 +6,9 @@ import {
 import { EWI_REPORT_TEMPLATE_VERSION } from './ewi-report.version';
 import { EwiPdfReportService } from './ewi-pdf-report.service';
 import { PdfReportRenderer } from '@platform/report/pdf/pdf-report.renderer';
+import { DocxReportRenderer } from '@platform/report/docx/docx-report.renderer';
+import mammoth from 'mammoth';
+import { EwiWordReportService } from './ewi-word-report.service';
 import { PdfParser } from '@modules/document-processing/parsers/pdf.parser';
 import { buildDeterministicAnalysis } from '../investigation/analysis/deterministic-analysis';
 
@@ -499,5 +502,65 @@ describe('EwiPdfReportService', () => {
     const text = (await pdfPages(artifact.buffer)).join('\n');
     expect(text).toContain('Public LinkedIn listing');
     expect(text).toContain('https://linkedin.example/jane');
+  });
+});
+
+describe('EwiWordReportService', () => {
+  it('builds the same report as a Word file', async () => {
+    const service = new EwiWordReportService(new DocxReportRenderer());
+    const evidence = [
+      {
+        sourceId: 'social' as const,
+        category: 'social',
+        title: 'Public LinkedIn listing',
+        summary: 'Public profile headline only.',
+        url: 'https://linkedin.example/jane',
+        access: 'public' as const,
+        informationStatus: 'unverified' as const,
+        raw: { presenceKind: 'social', platform: 'linkedin' },
+      },
+    ];
+    const questions = buildGroundedCrossExamQuestions({
+      expertName: 'Jane Doe',
+      evidence,
+    });
+    const artifact = await service.build({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence,
+      discrepancies: [],
+      questions,
+      generatedAt: '2026-09-29T12:00:00.000Z',
+      summary: 'Collected social listing could not be verified.',
+    });
+    const { value: text } = await mammoth.extractRawText({
+      buffer: artifact.buffer,
+    });
+    const { value: html } = await mammoth.convertToHtml({
+      buffer: artifact.buffer,
+    });
+
+    expect(artifact.format).toBe('docx');
+    expect(artifact.fileName).toBe('ewi-jane-doe-report.docx');
+    expect(artifact.mimeType).toContain('wordprocessingml');
+    expect(artifact.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
+    expect(artifact.buffer.subarray(0, 2).toString()).toBe('PK');
+    for (const expected of [
+      'EXPERT WITNESS INVESTIGATION REPORT',
+      'Jane Doe',
+      'Neurology · Boston',
+      '5. Executive Summary',
+      'Collected social listing could not be verified.',
+      '6. Expert Background',
+      '31. Social Media',
+      'Public LinkedIn listing',
+      '41. Cross-Examination Questions',
+      `1. ${questions[0].question}`,
+      'Disclaimer',
+    ]) {
+      expect(text).toContain(expected);
+    }
+    expect(html).toContain('<a href="https://linkedin.example/jane">');
   });
 });

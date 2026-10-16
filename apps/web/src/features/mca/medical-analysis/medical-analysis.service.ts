@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/config";
+import { downloadFileName, saveBlob } from "@/features/common/file-download";
 import type { AnalyzeCaseRequest } from "./types";
 import type {
   CreateMedicalAnalysisJobResponse,
@@ -62,6 +63,27 @@ export class MedicalAnalysisClient {
   async getHistory(id: string): Promise<AnalysisHistoryDetail> {
     const response = await apiFetch(`/medical-analysis/histories/${id}`);
     return parseApiResponse<AnalysisHistoryDetail>(response);
+  }
+
+  /** Saves a finished analysis as a Word report; returns the file name. */
+  async downloadWordReport(caseId: string): Promise<string> {
+    const response = await apiFetch(
+      `/medical-analysis/histories/${caseId}/report/word`,
+    );
+    if (!response.ok) {
+      await parseApiResponse<never>(response);
+    }
+    const blob = await response.blob();
+    if (blob.size === 0) {
+      throw new ApiError("The report file was empty or could not be read.", 502);
+    }
+    const name = downloadFileName(
+      response.headers.get("Content-Disposition"),
+      "medical-causation-report.docx",
+      blob.type || response.headers.get("Content-Type") || "",
+    );
+    saveBlob(blob, name);
+    return name;
   }
 
   async deleteHistory(id: string): Promise<void> {

@@ -37,7 +37,7 @@ The knowledge-base files are not in Git. Copy them onto the server and index the
 4. You watch the timeline. You can cancel. Retry starts a new investigation with the same name, city, and specialty.
 5. Sources that are missing, restricted, or failing stay marked that way. The job does not invent a degree, license, or lawsuit.
 6. The finished page shows the summary, findings, inconsistencies, sources, and cross-examination questions.
-7. Download the PDF report.
+7. Download the PDF report, or export it to Word.
 
 Local and server demos use sample research records (`RESEARCH_PROVIDER=mock`). With `RESEARCH_PROVIDER=live`, the investigation confirms the expert in the NPI Registry, then searches CMS Open Payments, OpenAlex, and CourtListener, including Daubert/Frye challenges. Paid databases are not connected. A missing source is not proof that the expert lacks a credential.
 
