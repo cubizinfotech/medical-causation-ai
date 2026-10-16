@@ -39,6 +39,9 @@ export class PdfParser implements IDocumentParser {
         ...source,
         useSystemFonts: true,
         disableFontFace: true,
+        disableAutoFetch: input.buffer.length === 0,
+        rangeChunkSize: 65536,
+        verbosity: 0,
       });
 
       const document = await loadingTask.promise;
@@ -90,6 +93,7 @@ export class PdfParser implements IDocumentParser {
           charCount: pageText.length,
           ...(hasImages !== undefined ? { hasImages } : {}),
         });
+        page.cleanup();
       }
 
       const rawText = pages.map((p) => p.text).join('\n\n');

@@ -234,6 +234,30 @@ export class IndexingService implements IIndexingService {
   }
 
   /**
+   * Records a failure when the indexing process itself was killed, for
+   * example by running out of memory, and could not write the status.
+   */
+  async markIndexingFailed(
+    knowledgeDocumentId: string,
+    message: string,
+  ): Promise<void> {
+    const existing =
+      await this.documentRepository.findByKnowledgeDocumentId(
+        knowledgeDocumentId,
+      );
+    if (!existing) return;
+    await this.documentRepository.updateStatus(
+      existing.id,
+      INDEX_STATUS.FAILED,
+      message,
+    );
+    this.knowledgeBaseService.updateDocumentStatus(
+      knowledgeDocumentId,
+      DOCUMENT_STATUS.FAILED,
+    );
+  }
+
+  /**
    * Embeds chunks that have no vector, or a vector from another provider or
    * model (after EMBEDDING_PROVIDER or AI_EMBEDDING_MODEL changes). Old
    * vectors are replaced one batch at a time, so search keeps working while

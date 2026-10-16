@@ -59,7 +59,8 @@ export class TesseractOcrProvider implements IOcrProvider {
       pages: unchanged('failed'),
     });
 
-    if (!context.pdf) {
+    const source = context.pdfPath || context.pdf;
+    if (!source) {
       return failed(
         'OCR reads scanned PDF pages only; this file is not a PDF.',
       );
@@ -83,7 +84,7 @@ export class TesseractOcrProvider implements IOcrProvider {
 
     const started = Date.now();
     this.logger.log(`Reading ${scanned.length} scanned page(s) with OCR`);
-    const results = await this.pdfOcr.recognize(context.pdf, scanned, {
+    const results = await this.pdfOcr.recognize(source, scanned, {
       dpi: settings?.dpi,
       onPage: (done, total) => {
         if (done % PROGRESS_EVERY === 0 && done < total) {

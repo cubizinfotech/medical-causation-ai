@@ -49,6 +49,31 @@ Create the first real sign-in:
 npm run user:create -- jane@firm.example attorney "Jane Doe"
 ```
 
+## Index the medical library
+
+After the books and articles are in `/var/www/medical-causation-ai/knowledge-base` (see [DEPLOYMENT.md](../DEPLOYMENT.md) section 16):
+
+```bash
+cd /var/www/medical-causation-ai
+mkdir -p logs
+nohup npm run index:kb > logs/index-kb.log 2>&1 &
+tail -f logs/index-kb.log
+```
+
+Ctrl+C stops `tail` only. Already indexed files are skipped. Failed files, including scans, are retried. PDFs over 8 MB run in their own process. On this 2 GB server, split any book near 1 GB into parts under about 200 MB before indexing it.
+
+## Clear MCA and EWI histories
+
+Prints the counts, then deletes only when `--yes` is passed. The medical library and user accounts stay.
+
+```bash
+cd /var/www/medical-causation-ai
+npm run clear:histories
+pm2 stop mca-api
+npm run clear:histories -- --yes
+pm2 start mca-api
+```
+
 ## Later deploys
 
 ```bash

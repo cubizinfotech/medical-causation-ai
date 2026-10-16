@@ -12,8 +12,9 @@
  * batch at a time, so search keeps working while it runs. --only indexes the
  * files whose path contains any of the given texts (case-insensitive).
  */
+import { spawn } from 'child_process';
 import { config } from 'dotenv';
-import { resolve } from 'path';
+import { delimiter, resolve } from 'path';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
 import { IndexingService } from '../src/modules/indexing';
@@ -22,6 +23,9 @@ import { KnowledgeBaseService } from '../src/modules/knowledge-base/services/kno
 const apiDir = resolve(__dirname, '..');
 config({ path: resolve(apiDir, '../../.env') });
 config({ path: resolve(apiDir, '.env'), override: false });
+
+/** Files larger than this are indexed in a separate process. */
+const LARGE_FILE_BYTES = 8 * 1024 * 1024;
 
 function optionValues(name: string): string[] {
   const values: string[] = [];
@@ -37,6 +41,7 @@ async function main(): Promise<void> {
   const reembedOnly = process.argv.includes('--reembed-only');
   const replaceEmbeddings = process.argv.includes('--replace-embeddings');
   const only = optionValues('--only').map((text) => text.toLowerCase());
+  const documentId = optionValues('--document')[0];
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
@@ -44,6 +49,16 @@ async function main(): Promise<void> {
 
   try {
     const indexing = app.get(IndexingService);
+
+    if (documentId) {
+      const result = await indexing.indexKnowledgeBaseDocument(documentId, {
+        forceReindex,
+      });
+      console.log(
+        `  status=${result.status} chunks=${result.chunkCount} embeddings=${result.embeddingCount} duration=${result.processingDurationMs}ms`,
+      );
+      return;
+    }
 
     if (reembedOnly) {
       if (replaceEmbeddings) {
@@ -96,6 +111,19 @@ async function main(): Promise<void> {
       for (const document of documents) {
         console.log(`\nIndexing: ${document.relativePath}`);
         try {
+          if (document.size > LARGE_FILE_BYTES && !documentId) {
+            const code = await indexInChild(document.id, forceReindex);
+            if (code !== 0) {
+              failed += 1;
+              const message =
+                code === 134
+                  ? 'Indexing stopped because this file ran out of memory. Split it into smaller PDFs and run npm run index:kb again.'
+                  : `Indexing process exited with code ${code}.`;
+              await indexing.markIndexingFailed(document.id, message);
+              console.log(`  failed: ${message}`);
+            }
+            continue;
+          }
           const result = await indexing.indexKnowledgeBaseDocument(
             document.id,
             { forceReindex },
@@ -121,6 +149,44 @@ async function main(): Promise<void> {
   } finally {
     await app.close();
   }
+}
+
+function indexInChild(
+  documentId: string,
+  forceReindex: boolean,
+): Promise<number> {
+  const requested = Number(process.env.INDEX_CHILD_HEAP_MB);
+  const heapMb =
+    Number.isFinite(requested) && requested >= 256 && requested <= 8192
+      ? Math.floor(requested)
+      : 768;
+  const args = [
+    `--max-old-space-size=${heapMb}`,
+    '-r',
+    'ts-node/register',
+    '-r',
+    'tsconfig-paths/register',
+    resolve(__dirname, 'run-indexing.ts'),
+    '--document',
+    documentId,
+  ];
+  if (forceReindex) args.push('--force');
+  const nodePath = [
+    resolve(apiDir, 'node_modules'),
+    resolve(apiDir, '../../node_modules'),
+    process.env.NODE_PATH,
+  ]
+    .filter(Boolean)
+    .join(delimiter);
+  return new Promise((resolveExit) => {
+    const child = spawn(process.execPath, args, {
+      cwd: apiDir,
+      stdio: 'inherit',
+      env: { ...process.env, NODE_PATH: nodePath },
+    });
+    child.on('error', () => resolveExit(1));
+    child.on('exit', (code) => resolveExit(code ?? 1));
+  });
 }
 
 void main().catch((error: unknown) => {

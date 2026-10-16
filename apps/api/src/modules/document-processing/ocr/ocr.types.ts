@@ -25,8 +25,10 @@ export interface OcrDocumentResult {
 
 /** The whole file, for engines that render pages themselves. */
 export interface OcrContext {
-  /** The PDF bytes, when the document is a PDF. */
+  /** The PDF bytes, when the document is a PDF small enough to hold. */
   pdf?: Buffer;
+  /** Path used instead of pdf bytes so a larger scan is not copied into memory. */
+  pdfPath?: string;
 }
 
 export interface IOcrProvider {

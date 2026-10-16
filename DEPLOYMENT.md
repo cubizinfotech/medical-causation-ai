@@ -356,13 +356,16 @@ df -h
 
 ```bash
 cd /var/www/medical-causation-ai
+mkdir -p logs
 nohup npm run index:kb > logs/index-kb.log 2>&1 &
 tail -f logs/index-kb.log      # Ctrl+C stops watching, not the indexing
 ```
 
-`index:kb` finds the files under `KNOWLEDGE_BASE_PATH`, splits them into passages, embeds them with the configured `EMBEDDING_PROVIDER`, and stores them in PostgreSQL. Files already indexed are skipped, so it is safe to run again after adding books. A file that cannot be indexed (for example a book over `KNOWLEDGE_BASE_MAX_FILE_SIZE_MB`) is reported and skipped; the rest continue. Do not start it while an upload is incomplete.
+The same command on a laptop, from the repository root, is `npm run index:kb`. Leave that terminal open until it prints `Indexing complete`.
 
-Scanned PDFs (pages that are images, with no text layer) are read with OCR on the server while indexing. This takes about 1–2 seconds per page on a laptop and longer on the 1-CPU droplet, so a large scanned book can take an hour or more; run it with `nohup` as above. A scan with more than `OCR_MAX_PAGES` (default 500) scanned pages is skipped with a message: split it into parts of up to 500 pages and under the size limit, then index again. A scan OCR cannot read is listed as `failed` with the reason "No readable text".
+`index:kb` reads `books/`, `articles/`, `reports/`, `templates/`, `uploads/`, and `originals/` under `KNOWLEDGE_BASE_PATH`, splits them into passages, embeds them with `EMBEDDING_PROVIDER`, and stores them in PostgreSQL. A file already indexed is skipped, so it is safe to run again after adding books. A file that failed (including the four scans that had no text because OCR was skipped) is retried. Do not start it while an upload is incomplete.
+
+A PDF larger than 8 MB is indexed in its own process, so one book running out of memory does not stop the rest. On this 2 GB droplet leave `INDEX_CHILD_HEAP_MB` unset (768 MB). A scanned page is rendered and read with OCR; that is about 1–2 seconds per page on a laptop and slower on one CPU, so a scanned book can take hours. A scan with more than `OCR_MAX_PAGES` (default 500) pages is marked failed: split it into parts of at most 500 pages and run `npm run index:kb` again. A book near 1 GB, such as the neurologic examination original, will not finish on 2 GB of RAM; split that PDF into parts under about 200 MB first. If a file still runs out of memory, the log says so and the next file continues.
 
 To index part of the library first, give one or more `--only` texts that appear in the file paths:
 
@@ -398,6 +401,18 @@ Records that attorneys upload on the MCA case form are stored in `CASE_RECORDS_P
 - The chronology sends record text to the configured `AI_PROVIDER`. Use a provider the firm has approved for patient data.
 
 Expert CVs uploaded on the EWI intake form follow the same rules in `EWI_DOCUMENTS_PATH` (default `data/ewi-documents`): owner-only, deleted with the investigation, and included in `scripts/backup.sh`.
+
+### Clear case histories
+
+This removes MCA analyses, uploaded medical records, EWI investigations, uploaded CVs, and generated EWI PDF reports. It does not remove the medical library, its passages, its embeddings, or user accounts. Run it from the repository root on the laptop or on the server. The first command only prints counts:
+
+```bash
+cd /var/www/medical-causation-ai
+npm run clear:histories
+npm run clear:histories -- --yes
+```
+
+Stop the API first when people might still be signed in (`pm2 stop mca-api`), then start it again (`pm2 start mca-api`). Take a backup with `bash scripts/backup.sh` before `--yes` if those cases should be recoverable.
 
 ## 17. Disk and Docker cleanup
 

@@ -16,7 +16,7 @@ NestJS application for Medical Causation Analysis (MCA) and Expert Witness Inves
 | `src/integrations/` | PubMed / Europe PMC, NPI Registry, Open Payments, OpenAlex, CourtListener |
 | `src/redis/` | Redis client, including `updateJson` for atomic job-record updates |
 | `prisma/` | Schema and migrations (`npm run prisma:migrate`) |
-| `scripts/` | `run-indexing.ts`, `seed-demo-users.ts`, `create-user.ts` |
+| `scripts/` | `run-indexing.ts`, `clear-histories.ts`, `seed-demo-users.ts`, `create-user.ts` |
 
 MCA and EWI never import each other.
 

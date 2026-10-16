@@ -42,7 +42,7 @@ export class OcrService {
    */
   async recognizeDocumentPages(
     pages: ProcessedPage[],
-    options: { force?: boolean; pdf?: Buffer } = {},
+    options: { force?: boolean; pdf?: Buffer; pdfPath?: string } = {},
   ): Promise<{ pages: ProcessedPage[]; ocr: OcrDocumentResult }> {
     const provider = this.getActiveProvider();
     const inputs: OcrPageInput[] = pages.map((page) => ({
@@ -58,7 +58,10 @@ export class OcrService {
     this.logger.log(
       `Running OCR via ${provider.name} for ${pages.length} page(s)`,
     );
-    const ocr = await provider.recognizePages(inputs, { pdf: options.pdf });
+    const ocr = await provider.recognizePages(inputs, {
+      pdf: options.pdf,
+      pdfPath: options.pdfPath,
+    });
     return { pages: mergeOcrIntoPages(pages, ocr), ocr };
   }
 }

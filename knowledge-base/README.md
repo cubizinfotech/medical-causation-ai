@@ -9,6 +9,7 @@ These files are **not** part of the application source code. They are source mat
 ```
 knowledge-base/
 ├── books/       # Licensed medical textbooks and reference books (PDF)
+├── originals/   # Large source PDFs before they are split into books or articles
 ├── articles/    # Peer-reviewed articles and research papers (PDF)
 ├── reports/     # Internal or expert reports and reference summaries
 ├── templates/   # Report templates and structured reference documents
@@ -54,6 +55,8 @@ Temporary staging area for documents uploaded by users before ingestion.
 - Files here are processed and moved to the appropriate permanent location
 - Do not treat this folder as long-term storage
 
+`originals/` holds source PDFs that are not yet split into `books/` or `articles/`. Indexing reads that folder too.
+
 ## Copy this folder to the server
 
 The PDFs stay on your computer. They are not in Git. From the repository root on Windows, upload books and articles that are missing or incomplete on the server:
@@ -62,25 +65,30 @@ The PDFs stay on your computer. They are not in Git. From the repository root on
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\upload-knowledge-base.ps1
 ```
 
-The script reads `knowledge-base` next to the repository, not a fixed drive letter. For a different server, set `MCA_SSH_TARGET` (for example `deploy@YOUR_SERVER`) before you run it. When the upload finishes, index the files on the server (in the background, so closing SSH does not stop it):
+The script reads `knowledge-base` next to the repository, not a fixed drive letter. For a different server, set `MCA_SSH_TARGET` (for example `deploy@YOUR_SERVER`) before you run it. When the upload finishes, index on the server. Closing SSH does not stop it:
 
 ```bash
 cd /var/www/medical-causation-ai
+mkdir -p logs
 nohup npm run index:kb > logs/index-kb.log 2>&1 &
 tail -f logs/index-kb.log
 ```
 
-`npm run reembed:kb:full` only re-embeds files that are already indexed (after changing the embedding provider or model); it does not read new files.
+On the laptop, from the repository root:
 
-More server detail is in [DEPLOYMENT.md](../DEPLOYMENT.md). Expert Witness Investigation does not use this folder.
+```bash
+npm run index:kb
+```
 
-## Indexing
+That command reads new files, changed files, and files that failed last time (including scanned PDFs). Files already indexed are skipped. A PDF over 8 MB runs in its own process. Scanned pages are read with OCR. On the 2 GB server, split a book near 1 GB into parts under about 200 MB first. A scan with more than 500 image pages is marked failed until it is split.
 
-Documents in this directory are parsed, chunked, embedded, and stored in PostgreSQL. They are not stored in Git.
+`npm run reembed:kb` only replaces embeddings for passages already in the database, after `EMBEDDING_PROVIDER` or `AI_EMBEDDING_MODEL` changes. It does not read new files.
+
+`npm run clear:histories` does not touch this folder. It deletes MCA and EWI case histories only.
+
+More server detail is in [DEPLOYMENT.md](../DEPLOYMENT.md). Generated EWI report PDFs are written under `ewi/reports/` and are not library books.
 
 ## Important Notes
 
-- Do **not** store PHI (Protected Health Information) in this repository
-- Use anonymized or synthetic case data for development and testing
-- Large binary files may be excluded from version control via `.gitignore` in production workflows
-- Document ingestion will be handled by backend workers (BullMQ) in a future phase
+- Do not store patient records in this folder. Uploaded records belong in `data/case-records`.
+- These PDFs are not in Git.

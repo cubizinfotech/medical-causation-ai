@@ -1,4 +1,5 @@
 import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Injectable } from '@nestjs/common';
 import { createWorker, OEM, type Worker } from 'tesseract.js';
 
@@ -44,7 +45,7 @@ type CreateCanvas = (typeof import('@napi-rs/canvas'))['createCanvas'];
 @Injectable()
 export class PdfPageOcr {
   async recognize(
-    pdf: Buffer,
+    pdf: Buffer | string,
     pageNumbers: number[],
     options: PdfOcrOptions = {},
   ): Promise<PdfOcrPage[]> {
@@ -52,8 +53,16 @@ export class PdfPageOcr {
     const dpi = options.dpi && options.dpi > 0 ? options.dpi : 200;
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const { createCanvas } = await import('@napi-rs/canvas');
+    const source =
+      typeof pdf === 'string'
+        ? {
+            url: pathToFileURL(pdf).href,
+            disableAutoFetch: true,
+            rangeChunkSize: 65536,
+          }
+        : { data: new Uint8Array(pdf) };
     const document = await pdfjs.getDocument({
-      data: new Uint8Array(pdf),
+      ...source,
       disableFontFace: true,
       standardFontDataUrl: STANDARD_FONTS,
       verbosity: 0,
@@ -108,6 +117,8 @@ export class PdfPageOcr {
       }).promise;
       const image = await canvas.encode('png');
       page.cleanup();
+      canvas.width = 0;
+      canvas.height = 0;
       const { data } = await worker.recognize(image);
       return {
         pageNumber,
