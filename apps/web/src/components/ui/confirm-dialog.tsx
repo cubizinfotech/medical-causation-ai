@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ConfirmDialogProps {
@@ -59,9 +58,8 @@ export function ConfirmDialog({
           <Button
             variant={destructive ? "destructive" : "default"}
             onClick={onConfirm}
-            disabled={loading}
+            loading={loading}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {confirmLabel}
           </Button>
         </div>

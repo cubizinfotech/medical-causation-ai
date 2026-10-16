@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Clock,
   FileSignature,
-  Loader2,
   RotateCcw,
   Trash2,
 } from "lucide-react";
@@ -27,6 +26,8 @@ import { medicalAnalysisClient } from "@/features/mca/medical-analysis/medical-a
 import { analysisFailureMessage } from "@/features/mca/medical-analysis/failure-message";
 import type { AnalysisHistoryDetail } from "@/features/mca/medical-analysis/history.types";
 import { formatReportDate } from "@/utils/format-date";
+import { Spinner } from "@/components/ui/spinner";
+import { startRouteProgress } from "@/components/layout/route-progress";
 
 function formatElapsed(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -182,6 +183,7 @@ export default function HistoryDetailView({ id }: { id: string }) {
     setDeleting(true);
     try {
       await medicalAnalysisClient.deleteHistory(id);
+      startRouteProgress();
       router.push("/mca/histories");
     } catch (deleteError) {
       const message =
@@ -198,7 +200,7 @@ export default function HistoryDetailView({ id }: { id: string }) {
   if (loading && !history) {
     return (
       <PageContainer className="py-20 text-center text-muted-foreground">
-        <Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />
+        <Spinner className="mx-auto mb-2 h-6 w-6" />
         Loading case history…
       </PageContainer>
     );
@@ -276,7 +278,7 @@ export default function HistoryDetailView({ id }: { id: string }) {
                 <CardTitle className="text-base">Overall Progress</CardTitle>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   {processing ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Spinner className="h-4 w-4" />
                   ) : (
                     <Clock className="h-4 w-4" />
                   )}

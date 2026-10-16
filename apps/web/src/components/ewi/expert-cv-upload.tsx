@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import {
   AlertTriangle,
   FileText,
-  Loader2,
   ScanText,
   Upload,
   X,
@@ -14,6 +13,7 @@ import { formatFileSize, formatPageList } from "@/features/common/format";
 import { ewiClient } from "@/features/ewi/ewi.service";
 import type { EwiExpertDocumentSummary } from "@/features/ewi/types";
 import { cn } from "@/utils/cn";
+import { Spinner } from "@/components/ui/spinner";
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -115,14 +115,11 @@ export function ExpertCvUpload({
                 size="icon"
                 className="h-8 w-8"
                 disabled={disabled || busy !== null}
+                loading={busy === "removing"}
                 onClick={() => remove(value)}
                 aria-label={`Remove ${value.name}`}
               >
-                {busy === "removing" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                ) : (
-                  <X className="h-4 w-4" aria-hidden />
-                )}
+                <X className="h-4 w-4" aria-hidden />
               </Button>
             </div>
           </div>
@@ -169,10 +166,7 @@ export function ExpertCvUpload({
         >
           {busy === "uploading" ? (
             <p className="flex items-center gap-2 text-sm">
-              <Loader2
-                className="h-4 w-4 animate-spin text-primary"
-                aria-hidden
-              />
+              <Spinner className="h-4 w-4 text-primary" />
               Uploading and reading pages…
             </p>
           ) : (

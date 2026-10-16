@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { AlertCircle, Download, FileText, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { startRouteProgress } from "@/components/layout/route-progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +41,7 @@ export default function EwiHistoryDetailPage() {
   } | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [exportingWord, setExportingWord] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const history = useQuery({
     queryKey: ewiKeys.history(id),
@@ -64,6 +66,7 @@ export default function EwiHistoryDetailPage() {
     mutationFn: () => ewiClient.deleteHistory(id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ewiKeys.histories });
+      startRouteProgress();
       router.push("/ewi/histories");
     },
   });
@@ -102,7 +105,11 @@ export default function EwiHistoryDetailPage() {
               )}
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Button variant="outline" onClick={() => void history.refetch()}>
+              <Button
+                variant="outline"
+                loading={history.isFetching}
+                onClick={() => void history.refetch()}
+              >
                 <RefreshCw className="h-4 w-4" />
                 Retry
               </Button>
@@ -187,10 +194,11 @@ export default function EwiHistoryDetailPage() {
     <Button
       variant="outline"
       onClick={() => void exportWord()}
-      disabled={exportingWord}
+      loading={exportingWord}
+      loadingText="Exporting…"
     >
       <FileText className="h-4 w-4" />
-      {exportingWord ? "Exporting…" : "Export Word"}
+      Export Word
     </Button>
   ) : null;
 
@@ -204,6 +212,8 @@ export default function EwiHistoryDetailPage() {
       cvDocumentId: detail.cvDocument?.id,
     });
     clearActiveEwiJob();
+    setRetrying(true);
+    startRouteProgress();
     router.push("/ewi/investigation");
   };
 
@@ -215,9 +225,13 @@ export default function EwiHistoryDetailPage() {
             Report file: <span className="font-medium">{detail.reportFileName}</span>
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => void download()} disabled={downloading}>
+            <Button
+              onClick={() => void download()}
+              loading={downloading}
+              loadingText="Downloading…"
+            >
               <Download className="h-4 w-4" />
-              {downloading ? "Downloading…" : "Download PDF Report"}
+              Download PDF Report
             </Button>
             {wordButton}
           </div>
@@ -248,6 +262,7 @@ export default function EwiHistoryDetailPage() {
               className="mt-2"
               size="sm"
               variant="outline"
+              loading={downloading || exportingWord}
               onClick={retryDownload}
             >
               Retry download
@@ -280,22 +295,31 @@ export default function EwiHistoryDetailPage() {
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           {detail.reportFileName ? (
-            <Button onClick={() => void download()} disabled={downloading}>
+            <Button
+              onClick={() => void download()}
+              loading={downloading}
+              loadingText="Downloading…"
+            >
               <Download className="h-4 w-4" />
-              {downloading ? "Downloading…" : "Download PDF Report"}
+              Download PDF Report
             </Button>
           ) : null}
           {wordButton}
-          <Button variant="outline" onClick={retrySameExpert}>
+          <Button
+            variant="outline"
+            loading={retrying}
+            onClick={retrySameExpert}
+          >
             Retry research
           </Button>
           {inProgress ? (
             <Button
               variant="outline"
-              disabled={cancel.isPending}
+              loading={cancel.isPending}
+              loadingText="Cancelling…"
               onClick={() => cancel.mutate()}
             >
-              {cancel.isPending ? "Cancelling…" : "Cancel"}
+              Cancel
             </Button>
           ) : null}
           <Button asChild variant="outline">
@@ -304,7 +328,8 @@ export default function EwiHistoryDetailPage() {
           <Button
             variant="destructive"
             className="sm:ml-auto"
-            disabled={remove.isPending}
+            loading={remove.isPending}
+            loadingText="Deleting…"
             onClick={() => remove.mutate()}
           >
             Delete
@@ -345,6 +370,7 @@ export default function EwiHistoryDetailPage() {
               className="mt-2"
               size="sm"
               variant="outline"
+              loading={downloading || exportingWord}
               onClick={retryDownload}
             >
               Retry download
@@ -377,7 +403,9 @@ export default function EwiHistoryDetailPage() {
               start a new investigation.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Button onClick={retrySameExpert}>Retry research</Button>
+              <Button onClick={retrySameExpert} loading={retrying}>
+                Retry research
+              </Button>
               <Button asChild variant="outline">
                 <Link href="/ewi/intake">New investigation</Link>
               </Button>

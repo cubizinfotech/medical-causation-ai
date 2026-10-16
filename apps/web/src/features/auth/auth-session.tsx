@@ -15,13 +15,13 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import {
   AUTH_EXPIRED_EVENT,
   apiFetch,
   getAccessToken,
   setAccessToken,
 } from "@/lib/config";
+import { Spinner } from "@/components/ui/spinner";
 
 export interface AuthSessionUser {
   id: string;
@@ -202,7 +202,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (requiresAuth && !ready) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+        <Spinner className="h-5 w-5" />
         Checking your session…
       </div>
     );
@@ -211,7 +211,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (requiresAuth && !user) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+        <Spinner className="h-5 w-5" />
         Redirecting to sign in…
       </div>
     );

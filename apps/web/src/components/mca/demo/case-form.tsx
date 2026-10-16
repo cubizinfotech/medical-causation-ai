@@ -9,7 +9,6 @@ import {
   Car,
   Check,
   FileText,
-  Loader2,
   HelpCircle,
   Sparkles,
   Stethoscope,
@@ -50,6 +49,7 @@ import {
   clearAnalysisResult,
   clearActiveAnalysis,
 } from "@/features/mca/demo/storage/case-storage";
+import { startRouteProgress } from "@/components/layout/route-progress";
 
 interface CaseFormProps {
   initialValues?: Partial<CaseFormValues>;
@@ -186,6 +186,7 @@ export function CaseForm({ initialValues }: CaseFormProps) {
       clearActiveAnalysis();
       saveCaseForm(values);
       saveCaseRecords(records);
+      startRouteProgress();
       router.push("/mca/analysis");
     } catch {
       setSubmitError("Unable to save case data. Please try again.");
@@ -533,15 +534,20 @@ export function CaseForm({ initialValues }: CaseFormProps) {
               type="button"
               variant="outline"
               disabled={isSubmitting}
-              onClick={() => router.push("/")}
+              onClick={() => {
+                startRouteProgress();
+                router.push("/");
+              }}
             >
               Cancel
             </Button>
-            <Button type="submit" size="lg" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : null}
-              {isSubmitting ? "Starting analysis…" : "Run AI Analysis"}
+            <Button
+              type="submit"
+              size="lg"
+              loading={isSubmitting}
+              loadingText="Starting analysis…"
+            >
+              Run AI Analysis
             </Button>
           </div>
         </div>

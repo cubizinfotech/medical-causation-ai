@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
+import { RouteProgress } from "@/components/layout/route-progress";
 import { appMetadata } from "@/lib/config";
 import { QueryProvider } from "@/providers/query-provider";
 import { AuthGate, AuthProvider } from "@/features/auth/auth-session";
@@ -33,6 +35,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body suppressHydrationWarning className="min-h-full flex flex-col">
+        <Suspense fallback={null}>
+          <RouteProgress />
+        </Suspense>
         <QueryProvider>
           <AuthProvider>
             <SiteHeader />

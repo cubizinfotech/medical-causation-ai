@@ -1,5 +1,6 @@
-import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, XCircle } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { Spinner } from "@/components/ui/spinner";
 
 export interface ProgressStep {
   id: string;
@@ -35,7 +36,7 @@ export function ProgressTimeline({
               ) : isFailedStep ? (
                 <XCircle className="h-5 w-5 text-destructive" />
               ) : isCurrent ? (
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <Spinner className="h-5 w-5 text-primary" />
               ) : (
                 <Circle className="h-5 w-5 text-muted-foreground/50" />
               )}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { openRecordPage } from "@/features/mca/records/case-records.service";
+import { Spinner } from "@/components/ui/spinner";
 
 /** Opens an uploaded record at the cited page in a new tab. */
 export function RecordPageLink({
@@ -38,7 +39,7 @@ export function RecordPageLink({
       >
         {children}
         {opening ? (
-          <Loader2 className="no-print h-3 w-3 animate-spin" aria-hidden />
+          <Spinner className="no-print h-3 w-3" />
         ) : (
           <ExternalLink className="no-print h-3 w-3" aria-hidden />
         )}

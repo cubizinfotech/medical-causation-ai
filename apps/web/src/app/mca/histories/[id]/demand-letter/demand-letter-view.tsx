@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft } from "lucide-react";
 import { PageContainer } from "@/components/layout";
 import { DemandLetterForm } from "@/components/mca/demand-letter/demand-letter-form";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import {
 } from "@/features/mca/demand-letter/demand-letter.storage";
 import { medicalAnalysisClient } from "@/features/mca/medical-analysis/medical-analysis.service";
 import type { AnalysisHistoryDetail } from "@/features/mca/medical-analysis/history.types";
+import { Spinner } from "@/components/ui/spinner";
 
 function initialValues(
   id: string,
@@ -89,7 +90,7 @@ export default function DemandLetterView({ id }: { id: string }) {
   if (!detail?.result) {
     return (
       <PageContainer className="py-20 text-center text-muted-foreground">
-        <Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />
+        <Spinner className="mx-auto mb-2 h-6 w-6" />
         Loading the case…
       </PageContainer>
     );

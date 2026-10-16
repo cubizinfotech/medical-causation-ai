@@ -3,13 +3,13 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageContainer } from "@/components/layout";
 import { useAuth } from "@/features/auth/auth-session";
 import { safeNextPath } from "@/features/auth/safe-next-path";
+import { startRouteProgress } from "@/components/layout/route-progress";
 
 function LoginForm() {
   const { login, user, ready } = useAuth();
@@ -31,6 +31,7 @@ function LoginForm() {
     setError(null);
     try {
       await login(email, password);
+      startRouteProgress();
       router.push(safeNextPath(params.get("next")));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -73,11 +74,13 @@ function LoginForm() {
           />
         </div>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <Button type="submit" disabled={pending} className="w-full sm:w-auto">
-          {pending ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          ) : null}
-          {pending ? "Signing in…" : "Sign in"}
+        <Button
+          type="submit"
+          loading={pending}
+          loadingText="Signing in…"
+          className="w-full sm:w-auto"
+        >
+          Sign in
         </Button>
       </form>
       </div>

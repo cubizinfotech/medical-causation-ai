@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   FileDown,
   Info,
-  Loader2,
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -327,13 +326,13 @@ export function DemandLetterForm({
             </p>
           ) : null}
 
-          <Button type="submit" disabled={drafting}>
-            {drafting ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <FileDown className="h-4 w-4" aria-hidden />
-            )}
-            {drafting ? "Drafting the letter…" : "Download Word draft"}
+          <Button
+            type="submit"
+            loading={drafting}
+            loadingText="Drafting the letter…"
+          >
+            <FileDown className="h-4 w-4" aria-hidden />
+            Download Word draft
           </Button>
           {drafting ? (
             <p className="text-xs text-muted-foreground">

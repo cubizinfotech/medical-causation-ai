@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (2026-10-16): Loading indicators on every action
+
+- Action buttons show a spinner while they work, and are disabled until the action ends: sign in, start an analysis or investigation, PDF and Word exports, demand letter, delete, cancel, retry, refresh, CV and record uploads and removals, save profile, sign out. On a slow server a click no longer looks ignored.
+- The shared `Button` has `loading` (spinner in place of the button's icon, disabled, `aria-busy`) and `loadingText`; the shared `Spinner` (`components/ui/spinner.tsx`) replaces the hand-made spinners in buttons, cards, and page loading states.
+- A thin progress bar at the top of the window shows while the next page loads, for every link click and for navigation that follows an action (after signing in, starting a run, or deleting). It is mounted once in the root layout; code that navigates calls `startRouteProgress()`.
+
 ### Added (2026-10-16): Export Word for MCA and EWI reports
 
 - **Export Word** sits next to the PDF button on a finished MCA analysis (`/mca/histories/:id`) and a finished EWI investigation (`/ewi/histories/:id`). The Word file has the PDF report's layout: a cover box with the case or expert details, the executive summary, and the count badges; a contents list (Word offers to fill in the page numbers when the file opens); one titled section per card, with records, evidence, and questions in bordered boxes; clickable source links (web and mail links only); the disclaimer; page numbers.

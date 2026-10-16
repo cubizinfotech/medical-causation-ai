@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { AlertTriangle, ExternalLink, FileText, Loader2 } from "lucide-react";
+import { AlertTriangle, ExternalLink, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatPageList } from "@/features/common/format";
 import { ewiClient } from "@/features/ewi/ewi.service";
@@ -11,6 +11,7 @@ import type {
   EwiCvLabel,
 } from "@/features/ewi/types";
 import { cn } from "@/utils/cn";
+import { Spinner } from "@/components/ui/spinner";
 
 /** Same words and order as the PDF report: conflicts first. */
 const LABEL_TEXT: Record<EwiCvLabel, string> = {
@@ -110,7 +111,7 @@ function CvPageLink({
       >
         {children}
         {opening ? (
-          <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+          <Spinner className="h-3 w-3" />
         ) : (
           <ExternalLink className="h-3 w-3" aria-hidden />
         )}

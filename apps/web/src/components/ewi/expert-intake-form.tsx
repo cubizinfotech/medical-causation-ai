@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
@@ -33,6 +32,7 @@ import {
 import { toUserFacingError } from "@/features/ewi/utils/user-facing-error";
 import { EWI_SPECIALTY_EXAMPLES } from "@/features/ewi/constants";
 import { NPI_REGISTRY_SEARCH_URL } from "@/features/ewi/utils/npi";
+import { startRouteProgress } from "@/components/layout/route-progress";
 
 export function ExpertIntakeForm() {
   const router = useRouter();
@@ -66,6 +66,7 @@ export function ExpertIntakeForm() {
     try {
       const created = await ewiClient.submitJob(request);
       saveActiveEwiJob(created);
+      startRouteProgress();
       router.push("/ewi/investigation");
     } catch (error) {
       setSubmitError(
@@ -239,11 +240,13 @@ export function ExpertIntakeForm() {
               {submitError}
             </p>
           ) : null}
-          <Button type="submit" disabled={starting || cvBusy}>
-            {starting ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : null}
-            {starting ? "Starting investigation…" : "Start investigation"}
+          <Button
+            type="submit"
+            disabled={cvBusy}
+            loading={starting}
+            loadingText="Starting investigation…"
+          >
+            Start investigation
           </Button>
           <Button
             type="button"

@@ -43,7 +43,7 @@ export default function EwiHistoriesView() {
           <Button
             variant="outline"
             onClick={() => void histories.refetch()}
-            disabled={histories.isFetching}
+            loading={histories.isFetching}
           >
             <RefreshCw className="h-4 w-4" />
             Refresh
@@ -75,6 +75,7 @@ export default function EwiHistoriesView() {
             <Button
               className="mt-3"
               variant="outline"
+              loading={histories.isFetching}
               onClick={() => void histories.refetch()}
             >
               <RefreshCw className="h-4 w-4" />

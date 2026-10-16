@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import {
   AlertTriangle,
   FileText,
-  Loader2,
   ScanText,
   ShieldCheck,
   Upload,
@@ -18,6 +17,7 @@ import {
 } from "@/features/mca/records/case-records.service";
 import { formatFileSize, formatPageList } from "@/features/mca/records/format";
 import { cn } from "@/utils/cn";
+import { Spinner } from "@/components/ui/spinner";
 
 const MAX_FILES = 10;
 const MAX_TOTAL_PAGES = 200;
@@ -211,15 +211,11 @@ export function MedicalRecordsUploader({
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    disabled={removing === record.id}
+                    loading={removing === record.id}
                     onClick={() => void remove(record.id)}
                     aria-label={`Remove ${record.name}`}
                   >
-                    {removing === record.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                    ) : (
-                      <X className="h-4 w-4" aria-hidden />
-                    )}
+                    <X className="h-4 w-4" aria-hidden />
                   </Button>
                 </div>
               </div>
@@ -261,10 +257,7 @@ export function MedicalRecordsUploader({
               <div className="min-w-0">
                 <p className="flex items-center gap-2 truncate font-medium">
                   {item.status === "uploading" ? (
-                    <Loader2
-                      className="h-4 w-4 shrink-0 animate-spin text-primary"
-                      aria-hidden
-                    />
+                    <Spinner className="h-4 w-4 shrink-0 text-primary" />
                   ) : (
                     <AlertTriangle
                       className="h-4 w-4 shrink-0 text-destructive"

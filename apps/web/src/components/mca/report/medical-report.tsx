@@ -13,7 +13,6 @@ import {
   GitCompare,
   Globe,
   Layers,
-  Loader2,
   Printer,
   Receipt,
   Scale,
@@ -123,26 +122,23 @@ export function MedicalReport({
   return (
     <div className="space-y-8">
       <div className="no-print flex flex-wrap gap-3">
-        <Button onClick={handleExportPdf} disabled={isExporting}>
-          {isExporting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          {isExporting ? "Generating PDF…" : "Export PDF"}
+        <Button
+          onClick={handleExportPdf}
+          loading={isExporting}
+          loadingText="Generating PDF…"
+        >
+          <Download className="h-4 w-4" />
+          Export PDF
         </Button>
         {caseId ? (
           <Button
             variant="outline"
             onClick={handleExportWord}
-            disabled={isExportingWord}
+            loading={isExportingWord}
+            loadingText="Generating Word…"
           >
-            {isExportingWord ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FileText className="h-4 w-4" />
-            )}
-            {isExportingWord ? "Generating Word…" : "Export Word"}
+            <FileText className="h-4 w-4" />
+            Export Word
           </Button>
         ) : null}
         <Button variant="outline" onClick={() => window.print()}>

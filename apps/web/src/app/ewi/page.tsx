@@ -148,6 +148,7 @@ export default function EwiDashboardPage() {
                       <Button
                         size="sm"
                         variant="outline"
+                        loading={histories.isFetching}
                         onClick={() => void histories.refetch()}
                       >
                         Retry

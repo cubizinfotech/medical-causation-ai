@@ -11,6 +11,7 @@ import {
   type AuthSessionUser,
 } from "@/features/auth/auth-session";
 import { UserAvatar } from "@/components/profile/user-avatar";
+import { startRouteProgress } from "@/components/layout/route-progress";
 import { cn } from "@/utils/cn";
 
 const itemClass =
@@ -90,6 +91,7 @@ export function UserMenu({ user }: { user: AuthSessionUser }) {
 
   const signOut = async () => {
     setOpen(false);
+    startRouteProgress();
     await logout();
     router.push("/login");
   };

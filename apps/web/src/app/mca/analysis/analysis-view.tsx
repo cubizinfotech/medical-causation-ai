@@ -7,12 +7,12 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  Loader2,
   RotateCcw,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout";
 import { LoadingCard, ProgressTimeline } from "@/components/mca/demo";
 import { Button } from "@/components/ui/button";
+import { startRouteProgress } from "@/components/layout/route-progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -29,6 +29,7 @@ import {
   clearCaseRecords,
 } from "@/features/mca/demo/storage/case-storage";
 import type { CaseFormValues } from "@/features/mca/demo/schemas/case-form.schema";
+import { Spinner } from "@/components/ui/spinner";
 
 function formatElapsed(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -48,6 +49,7 @@ export default function AnalysisView() {
   const hasStarted = useRef(false);
   const [caseData, setCaseData] = useState<CaseFormValues | null>(null);
   const [storageReady, setStorageReady] = useState(false);
+  const [openingReport, setOpeningReport] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const {
@@ -167,6 +169,8 @@ export default function AnalysisView() {
 
   const openReport = useCallback(() => {
     if (job?.result) {
+      setOpeningReport(true);
+      startRouteProgress();
       const active = loadActiveAnalysis();
       saveAnalysisResult(job.result);
       clearActiveAnalysis();
@@ -221,7 +225,7 @@ export default function AnalysisView() {
               <CardTitle className="text-base">Overall Progress</CardTitle>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 {isRunning ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="h-4 w-4" />
                 ) : (
                   <Clock className="h-4 w-4" />
                 )}
@@ -262,7 +266,9 @@ export default function AnalysisView() {
                     ) : null}
                   </div>
                   <div className="flex flex-wrap gap-3">
-                    <Button onClick={openReport}>View Report</Button>
+                    <Button onClick={openReport} loading={openingReport}>
+                      View Report
+                    </Button>
                     <Button variant="outline" asChild>
                       <Link href="/mca/case">New Case</Link>
                     </Button>
@@ -284,7 +290,7 @@ export default function AnalysisView() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-3">
-                    <Button onClick={() => runAnalysis()}>
+                    <Button onClick={() => runAnalysis()} loading={isSubmitting}>
                       <RotateCcw className="h-4 w-4" />
                       Retry Analysis
                     </Button>

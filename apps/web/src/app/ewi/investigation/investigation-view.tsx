@@ -26,6 +26,7 @@ import {
 } from "@/features/ewi/storage/ewi-storage";
 import { toUserFacingError } from "@/features/ewi/utils/user-facing-error";
 import type { ExpertInvestigationFormValues } from "@/features/ewi/schemas/expert-form.schema";
+import { startRouteProgress } from "@/components/layout/route-progress";
 
 export default function EwiInvestigationView() {
   const router = useRouter();
@@ -93,6 +94,7 @@ export default function EwiInvestigationView() {
     if (phase !== "completed" || !job || stayOnPage) return;
     clearActiveEwiJob();
     const id = job.investigationId ?? investigationId;
+    startRouteProgress();
     if (id) {
       router.push(`/ewi/histories/${id}`);
       return;
@@ -118,6 +120,7 @@ export default function EwiInvestigationView() {
   const retry = () => {
     const saved = loadExpertForm() ?? expert;
     if (!saved) {
+      startRouteProgress();
       router.push("/ewi/intake");
       return;
     }
@@ -202,10 +205,12 @@ export default function EwiInvestigationView() {
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
-                    disabled={isCancelling || !investigationId}
+                    disabled={!investigationId}
+                    loading={isCancelling}
+                    loadingText="Cancelling…"
                     onClick={() => void onCancel()}
                   >
-                    {isCancelling ? "Cancelling…" : "Cancel investigation"}
+                    Cancel investigation
                   </Button>
                   {investigationId ? (
                     <Button asChild variant="ghost">
@@ -252,6 +257,7 @@ export default function EwiInvestigationView() {
                   )}
                 </p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  {/* Retrying starts the run at once, which replaces this alert. */}
                   <Button onClick={retry}>Retry investigation</Button>
                   <Button asChild variant="outline">
                     <Link href="/ewi/intake">Edit intake</Link>

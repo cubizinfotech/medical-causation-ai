@@ -25,6 +25,7 @@ import { PageContainer } from "@/components/layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { startRouteProgress } from "@/components/layout/route-progress";
 import {
   Card,
   CardContent,
@@ -296,8 +297,11 @@ export default function ProfilePage() {
   const profile = useProfile();
   const [sessionExpiry] = useState(readSessionExpiry);
   const [editing, setEditing] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const signOut = async () => {
+    setSigningOut(true);
+    startRouteProgress();
     await logout();
     router.push("/login");
   };
@@ -335,12 +339,9 @@ export default function ProfilePage() {
         <Button
           variant="outline"
           onClick={() => void profile.refetch()}
-          disabled={profile.isFetching}
+          loading={profile.isFetching}
         >
-          <RefreshCw
-            className={cn("h-4 w-4", profile.isFetching && "animate-spin")}
-            aria-hidden
-          />
+          <RefreshCw className="h-4 w-4" aria-hidden />
           Refresh
         </Button>
       </div>
@@ -417,7 +418,12 @@ export default function ProfilePage() {
                   <Pencil className="h-4 w-4" aria-hidden />
                   Edit profile
                 </Button>
-                <Button variant="outline" onClick={() => void signOut()}>
+                <Button
+                  variant="outline"
+                  loading={signingOut}
+                  loadingText="Signing out…"
+                  onClick={() => void signOut()}
+                >
                   <LogOut className="h-4 w-4" aria-hidden />
                   Sign out
                 </Button>

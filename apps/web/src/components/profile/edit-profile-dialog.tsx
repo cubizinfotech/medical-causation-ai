@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Camera, Loader2, Trash2, Upload, X } from "lucide-react";
+import { Camera, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +17,7 @@ import {
   type PhotoChange,
   type UserProfile,
 } from "@/features/auth/profile";
+import { Spinner } from "@/components/ui/spinner";
 
 const BIO_MAX = 500;
 
@@ -198,7 +199,7 @@ export function EditProfileDialog({ profile, onClose }: EditProfileDialogProps) 
                 />
                 <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                   {photoBusy ? (
-                    <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
+                    <Spinner className="h-6 w-6" />
                   ) : (
                     <Camera className="h-6 w-6" aria-hidden />
                   )}
@@ -362,11 +363,13 @@ export function EditProfileDialog({ profile, onClose }: EditProfileDialogProps) 
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={busy || !hasChanges}>
-              {save.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : null}
-              {save.isPending ? "Saving…" : "Save changes"}
+            <Button
+              type="submit"
+              disabled={busy || !hasChanges}
+              loading={save.isPending}
+              loadingText="Saving…"
+            >
+              Save changes
             </Button>
           </div>
         </form>

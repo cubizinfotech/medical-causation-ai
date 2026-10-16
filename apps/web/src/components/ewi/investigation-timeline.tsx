@@ -4,7 +4,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Circle,
-  Loader2,
   Lock,
   MinusCircle,
   XCircle,
@@ -15,6 +14,7 @@ import {
   EWI_DISPLAY_STAGES,
   type EwiStageUiStatus,
 } from "@/features/ewi/progress-stages";
+import { Spinner } from "@/components/ui/spinner";
 
 const STATUS_COPY: Record<EwiStageUiStatus, string> = {
   pending: "Pending",
@@ -31,7 +31,7 @@ function StatusIcon({ status }: { status: EwiStageUiStatus }) {
       return <CheckCircle2 className="h-5 w-5 text-primary" aria-hidden />;
     case "running":
       return (
-        <Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden />
+        <Spinner className="h-5 w-5 text-primary" />
       );
     case "failed":
       return <XCircle className="h-5 w-5 text-destructive" aria-hidden />;

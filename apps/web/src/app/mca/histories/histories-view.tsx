@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { AlertCircle, RefreshCw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { medicalAnalysisClient } from "@/features/mca/medical-analysis/medical-analysis.service";
 import { formatReportDate } from "@/utils/format-date";
 import type { AnalysisHistoryListItem } from "@/features/mca/medical-analysis/history.types";
+import { Spinner } from "@/components/ui/spinner";
 
 function formatDate(iso: string): string {
   return formatReportDate(iso);
@@ -100,7 +101,7 @@ export default function HistoriesView() {
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
+        <Spinner className="h-5 w-5" />
         Loading histories…
       </div>
     );
@@ -112,7 +113,11 @@ export default function HistoriesView() {
         <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
           <AlertCircle className="h-8 w-8 text-destructive" />
           <p className="text-sm text-muted-foreground">{error}</p>
-          <Button variant="outline" onClick={() => void load()}>
+          <Button
+            variant="outline"
+            loading={loading}
+            onClick={() => void load()}
+          >
             <RefreshCw className="h-4 w-4" />
             Retry
           </Button>
@@ -138,7 +143,12 @@ export default function HistoriesView() {
     <>
       <div className="space-y-4">
         <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => void load()}>
+          <Button
+            variant="outline"
+            size="sm"
+            loading={loading}
+            onClick={() => void load()}
+          >
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
