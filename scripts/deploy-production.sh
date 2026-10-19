@@ -64,6 +64,13 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 1
 fi
 
+# npm install on the server rewrites the lockfile. The repository copy is
+# the one to deploy. Leave every other local edit in place.
+if git status --porcelain --untracked-files=no -- package-lock.json | grep -q .; then
+  echo "Restoring package-lock.json to the committed copy."
+  git checkout -- package-lock.json
+fi
+
 if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   echo "Tracked files have local changes. Refusing to deploy."
   git status --short --untracked-files=no
