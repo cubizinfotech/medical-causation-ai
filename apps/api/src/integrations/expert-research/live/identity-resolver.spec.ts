@@ -230,5 +230,17 @@ describe('parseCityState', () => {
       state: 'UT',
     });
     expect(parseCityState('Boston')).toEqual({ city: 'Boston', state: null });
+    expect(parseCityState('Gainesville Florida')).toEqual({
+      city: 'Gainesville',
+      state: 'FL',
+    });
+    expect(parseCityState('Charleston West Virginia')).toEqual({
+      city: 'Charleston',
+      state: 'WV',
+    });
+    expect(parseCityState('New York')).toEqual({
+      city: 'New York',
+      state: null,
+    });
   });
 });

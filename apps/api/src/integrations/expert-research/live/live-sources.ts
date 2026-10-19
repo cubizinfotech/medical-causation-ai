@@ -7,6 +7,8 @@ import { CourtListenerClient } from './courtlistener.client';
 import { CourtListenerResearchProvider } from './courtlistener.provider';
 import { ExpertIdentityResolver } from './identity-resolver';
 import { JustiaResearchProvider } from './justia.provider';
+import { NihReporterResearchProvider } from './nih-reporter.provider';
+import { PubMedResearchProvider } from './pubmed.provider';
 import { NpiRegistryClient } from './npi-registry.client';
 import { NpiRegistryResearchProvider } from './npi-registry.provider';
 import { OpenAlexClient } from './openalex.client';
@@ -21,6 +23,8 @@ export interface LiveSourceSettings {
   openAlexApiKey?: string;
   openAlexMailto?: string;
   openPaymentsYears?: number;
+  pubmedApiKey?: string;
+  pubmedEmail?: string;
   fetchImpl?: typeof fetch;
 }
 
@@ -80,6 +84,26 @@ export function createLiveSourceProviders(
     providers.set(
       justia.id,
       new JustiaResearchProvider(justia, fetchImpl, settings.timeoutMs),
+    );
+  }
+  const pubmed = definition('pubmed');
+  if (pubmed) {
+    providers.set(
+      pubmed.id,
+      new PubMedResearchProvider(
+        pubmed,
+        fetchImpl,
+        settings.timeoutMs,
+        settings.pubmedApiKey,
+        settings.pubmedEmail,
+      ),
+    );
+  }
+  const grants = definition('grants');
+  if (grants) {
+    providers.set(
+      grants.id,
+      new NihReporterResearchProvider(grants, fetchImpl, settings.timeoutMs),
     );
   }
   const courts = definition('courtlistener');

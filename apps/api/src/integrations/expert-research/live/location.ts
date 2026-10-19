@@ -88,12 +88,24 @@ export function parseCityState(input: string): CityState {
       return { city: parts.slice(0, -1).join(', '), state: code };
     }
   }
-  // "Phoenix AZ" without a comma.
-  const spaced = input.trim().match(/^(.+?)\s+([A-Za-z]{2})$/);
+  // "Phoenix AZ" or "Gainesville Florida" without a comma.
+  const withoutZip = input.trim().replace(/\s+\d{5}(?:-\d{4})?$/, '');
+  const spaced = withoutZip.match(/^(.+?)\s+([A-Za-z]{2})$/);
   if (spaced && STATE_NAMES[spaced[2].toUpperCase()]) {
     return { city: spaced[1].trim(), state: spaced[2].toUpperCase() };
   }
-  return { city: input.trim(), state: null };
+  const lower = withoutZip.toLowerCase();
+  const stateNames = Object.values(STATE_NAMES).sort(
+    (a, b) => b.length - a.length,
+  );
+  for (const name of stateNames) {
+    const needle = ` ${name.toLowerCase()}`;
+    if (!lower.endsWith(needle)) continue;
+    const city = withoutZip.slice(0, withoutZip.length - name.length).trim();
+    if (!city) continue;
+    return { city, state: CODE_BY_NAME.get(name.toLowerCase()) ?? null };
+  }
+  return { city: withoutZip, state: null };
 }
 
 /** Lower-case city with common abbreviations spelled out ("St." -> "saint"). */

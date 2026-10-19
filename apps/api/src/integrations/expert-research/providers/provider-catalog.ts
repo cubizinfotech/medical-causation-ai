@@ -3,7 +3,7 @@ import type { ProviderDefinition } from '../expert-research.types';
 /**
  * Independent research providers.
  * Live mode calls the connected public sources (NPI Registry, Open Payments,
- * OpenAlex, CourtListener). Mock mode uses fixtures only where a fixture
+ * OpenAlex, CourtListener, Justia, PubMed, and NIH RePORTER). Mock mode uses fixtures only where a fixture
  * exists. Other providers return unavailable and do not invent credentials,
  * publications, cases, or records. Restricted providers are never scraped.
  * LexisNexis is authorized access only.
@@ -21,6 +21,9 @@ export const LIVE_SOURCE_IDS = [
   'open_payments',
   'openalex',
   'courtlistener',
+  'justia',
+  'pubmed',
+  'grants',
 ] as const;
 
 export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
@@ -118,8 +121,10 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     requirement: 'free_api',
     credentialEnv: 'PUBMED_API_KEY',
     summary:
-      'Free NCBI E-utilities. An API key is optional. Not called locally.',
-  }),
+      'Free NCBI E-utilities. Lists PubMed articles whose author name matches the expert’s last name and initials. Affiliation is not confirmed from the summary alone.',
+  },
+  true,
+  ),
   source({
     id: 'author_verification',
     name: 'Author and co-author verification',
@@ -178,8 +183,10 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     accessClass: 'public',
     requirement: 'free_api',
     summary:
-      'Free NIH RePORTER-style grant search. No key required. Not called locally.',
-  }),
+      'Free NIH RePORTER search. Lists grants whose investigator name matches. A grant is not proof of identity unless the organization also fits.',
+  },
+  true,
+  ),
   source({
     id: 'grant_results',
     name: 'Grant results',

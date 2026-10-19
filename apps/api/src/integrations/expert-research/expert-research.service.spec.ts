@@ -121,6 +121,8 @@ describe('ExpertResearchService', () => {
     expect(global.fetch).not.toHaveBeenCalled();
     expect([...new Set(hosts)].sort()).toEqual([
       'api.openalex.org',
+      'api.reporter.nih.gov',
+      'eutils.ncbi.nlm.nih.gov',
       'law.justia.com',
       'npiregistry.cms.hhs.gov',
       'www.courtlistener.com',
@@ -132,6 +134,8 @@ describe('ExpertResearchService', () => {
       'openalex',
       'courtlistener',
       'justia',
+      'pubmed',
+      'grants',
     ]);
     const others = results.filter((result) => !live.has(result.sourceId));
     expect(others.every((result) => result.status === 'unavailable')).toBe(

@@ -40,6 +40,8 @@ export function createExpertResearchRuntime(
       openAlexApiKey: settings?.openAlexApiKey,
       openAlexMailto: settings?.openAlexMailto,
       openPaymentsYears: settings?.openPaymentsYears,
+      pubmedApiKey: process.env.PUBMED_API_KEY?.trim() || undefined,
+      pubmedEmail: process.env.PUBMED_EMAIL?.trim() || undefined,
     },
   };
 }
