@@ -7,11 +7,21 @@ import type {
 
 const STATUS_TEXT: Record<EwiIdentityResolution["status"], string> = {
   confirmed: "Identity confirmed in the NPI Registry",
-  ambiguous: "Identity not confirmed — more than one possible NPI record",
+  ambiguous: "Identity not confirmed",
   not_found: "No matching NPI Registry record",
   npi_mismatch: "The NPI entered belongs to someone else",
   unavailable: "NPI Registry not checked",
 };
+
+function statusHeading(identity: EwiIdentityResolution): string {
+  if (identity.status !== "ambiguous") return STATUS_TEXT[identity.status];
+  const count = identity.candidates.length;
+  if (count === 1) return "Identity not confirmed — one possible NPI record";
+  if (count > 1) {
+    return `Identity not confirmed — ${count} possible NPI records`;
+  }
+  return "Identity not confirmed — possible NPI records";
+}
 
 function place(candidate: EwiIdentityCandidate): string | null {
   if (!candidate.city) return null;
@@ -55,7 +65,7 @@ export function ExpertIdentityCard({
           aria-hidden
         />
         <h2 className="text-base font-semibold">
-          {STATUS_TEXT[identity.status]}
+          {statusHeading(identity)}
         </h2>
         {identity.simulated ? (
           <Badge variant="outline" className="text-[10px]">

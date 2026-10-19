@@ -68,6 +68,20 @@ describe('ExpertIdentityResolver', () => {
     expect(resolution.note).toMatch(/Add the expert’s NPI/);
   });
 
+  it('confirms one full-name match in the same state when only the city differs', async () => {
+    const { resolver } = resolverFor([{ ...neurologist, city: 'Scottsdale' }]);
+    const { resolution, record } = await resolver.resolve({
+      ...query,
+      expertName: 'Jane Ann Smith',
+    });
+    expect(resolution.status).toBe('confirmed');
+    expect(record?.npi).toBe('1234567893');
+    expect(resolution.basis).toEqual(['full name', 'specialty', 'state']);
+    expect(resolution.note).toMatch(/SCOTTSDALE/);
+    expect(resolution.note).toMatch(/not Phoenix/);
+    expect(resolution.candidates).toEqual([]);
+  });
+
   it('keeps a same-specialty record in another city as a candidate only', async () => {
     const { resolver } = resolverFor([{ ...neurologist, city: 'Scottsdale' }]);
     const { resolution } = await resolver.resolve(query);
@@ -76,7 +90,7 @@ describe('ExpertIdentityResolver', () => {
       npi: '1234567893',
       city: 'SCOTTSDALE',
     });
-    expect(resolution.note).toMatch(/nearby city or may have moved/);
+    expect(resolution.note).toMatch(/listed separately and was not merged/);
   });
 
   it('matches "St. Louis" to the registry spelling "SAINT LOUIS"', async () => {

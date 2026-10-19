@@ -133,10 +133,31 @@ export class ExpertIdentityResolver {
     const sameSpecialty = comparesSpecialty
       ? sameName.filter((record) => hasSpecialty(record, query.specialty))
       : [];
+    if (sameSpecialty.length === 1 && name.middle.length > 0) {
+      const record = sameSpecialty[0];
+      if (inState(record, location.state)) {
+        const where = record.locations[0];
+        const listedCity = where?.city ?? 'not listed';
+        return {
+          record,
+          resolution: {
+            status: 'confirmed',
+            identity: candidateOf(record),
+            basis: ['full name', 'specialty', 'state'],
+            note: `NPI ${record.npi} (${describe(record)}) is the only NPI Registry record that matches the full name and specialty in ${location.state}. The practice city on the registry is ${listedCity}, not ${location.city}.`,
+            notes: [
+              ...nameVariantNote(record, name),
+              `The city entered was ${location.city}. Other public records are attributed to this one NPI because the full name, specialty, and state match a single registry record. Taxonomy is self-reported and is not board certification.`,
+            ],
+            candidates: [],
+          },
+        };
+      }
+    }
     if (sameSpecialty.length > 0) {
       return ambiguous(
         sameSpecialty,
-        `No NPI Registry record matches the name and specialty in ${location.city}, but ${sameSpecialty.length} record(s) match the name and specialty elsewhere. The expert may practice in a nearby city or may have moved. Identity was not confirmed. Add the expert’s NPI to confirm it.`,
+        `No NPI Registry record matches the name and specialty in ${location.city}, but ${sameSpecialty.length} record(s) match the name and specialty elsewhere. Each NPI is listed separately and was not merged. Identity was not confirmed. Add the expert’s NPI to confirm it.`,
       );
     }
     const sameCity = sameName.filter((record) => inCity(record, location.city));
@@ -280,6 +301,13 @@ function sameSurname(left: PersonName, right: PersonName): boolean {
 
 function inCity(record: NpiRecord, city: string): boolean {
   return record.locations.some((location) => citiesMatch(location.city, city));
+}
+
+function inState(record: NpiRecord, state: string | null): boolean {
+  if (!state) return false;
+  return record.locations.some(
+    (location) => location.state?.toUpperCase() === state.toUpperCase(),
+  );
 }
 
 function hasSpecialty(record: NpiRecord, specialty: string): boolean {

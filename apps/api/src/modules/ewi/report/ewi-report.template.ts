@@ -635,18 +635,30 @@ function backgroundSection(
 const IDENTITY_STATUS_TEXT: Record<ExpertIdentityResolution['status'], string> =
   {
     confirmed: 'Identity confirmed in the NPI Registry',
-    ambiguous: 'Identity not confirmed — several possible NPI records',
+    ambiguous: 'Identity not confirmed',
     not_found: 'No matching NPI Registry record',
     npi_mismatch: 'The supplied NPI does not match the expert',
     unavailable: 'NPI Registry not checked',
   };
+
+function identityHeading(identity: ExpertIdentityResolution): string {
+  if (identity.status !== 'ambiguous') {
+    return IDENTITY_STATUS_TEXT[identity.status];
+  }
+  const count = identity.candidates.length;
+  if (count === 1) return 'Identity not confirmed — one possible NPI record';
+  if (count > 1) {
+    return `Identity not confirmed — ${count} possible NPI records`;
+  }
+  return 'Identity not confirmed — possible NPI records';
+}
 
 function identityBlocks(
   identity: ExpertIdentityResolution | null,
 ): ReportBlock[] {
   if (!identity) return [];
   const blocks: ReportBlock[] = [
-    { text: IDENTITY_STATUS_TEXT[identity.status], style: 'subheading' },
+    { text: identityHeading(identity), style: 'subheading' },
     { text: identity.note },
   ];
   const record = identity.identity;
