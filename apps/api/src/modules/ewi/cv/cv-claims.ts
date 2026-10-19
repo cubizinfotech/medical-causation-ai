@@ -1,4 +1,4 @@
-import { stateCode } from '@integrations/expert-research';
+import { articleTitle, stateCode } from '@integrations/expert-research';
 import type { LoadedExpertDocument } from '../documents/expert-documents.types';
 import {
   CV_CLAIM_CATEGORIES,
@@ -223,7 +223,7 @@ export function extractBibliographyClaims(
         category: 'publication',
         statement: cleaned.slice(0, 300),
         details: {
-          title: cleaned.slice(0, 240),
+          title: articleTitle(cleaned).slice(0, 240),
           ...(journal ? { journal: journal.trim() } : {}),
         },
         page: page.pageNumber,

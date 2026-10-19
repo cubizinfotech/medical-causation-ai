@@ -25,7 +25,7 @@ function sectionFailure(pages: string, error: unknown): string {
   if (error instanceof RateLimitExceededException) {
     return `The AI provider was busy (rate limit) and did not read CV ${pages}. Its claims are missing from the CV check; run the investigation again in a few minutes.`;
   }
-  return `The AI model could not read CV ${pages}. Its claims are missing from the CV check.`;
+  return `The AI model could not finish CV ${pages}. Numbered publications on those pages are still kept. Other statements on those pages are missing from the CV check.`;
 }
 
 /**
@@ -78,7 +78,10 @@ export class ExpertCvService {
       ocrPages: document.ocrPages,
     };
 
-    const batches = buildCvBatches(document, this.documents.batchChars);
+    const batches = buildCvBatches(
+      document,
+      Math.min(this.documents.batchChars, 5000),
+    );
     const listed = extractBibliographyClaims(document.pages);
     if (!this.modelAvailable() || batches.length === 0) {
       warnings.push(
@@ -105,7 +108,7 @@ export class ExpertCvService {
           () =>
             this.ai.complete({
               temperature: 0,
-              maxTokens: 4096,
+              maxTokens: 8192,
               metadata: {
                 product: 'ewi',
                 task: 'cv-claims',

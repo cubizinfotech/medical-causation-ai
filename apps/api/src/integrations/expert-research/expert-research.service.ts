@@ -81,6 +81,12 @@ export function createPublicationLookup(
       apiKey: live.openAlexApiKey,
       mailto: live.openAlexMailto,
     }),
+    {
+      timeoutMs: live.timeoutMs,
+      fetchImpl: live.fetchImpl,
+      apiKey: live.pubmedApiKey,
+      email: live.pubmedEmail,
+    },
   );
 }
 

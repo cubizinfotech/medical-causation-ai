@@ -13,7 +13,7 @@ export type {
   PublicationLookupResult,
   PublicationLookupStatus,
 } from './live/publication-lookup';
-export { sameTitle } from './live/publication-lookup';
+export { articleTitle, sameTitle } from './live/publication-lookup';
 export { specialtyMatches, taxonomyMatches } from './live/specialty-match';
 export { stateCode, stateName } from './live/location';
 export { namesCompatible, parsePersonName } from './live/person-name';

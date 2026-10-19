@@ -383,9 +383,13 @@ export function buildEwiReportDocument(input: {
       case 'cv-comparison':
         return cvComparisonSection(spec, input, tracker);
       case 'education':
-        return evidenceSection(spec, tracker, {
-          categories: ['education'],
-        });
+        return withCvStatements(
+          evidenceSection(spec, tracker, {
+            categories: ['education'],
+          }),
+          input.cvCheck,
+          ['education', 'training'],
+        );
       case 'university-accreditation':
         return evidenceSection(spec, tracker, {
           categories: ['university', 'accreditation'],
@@ -401,19 +405,31 @@ export function buildEwiReportDocument(input: {
       case 'board-actions':
         return boardActionsSection(spec, tracker);
       case 'board-certifications':
-        return evidenceSection(spec, tracker, {
-          categories: ['board', 'board_certification', 'certification'],
-          excludeHints: ['organization'],
-        });
+        return withCvStatements(
+          evidenceSection(spec, tracker, {
+            categories: ['board', 'board_certification', 'certification'],
+            excludeHints: ['organization'],
+          }),
+          input.cvCheck,
+          ['board_certification'],
+        );
       case 'certification-orgs':
         return evidenceSection(spec, tracker, {
           categories: ['certification_organization'],
           titleHints: ['certification organization', 'abms', 'board of'],
         });
       case 'memberships':
-        return membershipsSection(spec, professionalDossier, tracker);
+        return withCvStatements(
+          membershipsSection(spec, professionalDossier, tracker),
+          input.cvCheck,
+          ['membership'],
+        );
       case 'publications':
-        return publicationsSection(spec, tracker);
+        return withCvStatements(
+          publicationsSection(spec, tracker),
+          input.cvCheck,
+          ['publication'],
+        );
       case 'grants':
         return professionalGroupSection(
           spec,
@@ -1589,6 +1605,30 @@ function questionsSection(
     });
   }
   return { id: spec.id, title: spec.title, blocks };
+}
+
+/** CV statements for a section, labeled as the resume and not as a public-source finding. */
+function withCvStatements(
+  section: ReportSectionModel,
+  check: CvCheck | null | undefined,
+  categories: string[],
+): ReportSectionModel {
+  const claims = (check?.claims ?? []).filter((claim) =>
+    categories.includes(claim.category),
+  );
+  if (claims.length === 0) return section;
+  const blocks = section.blocks.filter((block) => block.text !== EMPTY);
+  for (const claim of claims.slice(0, 40)) {
+    blocks.push({ text: claim.statement, style: 'subheading' });
+    blocks.push({
+      text: `Uploaded CV, page ${claim.page}: “${claim.quote}”`,
+    });
+    blocks.push({
+      text: 'Stated on the uploaded CV. This is not an independent verification.',
+      style: 'note',
+    });
+  }
+  return { ...section, blocks };
 }
 
 function evidenceSection(

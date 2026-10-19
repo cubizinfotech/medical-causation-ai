@@ -336,6 +336,12 @@ describe('extractBibliographyClaims', () => {
     expect(claims).toHaveLength(2);
     expect(claims[0].category).toBe('publication');
     expect(claims[0].page).toBe(7);
+    expect(claims[0].details.title).toBe(
+      'Axial movements are relatively preserved',
+    );
+    expect(claims[1].details.title).toBe(
+      'Profound amnesia and confabulation following traumatic brain injury',
+    );
     expect(claims.map((claim) => claim.statement).join(' ')).not.toMatch(
       /poster/i,
     );

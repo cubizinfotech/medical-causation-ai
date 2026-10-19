@@ -1,8 +1,23 @@
 import { OpenAlexClient } from './openalex.client';
-import { PublicationTitleLookup, sameTitle } from './publication-lookup';
+import {
+  articleTitle,
+  PublicationTitleLookup,
+  sameTitle,
+} from './publication-lookup';
 import { fakeFetch } from './testing/live-fakes';
 
 describe('publication title lookup', () => {
+  it('pulls the article title out of a CV citation', () => {
+    expect(
+      articleTitle(
+        'Hanlon, R.E., Demery, J.A. (1998). Axial movements are relatively preserved. Cortex, 34, 731-741.',
+      ),
+    ).toBe('Axial movements are relatively preserved');
+    expect(articleTitle('Domestic homicide profiles')).toBe(
+      'Domestic homicide profiles',
+    );
+  });
+
   it('treats small differences in a title as the same title', () => {
     expect(
       sameTitle(
@@ -60,13 +75,16 @@ describe('publication title lookup', () => {
       new OpenAlexClient({ timeoutMs: 1000, fetchImpl: fake.fetch }),
     );
     const results = await lookup.lookup('Dr. Jane Smith', [
-      'Migraine outcomes after cervical fusion',
+      'Smith JA (2015). Migraine outcomes after cervical fusion. Spine, 1, 1-2.',
       'Spine study of lumbar fusion rates',
       'A paper nobody indexed anywhere',
       'Too short',
     ]);
     expect(results.map((result) => [result.title, result.status])).toEqual([
-      ['Migraine outcomes after cervical fusion', 'authored'],
+      [
+        'Smith JA (2015). Migraine outcomes after cervical fusion. Spine, 1, 1-2.',
+        'authored',
+      ],
       ['Spine study of lumbar fusion rates', 'not_author'],
       ['A paper nobody indexed anywhere', 'not_found'],
     ]);

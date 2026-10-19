@@ -342,7 +342,7 @@ function publicationTitleRows(
         title: `Publication found with the expert as an author: ${title}`,
         cv: cvSide(claim),
         source: {
-          name: 'OpenAlex',
+          name: lookup.catalog ?? 'OpenAlex',
           statement: `${work?.title}${work?.year ? ` (${work.year})` : ''}. Authors: ${work?.authors.join(', ')}.`,
           url: work?.url,
         },
@@ -356,7 +356,7 @@ function publicationTitleRows(
         title: `Publication found, but the expert is not listed as an author: ${title}`,
         cv: cvSide(claim),
         source: {
-          name: 'OpenAlex',
+          name: lookup.catalog ?? 'OpenAlex',
           statement: `${work?.title}${work?.year ? ` (${work.year})` : ''}. Authors: ${work?.authors.join(', ') || 'not listed'}.`,
           url: work?.url,
         },
