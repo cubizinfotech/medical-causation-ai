@@ -9,6 +9,7 @@
  *   npm run clear:histories -- --yes
  *
  * Without --yes the script only prints the counts. With --yes it deletes.
+ * npm keeps --yes for itself, so the script also honors npm_config_yes.
  */
 import { readdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -31,8 +32,16 @@ async function emptyDirectory(directory: string): Promise<number> {
   return names.length;
 }
 
+function deleteConfirmed(): boolean {
+  if (process.argv.includes('--yes') || process.argv.includes('--apply')) {
+    return true;
+  }
+  // `npm run clear:histories -- --yes` never puts --yes in argv. npm stores it here.
+  return process.env.npm_config_yes === 'true';
+}
+
 async function main(): Promise<void> {
-  const apply = process.argv.includes('--yes');
+  const apply = deleteConfirmed();
   loadEnv();
   const prisma = new PrismaClient();
   const root = findRepositoryRoot();
