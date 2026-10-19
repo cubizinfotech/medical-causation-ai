@@ -8,6 +8,7 @@ import {
 } from '../exceptions';
 import type { ProcessedPage } from '../types';
 import { CONTROL_CHARACTERS, countWords } from '../utils';
+import { loadPdfjs } from './load-pdfjs';
 
 /** Pages with less text than this are checked for images (likely scans). */
 const IMAGE_CHECK_MAX_CHARS = 300;
@@ -29,7 +30,7 @@ export class PdfParser implements IDocumentParser {
     let pdf: { destroy(): Promise<void> } | undefined;
 
     try {
-      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      const pdfjs = await loadPdfjs();
       const source =
         input.buffer.length > 0
           ? { data: new Uint8Array(input.buffer) }

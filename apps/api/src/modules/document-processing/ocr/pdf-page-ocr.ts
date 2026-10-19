@@ -1,5 +1,6 @@
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { loadPdfjs } from '../parsers/load-pdfjs';
 import { Injectable } from '@nestjs/common';
 import { createWorker, OEM, type Worker } from 'tesseract.js';
 
@@ -51,7 +52,7 @@ export class PdfPageOcr {
   ): Promise<PdfOcrPage[]> {
     if (pageNumbers.length === 0) return [];
     const dpi = options.dpi && options.dpi > 0 ? options.dpi : 200;
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfjs = await loadPdfjs();
     const { createCanvas } = await import('@napi-rs/canvas');
     const source =
       typeof pdf === 'string'

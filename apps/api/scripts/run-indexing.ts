@@ -13,6 +13,7 @@
  * files whose path contains any of the given texts (case-insensitive).
  */
 import { spawn } from 'child_process';
+import { createRequire } from 'module';
 import { config } from 'dotenv';
 import { delimiter, resolve } from 'path';
 import { NestFactory } from '@nestjs/core';
@@ -20,6 +21,7 @@ import { AppModule } from '../src/app.module';
 import { IndexingService } from '../src/modules/indexing';
 import { KnowledgeBaseService } from '../src/modules/knowledge-base/services/knowledge-base.service';
 
+const nodeRequire = createRequire(__filename);
 const apiDir = resolve(__dirname, '..');
 config({ path: resolve(apiDir, '../../.env') });
 config({ path: resolve(apiDir, '.env'), override: false });
@@ -112,17 +114,23 @@ async function main(): Promise<void> {
         console.log(`\nIndexing: ${document.relativePath}`);
         try {
           if (document.size > LARGE_FILE_BYTES && !documentId) {
-            const code = await indexInChild(document.id, forceReindex);
-            if (code !== 0) {
-              failed += 1;
-              const message =
-                code === 134
-                  ? 'Indexing stopped because this file ran out of memory. Split it into smaller PDFs and run npm run index:kb again.'
-                  : `Indexing process exited with code ${code}.`;
-              await indexing.markIndexingFailed(document.id, message);
-              console.log(`  failed: ${message}`);
+            const child = indexInChild(document.id, forceReindex);
+            if (child) {
+              const code = await child;
+              if (code !== 0) {
+                failed += 1;
+                const message =
+                  code === 134
+                    ? 'Indexing stopped because this file ran out of memory. Split it into smaller PDFs and run npm run index:kb again.'
+                    : `Indexing process exited with code ${code}.`;
+                await indexing.markIndexingFailed(document.id, message);
+                console.log(`  failed: ${message}`);
+              }
+              continue;
             }
-            continue;
+            console.log(
+              '  large file is indexed in this process because ts-node is not installed for a separate process',
+            );
           }
           const result = await indexing.indexKnowledgeBaseDocument(
             document.id,
@@ -154,7 +162,15 @@ async function main(): Promise<void> {
 function indexInChild(
   documentId: string,
   forceReindex: boolean,
-): Promise<number> {
+): Promise<number> | undefined {
+  let tsNodeRegister: string;
+  let tsconfigPathsRegister: string;
+  try {
+    tsNodeRegister = nodeRequire.resolve('ts-node/register');
+    tsconfigPathsRegister = nodeRequire.resolve('tsconfig-paths/register');
+  } catch {
+    return undefined;
+  }
   const requested = Number(process.env.INDEX_CHILD_HEAP_MB);
   const heapMb =
     Number.isFinite(requested) && requested >= 256 && requested <= 8192
@@ -163,9 +179,9 @@ function indexInChild(
   const args = [
     `--max-old-space-size=${heapMb}`,
     '-r',
-    'ts-node/register',
+    tsNodeRegister,
     '-r',
-    'tsconfig-paths/register',
+    tsconfigPathsRegister,
     resolve(__dirname, 'run-indexing.ts'),
     '--document',
     documentId,
