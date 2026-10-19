@@ -289,7 +289,10 @@ describe('buildDeterministicAnalysis', () => {
       { category: 'publication', findingKeys: ['f1'] },
     ]);
     expect(document.assessments[0]?.assessment).toBe('not_verified');
-    expect(document.summary).toMatch(/could not be verified/i);
+    // The status stays "not verified" in the data; the summary only counts.
+    expect(document.summary).toContain(
+      '1 item(s) were collected from the sources searched.',
+    );
     expect(document.missing[0]?.assessment).toBe('unavailable');
     expect(document.sectionSummaries).toHaveLength(
       EWI_ANALYSIS_SECTIONS.length,

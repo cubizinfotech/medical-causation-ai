@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (2026-10-19): red spell-check lines in the Word reports
+
+- Word underlined identifiers as misspelled: `board_certification`, `source:board_certification`, `courtlistener`, web addresses. The Word export now marks them "do not check spelling" (`w:noProof`): words with an underscore, references such as `source:pubmed`, paths, links, source and category names (the EWI template passes the research catalog's names), and whole source lines (Basis, Source refs, source index). Ordinary words in the same sentence are still checked, so edits are still spell-checked.
+- Text quoted from a source (library passages, PubMed titles and abstracts) and the AI model name are not checked in the MCA Word report; their spelling is the source's.
+- The document language is US English. Word checked it as British English and marked "Center" in names.
+- In the samples checked in Word, the EWI reports have no spelling marks left (58 before in one report).
+
+### Changed (2026-10-19): EWI report without "not verified" on every line
+
+- The PDF and Word reports no longer print "not verified" on each item. Overall Research Findings shows each statement as its source gives it ("Licenses reported to the NPI Registry (NPI …)") with its source references, in place of `[not_verified] Could not verify "…". The npi_registry statement is not verified.` Only outcomes worth acting on are labelled: Verified, Sources disagree, Partly verified, Restricted source, Source unavailable.
+- Record boxes say "Source: npi_registry." instead of "Status: Not Verified. Source: npi_registry."; the source index leaves out "status: unverified"; question bases show their source references without the "weak, conflicting, restricted, or not verified" caution; conflicts and questions drop the "Could not verify a single account." opening.
+- The summary says "39 item(s) were collected from the sources searched." (it ended with "Not verified and conflicting items could not be verified."), in the reports and in the app. A summary sentence that only says an item was not verified is left out of the report's cover; the item is listed under Overall Research Findings.
+- The statuses themselves are unchanged in the data. Inconsistencies (for example "License was not confirmed") are still listed: they are findings. Report template 3.1.0, so saved reports are rebuilt on their next download.
+
 ### Added (2026-10-16): Loading indicators on every action
 
 - Action buttons show a spinner while they work, and are disabled until the action ends: sign in, start an analysis or investigation, PDF and Word exports, demand letter, delete, cancel, retry, refresh, CV and record uploads and removals, save profile, sign out. On a slow server a click no longer looks ignored.

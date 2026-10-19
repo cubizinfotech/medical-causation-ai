@@ -2,7 +2,7 @@ import { EXPERT_RESEARCH_CATALOG } from '@integrations/expert-research';
 import type { ExpertEvidenceItem } from '@integrations/expert-research';
 import type { ExpertResearchSourceResult } from '@integrations/expert-research';
 import { DiscrepancyAnalyzer } from '../../research/discrepancy-analyzer';
-import { NO_RECORDS_LINE } from './summary-lines';
+import { NO_RECORDS_LINE, collectedLine } from './summary-lines';
 import type {
   AnalysisFinding,
   AnalysisPacket,
@@ -103,7 +103,7 @@ export function buildDeterministicAnalysis(
     'This summary uses collected source statements only. It does not confirm a qualification that those statements do not support.',
     packet.findings.length === 0
       ? NO_RECORDS_LINE
-      : `${packet.findings.length} item(s) were collected. Not verified and conflicting items could not be verified.`,
+      : collectedLine(packet.findings.length),
   ].join('\n');
 
   const conclusions = [

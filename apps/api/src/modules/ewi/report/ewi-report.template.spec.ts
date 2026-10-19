@@ -148,6 +148,84 @@ describe('EWI report template', () => {
     }
   });
 
+  it('does not print "not verified" on findings, records, sources, or questions', () => {
+    const findings = [
+      {
+        findingKey: 'f1',
+        category: 'license',
+        title: 'Licenses reported to the NPI Registry (NPI 1871685487)',
+        summary: 'Licensed in Ohio.',
+        url: 'https://npiregistry.cms.hhs.gov/provider-view/1871685487',
+        providerId: 'npi_registry',
+        informationStatus: 'unverified',
+        access: 'public',
+      },
+      {
+        findingKey: 'f2',
+        category: 'income_bias',
+        title: 'CMS Open Payments 2019–2025: $149,124.74 from 10 companies',
+        summary: 'Payments from drug and device makers.',
+        providerId: 'open_payments',
+        informationStatus: 'verified',
+        access: 'public',
+      },
+    ];
+    const analysis = buildDeterministicAnalysis({
+      expertName: 'Jane Doe',
+      specialty: 'Neurology',
+      findings,
+      sourceAttempts: [],
+    });
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: findings.map((finding) => ({
+        sourceId: finding.providerId,
+        category: finding.category,
+        title: finding.title,
+        summary: finding.summary,
+        url: finding.url,
+        access: 'public',
+        informationStatus: finding.informationStatus,
+      })) as Parameters<typeof buildEwiReportDocument>[0]['evidence'],
+      discrepancies: [],
+      questions: [
+        {
+          number: 1,
+          category: 'license',
+          question: 'Is every license in finding f1 current?',
+          evidenceBasis:
+            'f1 — Evidence for this item is weak, conflicting, restricted, or not verified; treat confirmation as open.',
+        },
+      ],
+      generatedAt: '2026-10-19T00:00:00.000Z',
+      summary: [
+        analysis.summary,
+        'Could not verify "Licenses reported to the NPI Registry (NPI 1871685487)". The npi_registry statement is not verified.',
+      ].join('\n'),
+      analysis,
+    });
+    const text = (id: string) =>
+      document.sections
+        .find((section) => section.id === id)
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    const all = document.sections
+      .flatMap((section) => section.blocks.map((block) => block.text))
+      .join('\n');
+
+    expect(all).not.toMatch(/not verified|unverified|could not verify/i);
+    expect(text('overall-findings')).toContain(
+      'Licenses reported to the NPI Registry (NPI 1871685487)',
+    );
+    expect(text('overall-findings')).toContain('Verified · Source refs: f2');
+    expect(text('questions')).toContain('Basis: f1');
+    expect(text('summary')).toContain(
+      '2 item(s) were collected from the sources searched.',
+    );
+  });
+
   it('keeps restricted source text out of the report and does not claim a PDF was saved', () => {
     const document = buildEwiReportDocument({
       expertName: 'Jane Doe',
@@ -429,7 +507,7 @@ describe('EWI report template', () => {
       discrepancies: [],
       questions,
       generatedAt: '2026-09-23T00:00:00.000Z',
-      summary: 'The collected publication record could not be verified.',
+      summary: 'The collected publication record is listed under Publications.',
     });
     const rendered = await renderer.render(document);
     const pages = await pdfPages(rendered.buffer);
@@ -445,7 +523,7 @@ describe('EWI report template', () => {
     expect(pages[0]).toContain('Jane Doe');
     expect(pages[0]).toContain('1. EXPERT NAME');
     expect(pages[0]).toContain(
-      'The collected publication record could not be verified.',
+      'The collected publication record is listed under Publications.',
     );
     expect(all).toContain('Contents');
     expect(all).toContain('41. Cross-Examination Questions');
@@ -490,7 +568,7 @@ describe('EwiPdfReportService', () => {
         evidence,
       }),
       generatedAt: '2026-09-29T12:00:00.000Z',
-      summary: 'Collected social listing could not be verified.',
+      summary: 'A public social listing was collected.',
     });
 
     expect(artifact.format).toBe('pdf');
@@ -532,7 +610,7 @@ describe('EwiWordReportService', () => {
       discrepancies: [],
       questions,
       generatedAt: '2026-09-29T12:00:00.000Z',
-      summary: 'Collected social listing could not be verified.',
+      summary: 'A public social listing was collected.',
     });
     const { value: text } = await mammoth.extractRawText({
       buffer: artifact.buffer,
@@ -551,7 +629,7 @@ describe('EwiWordReportService', () => {
       'Jane Doe',
       'Neurology · Boston',
       '5. Executive Summary',
-      'Collected social listing could not be verified.',
+      'A public social listing was collected.',
       '6. Expert Background',
       '31. Social Media',
       'Public LinkedIn listing',

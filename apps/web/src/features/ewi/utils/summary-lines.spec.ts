@@ -26,6 +26,14 @@ describe("presentableSummaryLines", () => {
     expect(presentableSummaryLines(item)).toEqual([item]);
     expect(presentableSummaryLines(null)).toEqual([]);
   });
+
+  it("says how many items were collected, without 'could not be verified'", () => {
+    expect(
+      presentableSummaryLines(
+        "39 item(s) were collected. Not verified and conflicting items could not be verified.",
+      ),
+    ).toEqual(["39 item(s) were collected from the sources searched."]);
+  });
 });
 
 describe("sectionsWithFindings", () => {

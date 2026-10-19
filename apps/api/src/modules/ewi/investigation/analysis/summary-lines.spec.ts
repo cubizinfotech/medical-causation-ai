@@ -22,6 +22,14 @@ describe('presentableSummaryLines', () => {
     ]);
   });
 
+  it('says how many items were collected, without "could not be verified"', () => {
+    expect(
+      presentableSummaryLines(
+        '39 item(s) were collected. Not verified and conflicting items could not be verified.',
+      ),
+    ).toEqual(['39 item(s) were collected from the sources searched.']);
+  });
+
   it('keeps statements about items that were collected', () => {
     const itemLine =
       'Could not verify "Diplomate, American Board of Anesthesiology". The npi_registry statement is not verified.';

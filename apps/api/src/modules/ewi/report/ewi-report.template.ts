@@ -2,15 +2,26 @@ import type {
   ExpertEvidenceItem,
   ExpertIdentityResolution,
 } from '@integrations/expert-research';
+import { EXPERT_RESEARCH_CATALOG } from '@integrations/expert-research';
 import type { ExpertDiscrepancy } from '../research/discrepancy-analyzer';
 import type { CrossExamQuestion } from '../research/cross-exam-question.generator';
 import type { EwiAnalysisDocument } from '../investigation/analysis/ewi-analysis.types';
 import {
   NO_RECORDS_LINE,
+  collectedLine,
   presentableSummaryLines,
 } from '../investigation/analysis/summary-lines';
 import type { CvCheck, CvComparison } from '../cv/cv.types';
 import { CV_LABEL_TEXT } from '../cv/cv-comparison';
+import {
+  evidenceStatusLine,
+  findingLabel,
+  findingStatement,
+  questionBasis,
+  sourceIndexStatus,
+  withoutSingleAccount,
+  withoutUnverifiedSentences,
+} from './report-wording';
 import type { InconsistencyLabel } from '../research/verification-labels';
 import type { LegalMatter, LegalResearchDossier } from '../research/legal';
 import {
@@ -564,6 +575,15 @@ export function buildEwiReportDocument(input: {
     mimeType: 'application/pdf',
     format: 'pdf',
     includeTableOfContents: true,
+    // Source and category ids appear in questions and source lines; Word
+    // would mark them as misspelled.
+    noProofTerms: [
+      ...EXPERT_RESEARCH_CATALOG.flatMap((provider) => [
+        provider.id,
+        provider.category,
+      ]),
+      ...input.evidence.flatMap((item) => [item.sourceId, item.category]),
+    ],
     highlights: [
       countLabel(input.evidence.length, 'collected item', 'collected items'),
       countLabel(
@@ -777,14 +797,30 @@ function admissibilitySection(
  */
 function summarySection(
   spec: EwiReportSectionSpec,
-  input: { summary?: string; analysis?: EwiAnalysisDocument },
+  input: {
+    summary?: string;
+    analysis?: EwiAnalysisDocument;
+    evidence: ExpertEvidenceItem[];
+  },
 ): ReportSectionModel {
   const text =
     input.summary?.trim() || input.analysis?.summary || NO_RECORDS_LINE;
+  // A line saying an item was not verified is left out here; the item is
+  // listed under Overall Research Findings.
   const blocks: ReportBlock[] = presentableSummaryLines(
     text,
     input.analysis?.missing,
-  ).map((line) => ({ text: line }));
+  )
+    .map(withoutUnverifiedSentences)
+    .filter(Boolean)
+    .map((line) => ({ text: line }));
+  if (blocks.length === 0) {
+    blocks.push({
+      text: input.evidence.length
+        ? collectedLine(input.evidence.length)
+        : NO_RECORDS_LINE,
+    });
+  }
   return { id: spec.id, title: spec.title, blocks };
 }
 
@@ -824,9 +860,15 @@ function inconsistenciesSection(
   }
 
   for (const item of items) {
-    const label = item.label ? item.label.replaceAll('_', ' ') : item.severity;
+    // The title says what was not confirmed; its label is not repeated.
+    const label =
+      item.label &&
+      item.label !== 'not_verified' &&
+      item.label !== 'unable_to_verify'
+        ? `${item.label.replaceAll('_', ' ')}, `
+        : '';
     blocks.push({
-      text: `${item.title} (${label}, ${item.severity})`,
+      text: `${item.title} (${label}${item.severity})`,
       style: 'subheading',
     });
     if (item.field) {
@@ -870,7 +912,7 @@ function inconsistenciesSection(
 
   for (const conflict of input.analysis?.conflicts ?? []) {
     blocks.push({
-      text: conflict.description,
+      text: withoutSingleAccount(conflict.description),
       style: 'subheading',
     });
     blocks.push({
@@ -1104,7 +1146,7 @@ function publicationsSection(
   for (const item of items) {
     blocks.push({ text: item.title, style: 'subheading' });
     blocks.push({
-      text: `Status: ${statusLabel(item)}. Source: ${item.sourceId}.`,
+      text: evidenceStatusLine(item),
       style: 'citation',
     });
     const raw = item.raw ?? {};
@@ -1421,12 +1463,14 @@ function overallFindingsSection(
   ];
   if (input.analysis?.investigationFindings?.length) {
     for (const finding of input.analysis.investigationFindings) {
+      blocks.push({ text: findingStatement(finding.text), style: 'item' });
       blocks.push({
-        text: `[${finding.status}] ${finding.text}`,
-        style: 'item',
-      });
-      blocks.push({
-        text: `Source refs: ${finding.sourceRefs.join(', ')}`,
+        text: [
+          findingLabel(finding.status),
+          `Source refs: ${finding.sourceRefs.join(', ')}`,
+        ]
+          .filter(Boolean)
+          .join(' · '),
         style: 'citation',
       });
     }
@@ -1502,7 +1546,7 @@ function sourceIndexSection(
         ? 'restricted (body not stored; PDF not saved)'
         : (item.access ?? 'public');
     blocks.push({
-      text: `${index + 1}. [${item.sourceId}] ${item.title} — access: ${access}; status: ${item.informationStatus ?? 'unverified'}`,
+      text: `${index + 1}. [${item.sourceId}] ${item.title} — access: ${access}${sourceIndexStatus(item)}`,
       style: 'item',
     });
     if (item.url) {
@@ -1536,11 +1580,11 @@ function questionsSection(
   ];
   for (const question of questions) {
     blocks.push({
-      text: `${question.number}. ${question.question}`,
+      text: `${question.number}. ${withoutSingleAccount(question.question)}`,
       style: 'item',
     });
     blocks.push({
-      text: `Basis: ${question.evidenceBasis}`,
+      text: `Basis: ${questionBasis(question.evidenceBasis)}`,
       style: 'citation',
     });
   }
@@ -1873,7 +1917,7 @@ function findingBlocks(item: ExpertEvidenceItem): ReportBlock[] {
   const blocks: ReportBlock[] = [
     { text: item.title, style: 'subheading' },
     {
-      text: `Status: ${statusLabel(item)}. Source: ${item.sourceId}.`,
+      text: evidenceStatusLine(item),
       style: 'citation',
     },
   ];
@@ -1900,14 +1944,6 @@ function findingBlocks(item: ExpertEvidenceItem): ReportBlock[] {
     blocks.push({ text: item.url, link: item.url, style: 'citation' });
   }
   return blocks;
-}
-
-function statusLabel(item: ExpertEvidenceItem): string {
-  if (item.access === 'restricted') return 'Restricted';
-  if (item.informationStatus === 'conflicting') return 'Conflicting';
-  if (item.informationStatus === 'verified') return 'Verified';
-  if (item.informationStatus === 'unavailable') return 'Unavailable';
-  return 'Not Verified';
 }
 
 function claimEvidence(

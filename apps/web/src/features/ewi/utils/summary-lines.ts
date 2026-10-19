@@ -9,6 +9,10 @@ const SOURCE_GAP_LINE = /^Could not verify [a-z0-9_]+\. /i;
 const OLD_NO_RECORDS_LINE =
   "No research items were collected. The information could not be verified.";
 
+/** "39 item(s) were collected. Not verified and conflicting items could not be verified." */
+const OLD_COLLECTED_LINE =
+  /^(\d+) item\(s\) were collected\. Not verified and conflicting items could not be verified\.$/;
+
 export const NO_RECORDS_LINE =
   "No records about this expert were found in the sources searched. The source list shows what was checked.";
 
@@ -23,7 +27,14 @@ export function presentableSummaryLines(
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) => !gapNotes.has(line) && !SOURCE_GAP_LINE.test(line))
-    .map((line) => (line === OLD_NO_RECORDS_LINE ? NO_RECORDS_LINE : line));
+    .map((line) => (line === OLD_NO_RECORDS_LINE ? NO_RECORDS_LINE : line))
+    .map((line) =>
+      line.replace(
+        OLD_COLLECTED_LINE,
+        (_line, count: string) =>
+          `${count} item(s) were collected from the sources searched.`,
+      ),
+    );
 }
 
 /**

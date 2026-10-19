@@ -354,7 +354,7 @@ function coverFacts(
       id,
       title,
       placement: 'cover-fact' as const,
-      blocks: [{ text: value }],
+      blocks: [{ text: value, noProof: id === 'ai-model' }],
     }));
 }
 
@@ -407,7 +407,7 @@ function evidenceBlocks(
 ): ReportBlock[] {
   if (items.length === 0) return [{ text: empty, style: 'note' }];
   return items.flatMap((item) => [
-    { text: item.excerpt, style: 'item' as const },
+    { text: item.excerpt, style: 'item' as const, noProof: true },
     citationBlock(item.citation),
     { text: item.reasoning, style: 'note' as const },
   ]);
@@ -729,6 +729,7 @@ function literatureBlocks(result: MedicalAnalysisResult): ReportBlock[] {
     blocks.push({
       text: `[${index + 1}] ${reference.title}`,
       style: 'subheading',
+      noProof: true,
     });
     const kind = [
       search ? reference.publicationType : 'Demo reference',
@@ -750,6 +751,7 @@ function literatureBlocks(result: MedicalAnalysisResult): ReportBlock[] {
         text: search
           ? `From the abstract: ${reference.excerpt}`
           : reference.excerpt,
+        noProof: true,
       });
     }
     if (reference.pmid) {
@@ -815,6 +817,7 @@ function libraryBlocks(result: MedicalAnalysisResult): ReportBlock[] {
     blocks.push({
       text: `${ref.documentName}${ref.pageNumber ? ` · Page ${ref.pageNumber}` : ''}`,
       style: 'subheading',
+      noProof: true,
     });
     const label = [
       ref.classification ? CLASSIFICATION_LABEL[ref.classification] : null,
@@ -829,6 +832,8 @@ function libraryBlocks(result: MedicalAnalysisResult): ReportBlock[] {
       text:
         ref.summary?.trim() ||
         `Passage from "${ref.documentName}" (${ref.pageNumber ? `page ${ref.pageNumber}` : 'indexed content'}) cited in this causation analysis.`,
+      // Names the library document.
+      noProof: true,
     });
     if (ref.excerpt) {
       blocks.push({ text: `“${ref.excerpt}”`, style: 'citation' });

@@ -19,6 +19,11 @@ export interface ReportBlock {
     | 'note';
   /** When set, the text is rendered as a hyperlink. */
   link?: string;
+  /**
+   * Word does not spell-check it: a name or text quoted from a source,
+   * whose spelling is not the report's (document names, abstracts).
+   */
+  noProof?: boolean;
 }
 
 /** Icons the PDF renderer can draw in a section header (Lucide shapes). */
@@ -102,5 +107,10 @@ export interface ReportDocumentModel {
   includeTableOfContents?: boolean;
   /** Short facts shown as badges on the cover, e.g. "12 questions". */
   highlights?: string[];
+  /**
+   * Names that are not words (source and category ids such as
+   * courtlistener): Word does not mark them as misspelled.
+   */
+  noProofTerms?: string[];
   metadata?: ReportDocumentMetadata;
 }

@@ -83,6 +83,10 @@ function run(
     color?: string;
     characterSpacing?: number;
     allCaps?: boolean;
+    /** Word does not spell-check it (names and identifiers, not prose). */
+    noProof?: boolean;
+    /** Starts on a new line. */
+    lineBreak?: boolean;
   } = {},
 ): TextRun {
   return new TextRun({
@@ -94,34 +98,87 @@ function run(
     color: options.color ?? COLOR.body,
     characterSpacing: options.characterSpacing,
     allCaps: options.allCaps,
+    noProof: options.noProof || undefined,
+    break: options.lineBreak ? 1 : undefined,
   });
+}
+
+/**
+ * Identifiers Word's spell check would mark with a red line: names with
+ * underscores (board_certification), references such as source:pubmed,
+ * paths such as ewi/investigation-report, and web addresses.
+ */
+const IDENTIFIERS =
+  /https?:\/\/|www\.|_|\b[a-z][\w-]*:[\w./-]+|\b[\w-]+\/[\w./-]+/;
+
+/**
+ * What Word does not spell-check: words with an identifier or one of the
+ * model's names in them. The whole word between spaces is matched, since
+ * Word checks "[courtlistener]" with its brackets as one word.
+ */
+export function technicalWords(terms: readonly string[] = []): RegExp {
+  const names = [...new Set(terms)]
+    .filter((term) => /^[\w.-]+$/.test(term))
+    .sort((a, b) => b.length - a.length)
+    .map((term) => term.replace(/[.-]/g, (char) => `\\${char}`));
+  const inner = [IDENTIFIERS.source];
+  if (names.length > 0) inner.push(`\\b(?:${names.join('|')})\\b`);
+  return new RegExp(`\\S*(?:${inner.join('|')})\\S*`, 'gi');
+}
+
+const DEFAULT_WORDS = technicalWords();
+
+/** A line split into prose and identifiers (identifiers are not spell-checked). */
+function segments(
+  line: string,
+  words: RegExp,
+): Array<{ text: string; technical: boolean }> {
+  const parts: Array<{ text: string; technical: boolean }> = [];
+  let last = 0;
+  for (const match of line.matchAll(words)) {
+    if (match.index > last) {
+      parts.push({ text: line.slice(last, match.index), technical: false });
+    }
+    parts.push({ text: match[0], technical: true });
+    last = match.index + match[0].length;
+  }
+  if (last < line.length || parts.length === 0) {
+    parts.push({ text: line.slice(last), technical: false });
+  }
+  return parts;
 }
 
 /** Text runs with the line breaks of `text` kept. */
 function runs(
   text: string,
   options: Parameters<typeof run>[1] = {},
+  words: RegExp = DEFAULT_WORDS,
 ): TextRun[] {
   return printableText(text)
     .split('\n')
-    .map((line, index) =>
-      index === 0
-        ? run(line, options)
-        : new TextRun({
-            text: line,
-            break: 1,
-            font: FONT,
-            size: options.size ?? SIZE.body,
-            bold: options.bold,
-            italics: options.italics,
-            color: options.color ?? COLOR.body,
-          }),
+    .flatMap((line, lineIndex) =>
+      segments(line, words).map((segment, position) =>
+        run(segment.text, {
+          ...options,
+          noProof: options.noProof || segment.technical,
+          lineBreak: lineIndex > 0 && position === 0,
+        }),
+      ),
     );
 }
 
 /** One report block as a Word paragraph. */
-function blockParagraph(block: ReportBlock): Paragraph {
+function blockParagraph(
+  block: ReportBlock,
+  words: RegExp = DEFAULT_WORDS,
+): Paragraph {
   const style = block.style ?? 'body';
+  const text = (options: Parameters<typeof run>[1] = {}) =>
+    runs(
+      block.text,
+      { ...options, noProof: options?.noProof || block.noProof },
+      words,
+    );
   const link = safeLink(block.link);
   const spacing = { after: 60, line: 276 };
   if (link) {
@@ -137,6 +194,7 @@ function blockParagraph(block: ReportBlock): Paragraph {
               font: FONT,
               size: SIZE.citation,
               color: COLOR.primary,
+              noProof: true,
             }),
           ],
         }),
@@ -148,7 +206,7 @@ function blockParagraph(block: ReportBlock): Paragraph {
       return new Paragraph({
         spacing,
         keepNext: true,
-        children: runs(block.text, {
+        children: text({
           bold: true,
           size: SIZE.subheading,
           color: COLOR.text,
@@ -158,7 +216,7 @@ function blockParagraph(block: ReportBlock): Paragraph {
       return new Paragraph({
         spacing,
         keepNext: true,
-        children: runs(block.text, { color: COLOR.text }),
+        children: text({ color: COLOR.text }),
       });
     case 'heading':
     case 'title':
@@ -166,7 +224,7 @@ function blockParagraph(block: ReportBlock): Paragraph {
       return new Paragraph({
         spacing: { before: 160, after: 80 },
         keepNext: true,
-        children: runs(block.text, {
+        children: text({
           bold: true,
           size: SIZE.subheading,
           color: COLOR.primary,
@@ -175,20 +233,25 @@ function blockParagraph(block: ReportBlock): Paragraph {
     case 'note':
       return new Paragraph({
         spacing,
-        children: runs(block.text, { size: SIZE.note, color: COLOR.muted }),
+        children: text({ size: SIZE.note, color: COLOR.muted }),
       });
     case 'citation':
+      // Source lines (references, sources, bases) are not spell-checked.
       return new Paragraph({
         spacing,
-        children: runs(block.text, { size: SIZE.citation, color: COLOR.muted }),
+        children: text({
+          size: SIZE.citation,
+          color: COLOR.muted,
+          noProof: true,
+        }),
       });
     default:
-      return new Paragraph({ spacing, children: runs(block.text) });
+      return new Paragraph({ spacing, children: text() });
   }
 }
 
 /** A bordered box (a record, a question), like the boxes in the PDF. */
-function box(blocks: ReportBlock[]): Table {
+function box(blocks: ReportBlock[], words: RegExp): Table {
   return new Table({
     width: { size: CONTENT_WIDTH, type: WidthType.DXA },
     columnWidths: [CONTENT_WIDTH],
@@ -205,7 +268,7 @@ function box(blocks: ReportBlock[]): Table {
           new TableCell({
             width: { size: CONTENT_WIDTH, type: WidthType.DXA },
             margins: { top: 100, bottom: 60, left: 160, right: 160 },
-            children: blocks.map(blockParagraph),
+            children: blocks.map((block) => blockParagraph(block, words)),
           }),
         ],
       }),
@@ -231,12 +294,12 @@ function gap(points = 5): Paragraph {
  * blocks after it until the next box opens; a heading closes it (the same
  * rule as the PDF).
  */
-function sectionContent(blocks: ReportBlock[]): Block[] {
+function sectionContent(blocks: ReportBlock[], words: RegExp): Block[] {
   const content: Block[] = [];
   let open: ReportBlock[] | null = null;
   const closeBox = () => {
     if (!open) return;
-    content.push(box(open), gap());
+    content.push(box(open, words), gap());
     open = null;
   };
   for (const block of blocks) {
@@ -251,11 +314,11 @@ function sectionContent(blocks: ReportBlock[]): Block[] {
       style === 'subtitle'
     ) {
       closeBox();
-      content.push(blockParagraph(block));
+      content.push(blockParagraph(block, words));
     } else if (open) {
       open.push(block);
     } else {
-      content.push(blockParagraph(block));
+      content.push(blockParagraph(block, words));
     }
   }
   closeBox();
@@ -288,7 +351,11 @@ function sectionHeading(title: string, newPage = false): Paragraph {
 }
 
 /** The cover's details: one row per fact section (label, value). */
-function factsTable(facts: ReportSectionModel[], width: number): Table {
+function factsTable(
+  facts: ReportSectionModel[],
+  width: number,
+  words: RegExp,
+): Table {
   const labelWidth = Math.round(width * 0.3);
   return new Table({
     width: { size: width, type: WidthType.DXA },
@@ -340,7 +407,11 @@ function factsTable(facts: ReportSectionModel[], width: number): Table {
                 new Paragraph({
                   children: runs(
                     fact.blocks.map((block) => block.text).join(' ') || '—',
-                    { color: COLOR.text },
+                    {
+                      color: COLOR.text,
+                      noProof: fact.blocks.some((block) => block.noProof),
+                    },
+                    words,
                   ),
                 }),
               ],
@@ -368,6 +439,8 @@ function highlightsParagraph(highlights: string[]): Paragraph {
           color: 'auto',
         },
         border: { style: BorderStyle.SINGLE, size: 4, color: COLOR.border },
+        // Counts and labels, not prose.
+        noProof: true,
       }),
     );
   });
@@ -377,6 +450,7 @@ function highlightsParagraph(highlights: string[]): Paragraph {
 /** The cover: a tinted box with the title, details, summary, and counts. */
 function cover(
   model: ReportDocumentModel,
+  words: RegExp,
   summary?: ReportSectionModel,
 ): Table {
   const innerWidth = CONTENT_WIDTH - 2 * 360;
@@ -435,7 +509,7 @@ function cover(
   if (facts.length > 0) {
     children.push(
       new Paragraph({ spacing: { before: 200 }, children: [] }),
-      factsTable(facts, innerWidth),
+      factsTable(facts, innerWidth, words),
     );
   }
   const summaryLines = (summary?.blocks ?? [])
@@ -464,7 +538,7 @@ function cover(
         (line) =>
           new Paragraph({
             spacing: { after: 100, line: 300 },
-            children: runs(line, { size: 23, color: COLOR.text }),
+            children: runs(line, { size: 23, color: COLOR.text }, words),
           }),
       ),
     );
@@ -532,8 +606,9 @@ export class DocxReportRenderer {
     const summary = model.sections.find(
       (section) => section.placement === 'cover-summary',
     );
+    const words = technicalWords(model.noProofTerms);
     const children: Array<Block | TableOfContents> = [
-      cover(model, summary),
+      cover(model, words, summary),
       gap(12),
     ];
     if (model.includeTableOfContents) {
@@ -545,14 +620,14 @@ export class DocxReportRenderer {
       const placement = section.placement ?? 'card';
       if (placement !== 'card') continue;
       children.push(sectionHeading(section.title, newPage));
-      children.push(...sectionContent(section.blocks));
+      children.push(...sectionContent(section.blocks, words));
       newPage = false;
     }
     const disclaimer = model.metadata?.disclaimer?.trim();
     if (disclaimer) {
       children.push(
         sectionHeading('Disclaimer'),
-        blockParagraph({ text: disclaimer, style: 'note' }),
+        blockParagraph({ text: disclaimer, style: 'note' }, words),
       );
     }
     children.push(
@@ -560,16 +635,15 @@ export class DocxReportRenderer {
         alignment: AlignmentType.CENTER,
         spacing: { before: 360 },
         border: { top: { ...border(COLOR.border), space: 8 } },
-        children: [
-          run(
-            [
-              model.headerLabel,
-              `Report generated ${formatGeneratedAt(model.generatedAt)}`,
-              `${model.templateId} ${model.templateVersion}`,
-            ].join(' · '),
-            { size: SIZE.small, color: COLOR.muted },
-          ),
-        ],
+        children: runs(
+          [
+            model.headerLabel,
+            `Report generated ${formatGeneratedAt(model.generatedAt)}`,
+            `${model.templateId} ${model.templateVersion}`,
+          ].join(' · '),
+          { size: SIZE.small, color: COLOR.muted },
+          words,
+        ),
       }),
     );
 
@@ -593,7 +667,14 @@ export class DocxReportRenderer {
       features: { updateFields: Boolean(model.includeTableOfContents) },
       styles: {
         default: {
-          document: { run: { font: FONT, size: SIZE.body, color: COLOR.body } },
+          document: {
+            run: {
+              font: FONT,
+              size: SIZE.body,
+              color: COLOR.body,
+              language: { value: 'en-US' },
+            },
+          },
           heading1: {
             run: {
               font: FONT,
