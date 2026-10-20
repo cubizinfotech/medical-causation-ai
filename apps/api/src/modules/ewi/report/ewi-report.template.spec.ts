@@ -11,6 +11,7 @@ import mammoth from 'mammoth';
 import { EwiWordReportService } from './ewi-word-report.service';
 import { PdfParser } from '@modules/document-processing/parsers/pdf.parser';
 import { buildDeterministicAnalysis } from '../investigation/analysis/deterministic-analysis';
+import type { MatchLevel, WebRecord } from '@integrations/web-research';
 
 /** The PDF's text, page by page, as the app's own PDF reader extracts it. */
 async function pdfPages(buffer: Buffer): Promise<string[]> {
@@ -651,7 +652,12 @@ describe('EWI report web research section', () => {
     questions: [],
     generatedAt: '2026-10-20T00:00:00.000Z',
   };
-  const record = (id: string, title: string, url: string, level: string) => ({
+  const record = (
+    id: string,
+    title: string,
+    url: string,
+    level: MatchLevel,
+  ): WebRecord => ({
     id,
     url,
     title,
