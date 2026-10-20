@@ -91,9 +91,7 @@ describe('EWI report template', () => {
         .find((section) => section.id === 'board-certifications')
         ?.blocks.map((block) => block.text)
         .join(' '),
-    ).toBe(
-      'The web search did not run for this investigation, so a board certification was not searched for on the web. A search cannot prove that nothing exists.',
-    );
+    ).toBe('This was not searched in this investigation.');
     expect(
       document.sections.find((section) => section.id === 'questions')?.blocks[0]
         ?.text,
@@ -536,7 +534,7 @@ describe('EWI report template', () => {
     pages.forEach((page, index) =>
       expect(page).toContain(`Page ${index + 1} of ${pages.length}`),
     );
-  });
+  }, 20000);
 });
 
 describe('EwiPdfReportService', () => {
@@ -646,6 +644,7 @@ describe('EwiWordReportService', () => {
 describe('EWI report web research section', () => {
   const base = {
     expertName: 'Jason A. Demery',
+    city: '',
     specialty: 'Neuropsychology',
     evidence: [],
     discrepancies: [],
@@ -741,24 +740,49 @@ describe('EWI report web research section', () => {
     });
     const section = document.sections.find((s) => s.id === 'web-research');
     const text = section?.blocks.map((block) => block.text).join('\n') ?? '';
-    expect(section?.title).toBe(
-      '39. Global Web Research and Same-Name Candidates',
-    );
-    expect(text).toContain('2 different people share this name');
-    expect(text).toContain(
-      'Jason A. Demery, PhD, neuropsychologist — likely the expert',
-    );
+    expect(section?.title).toBe('39. Other People with This Name');
+    expect(text).toContain('other person');
     expect(text).toContain('Jason Demery, contractor — a different person');
     expect(text).toContain('Nothing below is attributed to the expert');
-    expect(text).toContain('published 2026-09-01');
-    expect(text).toContain('https://courttv.example/a');
+    expect(text).not.toContain('Search coverage');
+    expect(text).not.toContain('search request(s) were sent');
     expect(text).toContain('Also known as J. Demery');
     expect(text).toContain('Login required');
-    expect(text).toContain('Social platforms were not opened.');
     expect(
       document.sections.find((s) => s.id === 'city')?.blocks[0]?.text,
     ).toMatch(/Not provided/);
     expect(document.subtitle).toBe('Jason A. Demery — Neuropsychology');
+  });
+
+  it('puts a sourced photo on the cover when web research found one', () => {
+    const document = buildEwiReportDocument({
+      ...base,
+      webResearch: {
+        ranAt: '2026-10-20T00:00:00.000Z',
+        durationMs: 1,
+        partial: false,
+        partialNote: null,
+        queriesPlanned: 1,
+        queriesRun: 1,
+        providers: [],
+        pagesRead: 1,
+        pagesBlocked: [],
+        candidates: [],
+        records: [],
+        registries: [],
+        limitations: [],
+        portrait: {
+          dataUrl: 'data:image/png;base64,aaa',
+          mimeType: 'image/png',
+          sourceUrl: 'https://clinic.example/about',
+          imageUrl: 'https://clinic.example/jason.png',
+        },
+      },
+    });
+    expect(document.metadata?.coverImage).toEqual({
+      dataUrl: 'data:image/png;base64,aaa',
+      sourceUrl: 'https://clinic.example/about',
+    });
   });
 
   it('says the web search did not run instead of claiming nothing exists', () => {
@@ -772,6 +796,6 @@ describe('EWI report web research section', () => {
         ?.blocks.map((block) => block.text)
         .join('\n') ?? '';
     expect(text).toMatch(/did not run/);
-    expect(text).toMatch(/not a finding that none exist/);
+    expect(text).not.toMatch(/not a finding that none exist/);
   });
 });

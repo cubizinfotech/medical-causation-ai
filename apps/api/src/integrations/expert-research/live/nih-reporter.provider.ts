@@ -124,6 +124,7 @@ export class NihReporterResearchProvider extends LiveResearchProvider {
         sameState
           ? 'The organization state matches the state in the investigation.'
           : 'The organization location was not confirmed as this expert’s practice state.',
+        'NIH RePORTER was searched by principal-investigator name only; co-investigators are not returned.',
       ]
         .filter(Boolean)
         .join(' '),

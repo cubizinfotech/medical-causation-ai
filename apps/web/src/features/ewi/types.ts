@@ -133,6 +133,14 @@ export interface EwiWebResearchDossier {
     quote: string | null;
   }>;
   verifications?: EwiWebVerification[];
+  portrait?: EwiExpertPortrait | null;
+}
+
+export interface EwiExpertPortrait {
+  dataUrl: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  sourceUrl: string;
+  imageUrl: string;
 }
 
 export interface EwiInconsistencySource {

@@ -317,6 +317,47 @@ describe('WebResearchEngine', () => {
     await engine.research(query);
     expect(provider.requests.length).toBe(after);
   });
+
+  it('keeps a public photo from a page about the expert', async () => {
+    const photo = 'https://neuro-clinic.example/jason.png';
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const fetcher = {
+      fetchPage: async (url: string): Promise<FetchedPage> => {
+        const page =
+          PAGES[url] ??
+          ({
+            url,
+            finalUrl: url,
+            status: 'failed',
+            note: 'The page could not be reached.',
+          } satisfies FetchedPage);
+        if (url === SUBJECT_URL && page.status === 'read') {
+          return {
+            ...page,
+            portraits: [{ url: photo, via: 'og' }],
+          };
+        }
+        return page;
+      },
+      fetchImage: async (url: string) =>
+        url === photo
+          ? { url, mimeType: 'image/png' as const, bytes: png }
+          : null,
+    } as unknown as SafeFetcher;
+    const dossier = await new WebResearchEngine({
+      settings,
+      providers: [fakeProvider('fake_search', allHits)],
+      fetcher,
+    }).run(query);
+    expect(dossier.portrait?.sourceUrl).toBe(SUBJECT_URL);
+    expect(dossier.portrait?.imageUrl).toBe(photo);
+    expect(dossier.portrait?.dataUrl.startsWith('data:image/png;base64,')).toBe(
+      true,
+    );
+  });
 });
 
 describe('web catalog sources', () => {

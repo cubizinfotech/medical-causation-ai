@@ -118,6 +118,7 @@ const TOPIC_SECTIONS: Partial<Record<WebClaimTopic, RoutedSectionId[]>> = {
   pleading: ['pleadings'],
   deposition: ['depositions'],
   testimony: ['testimony-inconsistencies'],
+  university_rules: ['university-rules'],
 };
 
 const SECTION_VERIFICATION: Partial<Record<RoutedSectionId, WebClaimTopic>> = {
@@ -208,6 +209,13 @@ export function institutionsIn(text: string): string[] {
   return [...found.values()];
 }
 
+const LEGAL_SECTIONS: ReadonlySet<RoutedSectionId> = new Set([
+  'orders',
+  'pleadings',
+  'depositions',
+  'testimony-inconsistencies',
+]);
+
 /** Sections where several sentences of one page say the same thing. */
 const ONE_PER_PAGE: ReadonlySet<RoutedSectionId> = new Set([
   'board-certifications',
@@ -218,6 +226,10 @@ const ONE_PER_PAGE: ReadonlySet<RoutedSectionId> = new Set([
   'ime',
   'publications',
   'background',
+  'licenses',
+  'education',
+  'office-location',
+  'social',
 ]);
 
 /** A quote that states the credential outright reads better than a bare suffix. */
@@ -228,6 +240,26 @@ function strength(quote: string | null): number {
     (/\bAmerican (Board|Academy) of\b/i.test(quote) ? 2 : 0) +
     (quote.length > 40 ? 1 : 0)
   );
+}
+
+const CAPTION =
+  /\b((?:United States|State(?: of [A-Z][a-z]+)?) v\.?\s+[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,4}|[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3}\s+v\.?\s+[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,4})/;
+
+/** Case name from a PACER or reporter title; falls back to a short title. */
+export function caseCaption(title: string, summary = ''): string {
+  const fromTitle = title.match(CAPTION);
+  if (fromTitle) return fromTitle[1].replace(/\s+/g, ' ').trim();
+  const fromSummary = summary.match(CAPTION);
+  if (fromSummary) return fromSummary[1].replace(/\s+/g, ' ').trim();
+  if (/UNITED STATES DISTRICT COURT/i.test(title)) {
+    const docket = title.match(
+      /\b(?:Case\s+)?No\.?\s*[:#]?\s*[\d:-]+[A-Za-z0-9-]*/i,
+    );
+    return docket
+      ? `Federal court record ${docket[0]}`
+      : 'Federal court record';
+  }
+  return short(title, 90);
 }
 
 function courtDocumentSection(record: WebRecord): RoutedSectionId | null {
@@ -350,10 +382,13 @@ export function routeWebFindings(
           }
           continue;
         }
+        const legal = LEGAL_SECTIONS.has(sectionId);
         push({
           ...base,
           sectionId,
-          title: `${TOPIC_LABEL[claim.topic ?? 'other']}: ${short(record.title, 90)}`,
+          title: legal
+            ? caseCaption(record.title, record.summary)
+            : `${TOPIC_LABEL[claim.topic ?? 'other']}: ${short(record.title, 90)}`,
           statement: claim.text,
           quote: claim.quote,
           basis,
@@ -422,7 +457,7 @@ export function routeWebFindings(
         push({
           ...base,
           sectionId,
-          title: short(record.title, 120),
+          title: caseCaption(record.title, record.summary),
           statement: record.summary,
           quote: record.match.quote,
           basis: 'record',
@@ -431,6 +466,25 @@ export function routeWebFindings(
           verification: null,
         });
       }
+    }
+
+    if (record.kind === 'social') {
+      push({
+        ...base,
+        sectionId: 'social',
+        title: record.platform
+          ? `${record.platform.replace(/^./, (c) => c.toUpperCase())} profile`
+          : short(record.title, 90),
+        statement:
+          record.read === 'read'
+            ? record.summary
+            : 'A search result listed this profile. The page was not opened because it is shown only to signed-in users.',
+        quote: record.match.quote ?? record.snippet,
+        basis: 'record',
+        basisLabel: BASIS_LABEL.record,
+        from: record.read === 'read' ? 'page' : 'snippet',
+        verification: null,
+      });
     }
   }
 
@@ -574,7 +628,7 @@ const SECTION_SEARCH: Record<
     what: 'a lawsuit or malpractice claim',
     topics: ['litigation', 'discipline'],
   },
-  criminal: { what: 'a criminal record', topics: ['discipline'] },
+  criminal: { what: 'a criminal record', topics: ['criminal'] },
   corporate: { what: 'a business tie', topics: ['business'] },
   'patient-reviews': {
     what: 'a patient or client review',
@@ -590,7 +644,7 @@ const SECTION_SEARCH: Record<
   },
   'university-rules': {
     what: 'a university rule or policy that applies to the expert',
-    topics: ['education'],
+    topics: ['university_rules', 'education'],
   },
   websites: { what: 'an expert or practice website', topics: ['identity'] },
   directories: {
@@ -616,54 +670,100 @@ export function sectionVerification(
     : null;
 }
 
+const EMPTY_NOUN: Record<RoutedSectionId, string> = {
+  background: 'employment or practice history attributable to',
+  education: 'a degree or training program attributable to',
+  'university-accreditation':
+    'accreditation status for an institution connected to',
+  licenses: 'a professional license attributable to',
+  'board-actions': 'a licensing board action attributable to',
+  'board-certifications': 'a board certification attributable to',
+  'certification-orgs': 'a certifying organization listing attributable to',
+  memberships: 'a professional membership attributable to',
+  publications: 'a publication attributable to',
+  grants: 'a research grant award directly attributable to',
+  patents: 'a patent attributable to',
+  'awards-military': 'an award or military-service claim attributable to',
+  ime: 'IME or expert-services advertising attributable to',
+  orders: 'a court order naming',
+  pleadings: 'a motion or pleading naming',
+  depositions: 'a deposition transcript attributable to',
+  'testimony-inconsistencies': 'inconsistent testimony attributable to',
+  'income-bias': 'fee or retention figures attributable to',
+  lawsuits: 'a lawsuit or malpractice claim against',
+  criminal: 'a criminal record attributable to',
+  corporate: 'a business affiliation attributable to',
+  'patient-reviews': 'a patient or client review of',
+  'office-location': 'an office address for',
+  'admissibility-challenges': 'an admissibility challenge naming',
+  'university-rules': 'a university rule or policy that applies to the role of',
+  websites: 'an expert or practice website for',
+  directories: 'an expert directory listing for',
+  social: 'a public social media profile that could be reliably attributed to',
+  videos: 'a video or transcript featuring',
+  news: 'a news article about',
+};
+
+function blockedNote(
+  dossier: WebResearchDossier,
+  sectionId: RoutedSectionId,
+): string | null {
+  const hosts: Partial<Record<RoutedSectionId, RegExp>> = {
+    publications: /researchgate\.net|pubmed|pmc\.ncbi/i,
+    grants: /reporter\.nih\.gov|researchgate\.net/i,
+    licenses: /doh\.state\.fl\.us|flhealthsource/i,
+    patents: /uspto\.gov|patents\.google/i,
+  };
+  const pattern = hosts[sectionId];
+  if (!pattern) return null;
+  const hit = dossier.pagesBlocked.find((page) => pattern.test(page.url));
+  if (!hit) return null;
+  return 'A source that may hold information for this section could not be read (login, bot protection or robots.txt).';
+}
+
 /**
- * The line that replaces "nothing was confirmed" in a section with no finding.
- * It says what was searched and what limited the search, so "not found" and
- * "not reachable" are not the same sentence.
+ * Short professional empty copy. Distinguishes "searched, nothing found"
+ * from "was not searched", without describing search mechanics.
  */
 export function coverageLine(
   dossier: WebResearchDossier | null | undefined,
   sectionId: string,
   structured: string[] = [],
+  expertName?: string,
 ): string {
+  const who = expertName?.trim() || 'this expert';
   if (!isRoutedSection(sectionId)) {
-    return 'No page or source in this run stated this for the expert. A search cannot prove that nothing exists.';
+    return `The public records reviewed did not establish a finding attributable to ${who}.`;
   }
-  const { what, topics } = SECTION_SEARCH[sectionId];
+  const noun = EMPTY_NOUN[sectionId];
   const parts: string[] = [];
   if (!dossier) {
-    parts.push(
-      `The web search did not run for this investigation, so ${what} was not searched for on the web.`,
-    );
+    parts.push('This was not searched in this investigation.');
   } else {
     const worked = dossier.providers.some(
       (p) => p.requests > 0 && p.failedRequests < p.requests,
     );
     if (!worked) {
       parts.push(
-        `The web search did not complete, so ${what} was not searched for. This is not a finding that none exists.`,
+        'The search for this topic did not complete, so no finding is reported.',
       );
     } else if (dossier.topics) {
+      const { topics } = SECTION_SEARCH[sectionId];
       const stats = dossier.topics.filter((t) => topics.includes(t.topic));
       const queries = stats.reduce((sum, t) => sum + t.queries, 0);
-      const hits = stats.reduce((sum, t) => sum + t.hits, 0);
       parts.push(
         queries > 0
-          ? `${queries} targeted web search${queries === 1 ? '' : 'es'} looked for ${what} and returned ${hits} page${hits === 1 ? '' : 's'}; none of the pages tied to this expert stated one.`
-          : `No targeted web search for ${what} completed in this run.`,
+          ? `The public records reviewed did not establish ${noun} ${who}.`
+          : 'This was not searched in this investigation.',
       );
     } else {
       parts.push(
-        `The web research did not record a targeted search for ${what}; no page tied to this expert stated one.`,
+        `The public records reviewed did not establish ${noun} ${who}.`,
       );
     }
-    if (dossier.pagesBlocked.length > 0) {
-      parts.push(
-        `${dossier.pagesBlocked.length} page${dossier.pagesBlocked.length === 1 ? '' : 's'} that may concern the expert could not be read (login, bot protection or robots.txt) and may hold information for this section; they are listed in section 39.`,
-      );
-    }
+    const blocked = blockedNote(dossier, sectionId);
+    if (blocked) parts.push(blocked);
   }
   parts.push(...structured);
-  parts.push('A search cannot prove that nothing exists.');
   return parts.join(' ');
 }

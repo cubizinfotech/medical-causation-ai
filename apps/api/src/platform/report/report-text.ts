@@ -33,6 +33,33 @@ export function safeLink(link: string | undefined): string | undefined {
   }
 }
 
+/** Bytes of a data:image URL, or null when it is not a usable image. */
+export function decodeDataUrlImage(dataUrl: string | undefined): Buffer | null {
+  if (!dataUrl?.startsWith('data:image/')) return null;
+  const comma = dataUrl.indexOf(',');
+  if (comma < 0) return null;
+  try {
+    const bytes = Buffer.from(dataUrl.slice(comma + 1), 'base64');
+    return bytes.length > 32 ? bytes : null;
+  } catch {
+    return null;
+  }
+}
+
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+/** "Photo from clinic.example" for a cover caption. */
+export function photoSourceLabel(sourceUrl: string | undefined): string | null {
+  const host = sourceUrl ? hostOf(sourceUrl) : null;
+  return host ? `Photo from ${host}` : null;
+}
+
 /** "Oct 15, 2026, 9:10 AM UTC". The server's time zone is not the reader's. */
 export function formatGeneratedAt(iso: string): string {
   const date = new Date(iso);

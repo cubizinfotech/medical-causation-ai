@@ -2,6 +2,7 @@ import { EXPERT_RESEARCH_CATALOG } from '../providers/provider-catalog';
 import {
   affiliationAgrees,
   authorListed,
+  parseArticleGrants,
   parseAuthorAffiliations,
   PubMedResearchProvider,
 } from './pubmed.provider';
@@ -152,5 +153,21 @@ describe('PubMed affiliation check', () => {
     expect(second?.raw?.identity).toBeUndefined();
     expect(result.message).toMatch(/1 also list an affiliation that agrees/);
     expect(result.message).toMatch(/Shingle durability/);
+  });
+});
+
+describe('PubMed grant list', () => {
+  it('reads article-level grants without treating them as a personal award', () => {
+    const xml = `<PubmedArticleSet>
+<PubmedArticle><MedlineCitation><PMID Version="1">99</PMID>
+<GrantList>
+<Grant><GrantID>R01NS012345</GrantID><Agency>NINDS NIH HHS</Agency></Grant>
+</GrantList>
+</MedlineCitation></PubmedArticle>
+</PubmedArticleSet>`;
+    const grants = parseArticleGrants(xml);
+    expect(grants.get('99')).toEqual([
+      { id: 'R01NS012345', agency: 'NINDS NIH HHS' },
+    ]);
   });
 });

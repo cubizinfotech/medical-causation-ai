@@ -243,19 +243,22 @@ describe('routeWebFindings', () => {
 });
 
 describe('coverageLine', () => {
-  it('says what was searched and how many pages came back', () => {
+  it('states a professional negative when the topic was searched', () => {
     const line = coverageLine(
       dossier([], { topics: [{ topic: 'grants', queries: 2, hits: 14 }] }),
       'grants',
+      [],
+      'Jason A. Demery',
     );
     expect(line).toMatch(
-      /2 targeted web searches looked for a research grant and returned 14 pages/,
+      /did not establish a research grant award directly attributable to Jason A. Demery/,
     );
-    expect(line).toMatch(/cannot prove/);
+    expect(line).not.toMatch(/targeted web search/);
+    expect(line).not.toMatch(/cannot prove/);
   });
 
   it('says not searched when the web run did not work or did not run', () => {
-    expect(coverageLine(null, 'grants')).toMatch(/did not run/);
+    expect(coverageLine(null, 'grants')).toMatch(/was not searched/);
     const failed = dossier([], {
       providers: [
         {
@@ -272,14 +275,24 @@ describe('coverageLine', () => {
     expect(coverageLine(failed, 'grants')).toMatch(/did not complete/);
   });
 
-  it('separates pages that could not be read from pages that held nothing', () => {
-    const line = coverageLine(
+  it('mentions a blocked source only when it is material to the section', () => {
+    const patents = coverageLine(
       dossier([], {
         topics: [{ topic: 'patents', queries: 1, hits: 3 }],
         pagesBlocked: [{ url: 'https://x.example', reason: 'CAPTCHA' }],
       }),
       'patents',
     );
-    expect(line).toMatch(/could not be read/);
+    expect(patents).not.toMatch(/could not be read/);
+    const grants = coverageLine(
+      dossier([], {
+        topics: [{ topic: 'grants', queries: 1, hits: 0 }],
+        pagesBlocked: [
+          { url: 'https://reporter.nih.gov/x', reason: 'CAPTCHA' },
+        ],
+      }),
+      'grants',
+    );
+    expect(grants).toMatch(/could not be read/);
   });
 });

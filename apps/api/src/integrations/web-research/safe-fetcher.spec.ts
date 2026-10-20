@@ -263,6 +263,37 @@ describe('SafeFetcher', () => {
     expect(page.note).toMatch(/paywall/i);
   });
 
+  it('lists portrait URLs on a page and reads a public JPEG, PNG or WebP', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const fake = fakeFetch((url) => {
+      if (url.endsWith('/robots.txt')) return new Response('', { status: 404 });
+      if (url.endsWith('/jason.png')) {
+        return new Response(png, {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        });
+      }
+      return html(
+        `<html><head><title>About Dr. Demery</title>
+         <meta property="og:image" content="https://clinic.example/jason.png"></head>
+         <body><p>Dr. Jason A. Demery is a clinical neuropsychologist in Gainesville who evaluates traumatic brain injury for treating physicians and for attorneys in civil and criminal cases.</p></body></html>`,
+      );
+    });
+    const fetcher = new SafeFetcher({
+      timeoutMs: 1000,
+      fetchImpl: fake.impl,
+      lookup: PUBLIC,
+    });
+    const page = await fetcher.fetchPage('https://clinic.example/about');
+    expect(page.portraits?.[0]?.url).toBe('https://clinic.example/jason.png');
+    const image = await fetcher.fetchImage('https://clinic.example/jason.png');
+    expect(image?.mimeType).toBe('image/png');
+    expect(image?.bytes.equals(png)).toBe(true);
+  });
+
   it('reports a network failure without throwing', async () => {
     const impl = (() =>
       Promise.reject(new Error('socket hang up'))) as typeof fetch;

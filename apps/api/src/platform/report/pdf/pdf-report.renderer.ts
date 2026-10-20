@@ -247,6 +247,18 @@ function paint(doc: Pdf, op: PaintOp, fonts: Record<FontKey, string>): void {
       if (op.outline) doc.outline.addItem(op.outline);
       return;
     }
+    case 'image': {
+      try {
+        doc.image(op.data, op.x, op.y, {
+          fit: [op.w, op.h],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        // A bad image is omitted; the rest of the cover still prints.
+      }
+      return;
+    }
   }
 }
 

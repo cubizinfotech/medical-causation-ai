@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ExpertPortrait } from "@/components/ewi/expert-portrait";
 import type {
   EwiHistoryDetail,
   EwiInvestigationResult,
@@ -81,11 +82,17 @@ export function InvestigationSummaryDashboard({
     <Card>
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-xl">{expertName}</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {[city, specialty].filter(Boolean).join(" · ")}
-            </p>
+          <div className="flex items-start gap-4">
+            <ExpertPortrait
+              portrait={result?.webResearch?.portrait}
+              name={expertName}
+            />
+            <div>
+              <CardTitle className="text-xl">{expertName}</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {[city, specialty].filter(Boolean).join(" · ")}
+              </p>
+            </div>
           </div>
           <Badge
             variant={

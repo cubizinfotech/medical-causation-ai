@@ -14,7 +14,12 @@ import {
   type TextOp,
 } from './pdf-layout';
 import { truncateText } from './pdf-text';
-import { formatGeneratedAt, safeLink } from '../report-text';
+import {
+  decodeDataUrlImage,
+  formatGeneratedAt,
+  photoSourceLabel,
+  safeLink,
+} from '../report-text';
 import {
   BOX,
   CARD,
@@ -130,14 +135,53 @@ function layoutCover(
   gap(12);
   const name =
     model.metadata?.expertName?.trim() || model.subtitle || model.title;
-  rows.push(textRow(layout, x, [name], { style: TEXT.coverName, width }));
   const subline = [model.metadata?.specialty, model.metadata?.city]
     .map((value) => value?.trim())
     .filter(Boolean)
     .join(' · ');
-  if (subline) {
+  const photo = decodeDataUrlImage(model.metadata?.coverImage?.dataUrl);
+  const photoSize = photo ? 72 : 0;
+  const photoGap = photo ? 14 : 0;
+  const nameWidth = width - photoSize - photoGap;
+  const nameLines = layout.wrap(name, TEXT.coverName, nameWidth);
+  const subLines = subline
+    ? layout.wrap(subline, TEXT.coverSubtitle, nameWidth)
+    : [];
+  const nameHeight =
+    nameLines.length * TEXT.coverName.leading +
+    subLines.length * TEXT.coverSubtitle.leading;
+  rows.push({
+    height: Math.max(nameHeight, photoSize),
+    draw: (top) => {
+      let lineTop = top;
+      for (const line of nameLines) {
+        layout.text(x, lineTop, line, TEXT.coverName);
+        lineTop += TEXT.coverName.leading;
+      }
+      for (const line of subLines) {
+        layout.text(x, lineTop, line, TEXT.coverSubtitle);
+        lineTop += TEXT.coverSubtitle.leading;
+      }
+      if (photo) {
+        layout.add({
+          kind: 'image',
+          page: layout.page,
+          x: x + nameWidth + photoGap,
+          y: top,
+          w: photoSize,
+          h: photoSize,
+          data: photo,
+          layer: LAYER.content,
+        });
+      }
+    },
+  });
+  const photoNote = photo
+    ? photoSourceLabel(model.metadata?.coverImage?.sourceUrl)
+    : null;
+  if (photoNote) {
     rows.push(
-      textRow(layout, x, [subline], { style: TEXT.coverSubtitle, width }),
+      textRow(layout, x, [photoNote], { style: TEXT.coverMeta, width }),
     );
   }
 

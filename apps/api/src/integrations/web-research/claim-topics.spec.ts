@@ -2,6 +2,7 @@ import {
   basisFor,
   extractFacts,
   factsFromSnippet,
+  isHeadingClaim,
   officialSourceFor,
   officialSourceForAcronym,
   organizationsIn,
@@ -133,6 +134,105 @@ describe('extractFacts', () => {
     expect(certification[0].quote).toContain('Demery');
   });
 
+  it('extracts forensic and medicolegal IME language', () => {
+    const facts = extractFacts({
+      url: 'https://clinic.example/about',
+      kind: 'expert_website',
+      title: 'About',
+      text: 'Dr. Demery provides forensic neuropsychological evaluations and medicolegal evaluations for attorneys and courts.',
+      subject,
+      ownPage: true,
+    });
+    expect(facts.some((fact) => fact.topic === 'ime')).toBe(true);
+  });
+
+  it('rejects heading-only patent, discipline and award labels', () => {
+    const facts = extractFacts({
+      url: 'https://directory.example/x',
+      kind: 'directory',
+      title: 'Profile',
+      text: 'Jason Demery. Clinical Trials, Grants & Patents. Disciplinary Actions & Sanctions. Award Winning Hospitals.',
+      subject,
+      ownPage: false,
+    });
+    expect(facts.some((fact) => fact.topic === 'patent')).toBe(false);
+    expect(facts.some((fact) => fact.topic === 'discipline')).toBe(false);
+    expect(facts.some((fact) => fact.topic === 'award')).toBe(false);
+  });
+
+  it('does not treat related-video titles as the expert’s criminal record', () => {
+    const facts = extractFacts({
+      url: 'https://www.youtube.com/watch?v=dQPVnCi9EyQ',
+      kind: 'video',
+      title:
+        "The Frostproof Massacre: State Expert Dr. Jason Demery's Full Testimony",
+      text: 'Dr. Jason Demery testified as a state expert. Inside the courtroom as Caleb Flynn is convicted of killing his wife Ashley Flynn.',
+      subject,
+      ownPage: false,
+    });
+    expect(facts.some((fact) => fact.topic === 'criminal')).toBe(false);
+  });
+
+  it('does not treat examining a defendant as the expert’s criminal record', () => {
+    const facts = extractFacts({
+      url: 'https://ecf.example/1',
+      kind: 'court',
+      title: 'Order',
+      text: 'The Court appointed Jason Demery to examine the criminal defendant regarding competency.',
+      subject,
+      ownPage: false,
+    });
+    expect(facts.some((fact) => fact.topic === 'criminal')).toBe(false);
+  });
+
+  it('keeps a university policy only when it is about the expert’s role', () => {
+    const policy = extractFacts({
+      url: 'https://uf.example/coi',
+      kind: 'university',
+      title: 'Outside activity',
+      text: 'Jason Demery, faculty at the University of Florida, is subject to the conflict of interest consulting policy.',
+      subject,
+      ownPage: false,
+    });
+    expect(policy.some((fact) => fact.topic === 'university_rules')).toBe(true);
+    const syllabus = extractFacts({
+      url: 'https://uf.example/syllabus',
+      kind: 'university',
+      title: 'CLP4302',
+      text: 'Cell phones and electronics must be silenced. Papers use Times New Roman. Late work loses a letter grade.',
+      subject,
+      ownPage: false,
+    });
+    expect(syllabus.some((fact) => fact.topic === 'university_rules')).toBe(
+      false,
+    );
+  });
+
+  it('labels NIH PI listings as personal awards and papers as associated research', () => {
+    const award = extractFacts({
+      url: 'https://reporter.nih.gov/project-details/1',
+      kind: 'publication',
+      title: 'NIH RePORTER',
+      text: 'Jason Demery is the principal investigator of R01NS012345 funded by NIH.',
+      subject,
+      ownPage: false,
+    });
+    expect(award.find((f) => f.topic === 'grant')?.text).toMatch(
+      /^Personal award:/,
+    );
+    const paper = extractFacts({
+      url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC1/',
+      kind: 'publication',
+      title: 'Article',
+      text: 'This work by Jason Demery was funded by NIH grant support through TRACK-TBI.',
+      subject,
+      ownPage: false,
+    });
+    expect(paper.find((f) => f.topic === 'grant')?.text).toMatch(
+      /^Associated with grant-funded research:/,
+    );
+  });
+
   it('labels snippet-only statements as snippets', () => {
     const facts = factsFromSnippet({
       url: 'https://example.com/x',
@@ -142,5 +242,18 @@ describe('extractFacts', () => {
       subject,
     });
     expect(facts[0]?.from).toBe('snippet');
+  });
+});
+
+describe('isHeadingClaim', () => {
+  it('treats directory nav labels as headings', () => {
+    expect(isHeadingClaim('Clinical Trials, Grants & Patents')).toBe(true);
+    expect(isHeadingClaim('Disciplinary Actions & Sanctions')).toBe(true);
+    expect(isHeadingClaim('Award Winning Hospitals')).toBe(true);
+    expect(
+      isHeadingClaim(
+        'Dr. Demery is board certified in clinical neuropsychology.',
+      ),
+    ).toBe(false);
   });
 });

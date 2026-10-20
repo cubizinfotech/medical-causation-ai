@@ -2,6 +2,10 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { classifyUrl } from './source-kind';
 import { extractPageText, type PageText } from './page-text';
+import {
+  extractPortraitCandidates,
+  type PortraitCandidate,
+} from './page-portraits';
 import { extractPdfText } from './pdf-text';
 import type { PageReadStatus } from './web-research.types';
 
@@ -19,6 +23,14 @@ export interface FetchedPage extends Partial<PageText> {
   botBlocked?: boolean;
   /** Set when the text came from an Internet Archive copy. */
   archiveUrl?: string;
+  /** Portrait URLs found in the markup. Candidates only. */
+  portraits?: PortraitCandidate[];
+}
+
+export interface FetchedImage {
+  url: string;
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
+  bytes: Buffer;
 }
 
 export interface SafeFetcherOptions {
@@ -34,6 +46,7 @@ export interface SafeFetcherOptions {
 const USER_AGENT =
   'Mozilla/5.0 (compatible; EWI-PublicResearch/1.0; +public-records-research)';
 const MAX_REDIRECTS = 5;
+const MAX_IMAGE_BYTES = 400_000;
 
 const CHALLENGE_MARKERS = [
   /just a moment\.\.\./i,
@@ -187,6 +200,52 @@ export class SafeFetcher {
       return direct;
     }
     return (await this.fromArchive(rawUrl)) ?? direct;
+  }
+
+  /**
+   * Reads a public JPEG, PNG or WebP. Login-gated hosts, private addresses
+   * and robots.txt refusals are skipped the same way as pages.
+   */
+  async fetchImage(rawUrl: string): Promise<FetchedImage | null> {
+    let current: URL;
+    try {
+      current = new URL(rawUrl);
+    } catch {
+      return null;
+    }
+    for (let hop = 0; hop <= 3; hop++) {
+      const refusal = await this.refuse(current);
+      if (refusal) return null;
+      let response: Response;
+      try {
+        response = await this.fetchImpl(current, {
+          redirect: 'manual',
+          headers: {
+            'User-Agent': this.userAgent,
+            Accept: 'image/jpeg,image/png,image/webp;q=0.9,*/*;q=0.1',
+          },
+          signal: AbortSignal.timeout(this.options.timeoutMs),
+        });
+      } catch {
+        return null;
+      }
+      const location = response.headers.get('location');
+      if (response.status >= 300 && response.status < 400 && location) {
+        try {
+          current = new URL(location, current);
+        } catch {
+          return null;
+        }
+        continue;
+      }
+      if (response.status >= 400) return null;
+      const bytes = await this.readBytes(response, MAX_IMAGE_BYTES + 1);
+      if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) return null;
+      const mimeType = imageMime(bytes, response.headers.get('content-type'));
+      if (!mimeType) return null;
+      return { url: current.toString(), mimeType, bytes };
+    }
+    return null;
   }
 
   private async fromArchive(rawUrl: string): Promise<FetchedPage | null> {
@@ -499,10 +558,14 @@ export class SafeFetcher {
     }
     const paywalled =
       PAYWALL_MARKERS.some((m) => m.test(page.text)) && page.text.length < 2500;
+    const portraits = /html/i.test(contentType)
+      ? extractPortraitCandidates(body, finalUrl)
+      : [];
     return {
       ...common,
       ...page,
       ...(keepHtml ? { html: body } : {}),
+      ...(portraits.length > 0 ? { portraits } : {}),
       status: 'read',
       note: paywalled
         ? 'The page appears to be partly behind a paywall or sign-in; only the visible part was read.'
@@ -533,4 +596,39 @@ export class SafeFetcher {
     }
     return Buffer.concat(chunks.map((c) => Buffer.from(c)));
   }
+}
+
+function imageMime(
+  bytes: Buffer,
+  contentType: string | null,
+): FetchedImage['mimeType'] | null {
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  ) {
+    return 'image/jpeg';
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes.toString('ascii', 0, 4) === 'RIFF' &&
+    bytes.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  const type = (contentType ?? '').split(';')[0].trim().toLowerCase();
+  if (type === 'image/jpeg' || type === 'image/png' || type === 'image/webp') {
+    return type;
+  }
+  return null;
 }

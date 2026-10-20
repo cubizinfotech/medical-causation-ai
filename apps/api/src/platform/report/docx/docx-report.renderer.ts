@@ -7,6 +7,7 @@ import {
   Footer,
   Header,
   HeadingLevel,
+  ImageRun,
   LineRuleType,
   Packer,
   PageNumber,
@@ -27,7 +28,13 @@ import type {
   ReportDocumentModel,
   ReportSectionModel,
 } from '../report-document';
-import { formatGeneratedAt, printableText, safeLink } from '../report-text';
+import {
+  decodeDataUrlImage,
+  formatGeneratedAt,
+  photoSourceLabel,
+  printableText,
+  safeLink,
+} from '../report-text';
 
 export const DOCX_MIME_TYPE =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -101,6 +108,23 @@ function run(
     noProof: options.noProof || undefined,
     break: options.lineBreak ? 1 : undefined,
   });
+}
+
+function coverPhoto(model: ReportDocumentModel): ImageRun | null {
+  const mime = model.metadata?.coverImage?.dataUrl.match(
+    /^data:(image\/(?:jpeg|png));base64,/i,
+  )?.[1];
+  const data = decodeDataUrlImage(model.metadata?.coverImage?.dataUrl);
+  if (!mime || !data) return null;
+  try {
+    return new ImageRun({
+      type: mime === 'image/png' ? 'png' : 'jpg',
+      data,
+      transformation: { width: 80, height: 80 },
+    });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -484,6 +508,7 @@ function cover(
     }),
   ];
   if (name) {
+    const photo = coverPhoto(model);
     children.push(
       new Paragraph({
         spacing: { before: 240 },
@@ -504,6 +529,24 @@ function cover(
           ],
         }),
       );
+    }
+    if (photo) {
+      children.push(
+        new Paragraph({
+          spacing: { before: 120 },
+          children: [photo],
+        }),
+      );
+      const caption = photoSourceLabel(model.metadata?.coverImage?.sourceUrl);
+      if (caption) {
+        children.push(
+          new Paragraph({
+            children: [
+              run(caption, { size: SIZE.citation, color: COLOR.muted }),
+            ],
+          }),
+        );
+      }
     }
   }
   if (facts.length > 0) {

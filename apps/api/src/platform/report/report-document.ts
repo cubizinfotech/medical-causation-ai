@@ -89,6 +89,8 @@ export interface ReportDocumentMetadata {
   templateId?: string;
   product?: string;
   disclaimer?: string;
+  /** Public photo of the subject, when one was read from a sourced page. */
+  coverImage?: { dataUrl: string; sourceUrl: string };
 }
 
 export interface ReportDocumentModel {

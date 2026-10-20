@@ -38,6 +38,7 @@ describe('planQueries', () => {
       'patents',
       'awards',
       'ime',
+      'criminal',
     ]) {
       expect(topics).toContain(topic);
     }
@@ -135,6 +136,37 @@ describe('planFollowUps', () => {
     expect(plans.some((p) => p.request.query.includes('state.fl.us'))).toBe(
       false,
     );
-    expect(plans[0]?.request.prompt).toContain('TX');
+    const license = plans.find((plan) => plan.topic === 'license');
+    expect(license?.request.prompt).toContain('TX');
+  });
+
+  it('follows named programs, NIH RePORTER and faculty policy pages', () => {
+    const plans = planFollowUps(subject(), {
+      acronyms: [],
+      state: 'FL',
+      programs: ['TRACK-TBI'],
+      institutions: ['University of Florida'],
+      searchNih: true,
+    });
+    expect(
+      plans.some((p) => p.request.query.includes('reporter.nih.gov')),
+    ).toBe(true);
+    expect(plans.some((p) => p.request.query.includes('TRACK-TBI'))).toBe(true);
+    expect(
+      plans.some(
+        (p) =>
+          p.topic === 'university_rules' &&
+          p.request.query.includes('University of Florida'),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('planQueries order', () => {
+  it('runs grants and IME before news and reviews', () => {
+    const topics = planQueries(subject()).map((plan) => plan.topic);
+    expect(topics.indexOf('grants')).toBeLessThan(topics.indexOf('news'));
+    expect(topics.indexOf('ime')).toBeLessThan(topics.indexOf('reviews'));
+    expect(topics.indexOf('criminal')).toBeLessThan(topics.indexOf('video'));
   });
 });

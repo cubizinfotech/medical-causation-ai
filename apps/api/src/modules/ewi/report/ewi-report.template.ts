@@ -324,7 +324,7 @@ export const EWI_REPORT_SECTIONS: EwiReportSectionSpec[] = [
   {
     id: 'web-research',
     number: 39,
-    title: '39. Global Web Research and Same-Name Candidates',
+    title: '39. Other People with This Name',
     icon: 'globe',
   },
   {
@@ -626,6 +626,7 @@ export function buildEwiReportDocument(input: {
         routedWeb,
         input.webResearch ?? null,
         input.sourceStatuses ?? [],
+        input.expertName,
       ),
       ...(icon ? { icon } : {}),
       ...(placement ? { placement } : {}),
@@ -678,6 +679,14 @@ export function buildEwiReportDocument(input: {
       templateId: EWI_REPORT_TEMPLATE_ID,
       product: 'ewi',
       disclaimer: EWI_REPORT_DISCLAIMER,
+      ...(input.webResearch?.portrait
+        ? {
+            coverImage: {
+              dataUrl: input.webResearch.portrait.dataUrl,
+              sourceUrl: input.webResearch.portrait.sourceUrl,
+            },
+          }
+        : {}),
     },
     sections,
   };
@@ -770,11 +779,11 @@ function structuredCoverage(
   }
   const parts: string[] = [];
   if (checked.length > 0) {
-    parts.push(`Checked with no matching record: ${checked.join(', ')}.`);
+    parts.push(`${checked.join(', ')} returned no matching record.`);
   }
   if (notChecked.length > 0) {
     parts.push(
-      `Not checked in this run (no live connection or the check failed): ${notChecked.join(', ')}. For these the absence of a record means the source was not searched, not that nothing exists.`,
+      `${notChecked.join(', ')} was not reachable in this investigation.`,
     );
   }
   return parts;
@@ -792,25 +801,22 @@ function webFindingBlocks(finding: RoutedFinding): ReportBlock[] {
   ) {
     blocks.push({ text: finding.statement, noProof: true });
   }
-  if (quote) blocks.push({ text: `“${quote}”`, noProof: true });
+  if (quote && quote !== finding.title) {
+    blocks.push({ text: `“${quote}”`, noProof: true });
+  }
   const published = webDate(finding.publishedAt);
-  const retrieved = webDate(finding.retrievedAt);
-  blocks.push({
-    text: [
-      finding.basisLabel,
-      finding.from === 'snippet'
-        ? 'from a search-result snippet; the page itself was not read'
-        : null,
-      finding.matchLevel === 'possible'
-        ? 'possible match: the page only partly agrees with the subject'
-        : null,
-      published ? `published ${published}` : null,
-      retrieved ? `retrieved ${retrieved}` : null,
-    ]
-      .filter(Boolean)
-      .join(' · '),
-    style: 'citation',
-  });
+  const notes = [
+    finding.from === 'snippet'
+      ? 'Taken from a search result; the page itself was not read.'
+      : null,
+    finding.matchLevel === 'possible'
+      ? 'The page only partly agrees with the subject, so this is a possible match.'
+      : null,
+    published ? `Published ${published}.` : null,
+  ].filter(Boolean);
+  if (notes.length > 0) {
+    blocks.push({ text: notes.join(' '), style: 'citation' });
+  }
   blocks.push({ text: finding.url, link: finding.url, style: 'citation' });
   return blocks;
 }
@@ -819,11 +825,9 @@ function verificationBlocks(verification: WebVerification): ReportBlock[] {
   if (verification.status === 'confirmed' && verification.confirmedBy) {
     const blocks: ReportBlock[] = [
       {
-        text: `Confirmed at the source: ${verification.claim}`,
-        style: 'subheading',
+        text: `Confirmed on ${verification.confirmedBy.name}.`,
         noProof: true,
       },
-      { text: verification.note },
     ];
     if (verification.confirmedBy.quote) {
       blocks.push({
@@ -838,18 +842,11 @@ function verificationBlocks(verification: WebVerification): ReportBlock[] {
     });
     return blocks;
   }
-  const blocks: ReportBlock[] = [
-    {
-      text: `Not confirmed at the source: ${verification.claim}`,
-      style: 'subheading',
-      noProof: true,
-    },
-    { text: verification.note, style: 'note' },
-  ];
-  for (const url of verification.claimedAt.slice(0, 4)) {
-    blocks.push({ text: `Claimed at: ${url}`, link: url, style: 'citation' });
-  }
-  return blocks;
+  const who =
+    verification.status === 'not_checked'
+      ? 'The issuing body’s own site was not searched in this investigation, so the claim is reported as made and not confirmed at the source.'
+      : verification.note;
+  return [{ text: who, style: 'note' }];
 }
 
 /**
@@ -861,6 +858,7 @@ function withWebFindings(
   routed: Map<RoutedSectionId, RoutedFinding[]>,
   dossier: WebResearchDossier | null,
   statuses: ReportSourceStatus[],
+  expertName?: string,
 ): ReportSectionModel {
   if (!isRoutedSection(section.id)) return section;
   const own = section.blocks.filter((block) => block.text !== EMPTY);
@@ -883,6 +881,7 @@ function withWebFindings(
         dossier,
         section.id,
         structuredCoverage(section.id, statuses),
+        expertName,
       ),
       style: 'note',
     });
@@ -921,6 +920,7 @@ function backgroundSection(
   const items = claimEvidence(tracker, {
     categories: ['identity', 'profile', 'specialty', 'location'],
     providers: ['web_search', 'orcid'],
+    excludeHints: ['web research coverage'],
   });
   const blocks = identityBlocks(identity);
   if (items.length > 0) {
@@ -1110,7 +1110,7 @@ function summarySection(
   }
   if (webLines.length > 0) {
     blocks.push({
-      text: 'From the web research (each line names its source in the section it belongs to):',
+      text: 'Selected findings (each is sourced in its section):',
       style: 'note',
     });
   }
@@ -1161,14 +1161,12 @@ function webSummaryLines(
     const quote = lead.quote ? ` “${lead.quote.slice(0, 150).trim()}”` : '';
     const more =
       list.length > 1 ? ` (${list.length} items in the section)` : '';
-    lines.push(
-      `${plainTitle(sectionId)}: ${lead.title}.${quote} ${lead.basisLabel}.${more}`,
-    );
+    lines.push(`${plainTitle(sectionId)}: ${lead.title}.${quote}${more}`);
   }
   for (const verification of dossier?.verifications ?? []) {
     if (verification.status === 'confirmed') {
       lines.push(
-        `${verification.claim}: confirmed at ${verification.confirmedBy?.name ?? 'the issuing body'}.`,
+        `${verification.claim}: confirmed on ${verification.confirmedBy?.name ?? 'the issuing body'}.`,
       );
     } else {
       lines.push(
@@ -1807,44 +1805,6 @@ function legalMattersSection(
   };
 }
 
-const WEB_KIND_TEXT: Record<string, string> = {
-  social: 'Social media',
-  news: 'News',
-  blog: 'Blog',
-  directory: 'Directory',
-  review: 'Review',
-  video: 'Video',
-  presentation: 'Presentation',
-  court: 'Court record',
-  justia: 'Justia',
-  corporate: 'Corporate record',
-  publication: 'Publication',
-  university: 'University',
-  expert_website: 'Expert website',
-  advertising: 'Advertising',
-  ime: 'IME / expert services',
-  maps: 'Maps listing',
-  profile: 'Profile',
-  other: 'Web page',
-};
-
-const WEB_CLAIM_TEXT: Record<string, string> = {
-  advertising: 'Advertising claim',
-  forensic: 'Forensic work claim',
-  credential: 'Credential claim',
-  allegation: 'Allegation (not adjudicated)',
-  rating: 'Rating',
-  other: 'Statement',
-};
-
-const WEB_MATCH_TEXT: Record<string, string> = {
-  strong: 'strong match',
-  possible: 'possible match',
-  weak: 'weak match',
-  other_person: 'different person',
-  none: 'no match',
-};
-
 function webDate(value: string | null | undefined): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -1852,12 +1812,10 @@ function webDate(value: string | null | undefined): string | null {
 }
 
 function webRecordBlocks(record: WebRecord): ReportBlock[] {
-  const kind = WEB_KIND_TEXT[record.kind] ?? record.kind;
-  const platform = record.platform ? ` · ${record.platform}` : '';
   const published = webDate(record.publishedAt);
   const blocks: ReportBlock[] = [
     {
-      text: `[${kind}${platform}] ${record.title || record.url}${published ? ` (published ${published})` : ''}`,
+      text: `${record.title || record.url}${published ? ` (${published})` : ''}`,
       style: 'item',
     },
   ];
@@ -1865,13 +1823,8 @@ function webRecordBlocks(record: WebRecord): ReportBlock[] {
   if (description) blocks.push({ text: description });
   if (record.match.quote) {
     blocks.push({
-      text: `Page text tying it to the expert: “${record.match.quote}”${record.match.quoteVerified ? '' : ' (quote not confirmed on the page)'}`,
+      text: `“${record.match.quote}”${record.match.quoteVerified ? '' : ' (quote not confirmed on the page)'}`,
       style: 'citation',
-    });
-  }
-  for (const claim of record.claims) {
-    blocks.push({
-      text: `${WEB_CLAIM_TEXT[claim.type] ?? 'Statement'}: ${claim.text}${claim.quote ? ` — “${claim.quote}”` : ''}`,
     });
   }
   if (record.match.conflicts.length > 0) {
@@ -1880,18 +1833,12 @@ function webRecordBlocks(record: WebRecord): ReportBlock[] {
       style: 'note',
     });
   }
-  const access =
-    record.read === 'read'
-      ? 'page read'
-      : record.read === 'snippet_only'
-        ? 'search snippet only; the page was not read'
-        : record.read === 'restricted'
-          ? 'restricted; the page was not read'
-          : 'page not read';
-  blocks.push({
-    text: `${WEB_MATCH_TEXT[record.match.level] ?? record.match.level}${record.match.confidence ? ` (${record.match.confidence} confidence)` : ''} · ${access}${record.readNote ? ` (${record.readNote})` : ''} · retrieved ${webDate(record.retrievedAt) ?? 'unknown'}`,
-    style: 'citation',
-  });
+  if (record.read === 'restricted' || record.read === 'failed') {
+    blocks.push({
+      text: record.readNote ?? 'The page could not be read.',
+      style: 'note',
+    });
+  }
   blocks.push({ text: record.url, link: record.url, style: 'citation' });
   if (record.archiveUrl) {
     blocks.push({
@@ -1943,13 +1890,12 @@ function webCandidateBlocks(
     }
     return blocks;
   }
-  for (const record of records) blocks.push(...webRecordBlocks(record));
   return blocks;
 }
 
 /**
- * Global web research. Same-name people are listed separately and are never
- * merged; every record carries its URL, date and the page text behind it.
+ * Same-name people, leftover pages, and sources that could not be read.
+ * Search mechanics stay in application logs, not in this section.
  */
 function webResearchSection(
   spec: EwiReportSectionSpec,
@@ -1971,124 +1917,75 @@ function webResearchSection(
   }
   if (!dossier) {
     blocks.push({
-      text: 'The global web search did not run for this investigation, so news, social media, reviews, advertising and corporate pages were not searched. This is not a finding that none exist.',
+      text: 'The global web search did not run for this investigation.',
       style: 'note',
     });
     return { id: spec.id, title: spec.title, blocks };
   }
 
-  blocks.push({
-    text: `${dossier.queriesRun} search request(s) were sent on ${webDate(dossier.ranAt) ?? 'an unknown date'}${dossier.queriesPlanned > 0 ? ` (${dossier.queriesPlanned} were planned up front; retries, headline look-ups and second-round searches of official sites account for the difference)` : ''}. ${dossier.pagesRead} page(s) were read in full and ${dossier.records.length} web record(s) were found.`,
-  });
-  const coverage = (dossier.topics ?? []).filter((t) => t.queries > 0);
-  if (coverage.length > 0) {
-    blocks.push({
-      text: `Targeted searches by topic: ${coverage
-        .map(
-          (t) =>
-            `${t.topic.replace(/_/g, ' ')} (${t.queries} searches, ${t.hits} results)`,
-        )
-        .join('; ')}.`,
-      style: 'citation',
-    });
-  }
-  if (dossier.partial) {
-    blocks.push({
-      text:
-        dossier.partialNote ??
-        'The web search stopped before every planned search finished, so some sources may be missing.',
-      style: 'note',
-    });
-  }
-
+  const others = dossier.candidates.filter(
+    (candidate) => candidate.role === 'other',
+  );
   const byId = new Map(dossier.records.map((record) => [record.id, record]));
-  const grouped = new Set<string>();
-  if (dossier.candidates.length > 1) {
+  if (others.length > 0) {
     blocks.push({
-      text: `${dossier.candidates.length} different people share this name in the web results. Each is listed separately below and was not merged with the others.`,
+      text: `${others.length} other ${others.length === 1 ? 'person' : 'people'} with a similar name ${others.length === 1 ? 'was' : 'were'} found and kept separate.`,
       style: 'note',
     });
   }
-  for (const candidate of dossier.candidates) {
+  for (const candidate of others) {
     const records = candidate.recordIds
       .map((id) => byId.get(id))
       .filter((record): record is WebRecord => Boolean(record));
-    for (const record of records) grouped.add(record.id);
     blocks.push(...webCandidateBlocks(candidate, records));
   }
-  const loose = dossier.records.filter(
+
+  const otherIds = new Set(others.flatMap((candidate) => candidate.recordIds));
+  const leftover = dossier.records.filter(
     (record) =>
-      !grouped.has(record.id) &&
+      !otherIds.has(record.id) &&
       record.match.level !== 'other_person' &&
-      record.match.level !== 'none',
+      record.match.level !== 'none' &&
+      record.match.level !== 'strong' &&
+      record.kind !== 'social',
   );
-  if (loose.length > 0) {
+  if (leftover.length > 0) {
     blocks.push({
-      text: 'Pages that could not be tied to one person',
+      text: 'Other public pages',
       style: 'subheading',
     });
-    for (const record of loose) blocks.push(...webRecordBlocks(record));
+    for (const record of leftover.slice(0, 12)) {
+      blocks.push(...webRecordBlocks(record));
+    }
   }
-  if (dossier.candidates.length === 0 && loose.length === 0) {
+
+  if (dossier.pagesBlocked.length > 0) {
     blocks.push({
-      text: 'No web page was confirmed to concern this expert in the searches that ran. This is not proof that nothing exists; see the coverage below.',
+      text: 'Pages that could not be read',
+      style: 'subheading',
+    });
+    for (const page of dossier.pagesBlocked.slice(0, 15)) {
+      blocks.push({
+        text: `${page.url} — ${page.reason}`,
+        link: page.url,
+        style: 'citation',
+      });
+    }
+  }
+  for (const registry of dossier.registries) {
+    if (registry.status === 'checked' && !registry.message) continue;
+    blocks.push({
+      text: registry.message,
+      ...(registry.url ? { link: registry.url } : {}),
       style: 'note',
     });
   }
 
-  if ((dossier.verifications ?? []).length > 0) {
+  if (blocks.length === 0) {
     blocks.push({
-      text: 'Credential claims compared with the issuing body',
-      style: 'subheading',
+      text: 'No additional public pages remained after the findings above were assigned to their sections.',
+      style: 'note',
     });
-    for (const verification of dossier.verifications ?? []) {
-      const status =
-        verification.status === 'confirmed'
-          ? 'Confirmed at the source'
-          : verification.status === 'not_confirmed'
-            ? 'Not confirmed at the source'
-            : 'Not checked at the source';
-      blocks.push({
-        text: `${verification.claim}: ${status}. ${verification.note}`,
-        noProof: true,
-      });
-    }
-  }
-
-  blocks.push({ text: 'Search coverage', style: 'subheading' });
-  for (const provider of dossier.providers) {
-    const detail = !provider.configured
-      ? 'not configured'
-      : provider.failures.length > 0
-        ? `issues: ${provider.failures
-            .slice(0, 2)
-            .map((failure) => failure.message)
-            .join('; ')}`
-        : 'completed';
-    blocks.push({
-      text: `${provider.name}: ${provider.requests} request(s), ${provider.hits} hit(s), ${detail}`,
-      style: 'citation',
-    });
-  }
-  for (const registry of dossier.registries) {
-    blocks.push({
-      text: `${registry.name}: ${registry.message}`,
-      ...(registry.url ? { link: registry.url } : {}),
-      style: 'citation',
-    });
-  }
-  for (const page of dossier.pagesBlocked.slice(0, 25)) {
-    blocks.push({
-      text: `Not read: ${page.url} — ${page.reason}`,
-      link: page.url,
-      style: 'citation',
-    });
-  }
-  if (dossier.limitations.length > 0) {
-    blocks.push({ text: 'Limitations', style: 'subheading' });
-    for (const limitation of dossier.limitations) {
-      blocks.push({ text: limitation, style: 'note' });
-    }
   }
   return { id: spec.id, title: spec.title, blocks };
 }

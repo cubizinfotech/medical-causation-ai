@@ -73,32 +73,46 @@ export class PubMedResearchProvider extends LiveResearchProvider {
         message: `PubMed returned ${ids.length} id(s) for ${name.last}, but none of the author lists matched the expert’s initials. Nothing was attributed.`,
       };
     }
-    const affiliations = await this.affiliations(
+    const xmlBundle = await this.fetchXml(
       matched.map((article) => article.uid ?? '').filter(Boolean),
-      name,
     );
+    const affiliations = xmlBundle
+      ? parseAuthorAffiliations(xmlBundle, name)
+      : new Map<string, string[]>();
+    const grantsByPmid = xmlBundle
+      ? parseArticleGrants(xmlBundle)
+      : new Map<string, ArticleGrant[]>();
     const confirmed: string[] = [];
     const unconfirmed: string[] = [];
-    const items = matched.map((article) => {
+    const items = matched.flatMap((article) => {
       const listed = affiliations.get(article.uid ?? '') ?? [];
       const agreement = affiliationAgrees(listed, query);
       (agreement ? confirmed : unconfirmed).push(
         `“${article.title ?? 'Untitled'}”${article.pubdate ? ` (${article.pubdate.slice(0, 4)})` : ''}`,
       );
-      return this.articleItem(
+      const grants = grantsByPmid.get(article.uid ?? '') ?? [];
+      const publication = this.articleItem(
         article,
         name,
         retrievedAt,
         listed,
         agreement,
         query,
+        grants,
       );
+      if (!agreement || grants.length === 0) return [publication];
+      return [
+        publication,
+        ...grants
+          .slice(0, 3)
+          .map((grant) => this.fundingItem(article, grant, retrievedAt, query)),
+      ];
     });
     const checked = affiliations.size > 0;
     return {
       items,
       message: [
-        `${items.length} PubMed article(s) list an author matching ${name.last} and the expert’s initials.`,
+        `${matched.length} PubMed article(s) list an author matching ${name.last} and the expert’s initials.`,
         confirmed.length > 0
           ? `${confirmed.length} also list an affiliation that agrees with the expert’s place, specialty or note and are attributed to the expert.`
           : null,
@@ -113,12 +127,8 @@ export class PubMedResearchProvider extends LiveResearchProvider {
     };
   }
 
-  /** Affiliation strings listed for the expert's own author entry, by PMID. */
-  private async affiliations(
-    pmids: string[],
-    name: PersonName,
-  ): Promise<Map<string, string[]>> {
-    if (pmids.length === 0) return new Map();
+  private async fetchXml(pmids: string[]): Promise<string | null> {
+    if (pmids.length === 0) return null;
     try {
       const url = this.endpoint('efetch.fcgi', { id: pmids.join(',') });
       url.searchParams.set('retmode', 'xml');
@@ -126,10 +136,10 @@ export class PubMedResearchProvider extends LiveResearchProvider {
         headers: { Accept: 'application/xml' },
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-      if (!response.ok) return new Map();
-      return parseAuthorAffiliations(await response.text(), name);
+      if (!response.ok) return null;
+      return await response.text();
     } catch {
-      return new Map();
+      return null;
     }
   }
 
@@ -172,6 +182,34 @@ export class PubMedResearchProvider extends LiveResearchProvider {
     return url;
   }
 
+  private fundingItem(
+    article: PubMedSummary,
+    grant: ArticleGrant,
+    retrievedAt: string,
+    query: ExpertResearchQuery,
+  ): ExpertEvidenceItem {
+    const pmid = article.uid ?? '';
+    const label = [grant.id, grant.agency].filter(Boolean).join(' — ');
+    return this.item({
+      category: 'grant',
+      title: label || 'Grant listed on a PubMed article',
+      summary: [
+        `PubMed lists ${label || 'grant support'} on “${article.title ?? 'Untitled'}”.`,
+        'The expert is named as an author on that paper.',
+        'This is not a finding that the expert was the principal investigator or personally received the award.',
+      ].join(' '),
+      url: pmid ? `https://pubmed.ncbi.nlm.nih.gov/${pmid}/` : undefined,
+      retrievedAt,
+      informationStatus: 'unverified',
+      raw: {
+        pmid,
+        grantId: grant.id,
+        agency: grant.agency,
+        identity: { name: query.expertName, verifiedBy: 'source_match' },
+      },
+    });
+  }
+
   private articleItem(
     article: PubMedSummary,
     name: PersonName,
@@ -179,6 +217,7 @@ export class PubMedResearchProvider extends LiveResearchProvider {
     affiliations: string[],
     agreement: string | null,
     query: ExpertResearchQuery,
+    grants: ArticleGrant[] = [],
   ): ExpertEvidenceItem {
     const pmid = article.uid ?? '';
     const authors = (article.authors ?? [])
@@ -202,6 +241,16 @@ export class PubMedResearchProvider extends LiveResearchProvider {
         agreement
           ? `The affiliation agrees with the expert (${agreement}). An affiliation is not proof of identity.`
           : 'No affiliation that agrees with the expert’s place or specialty was found, so it is not proof the article belongs to this expert.',
+        grants.length > 0
+          ? `The article lists grant support: ${grants
+              .slice(0, 4)
+              .map((grant) =>
+                [grant.id, grant.agency].filter(Boolean).join(' '),
+              )
+              .join(
+                '; ',
+              )}. Being named as an author on a funded paper is not a personal grant award.`
+          : null,
       ]
         .filter(Boolean)
         .join(' '),
@@ -214,6 +263,7 @@ export class PubMedResearchProvider extends LiveResearchProvider {
         journal,
         pubdate: article.pubdate ?? null,
         affiliations,
+        grants,
         ...(agreement
           ? {
               identity: {
@@ -288,6 +338,38 @@ export function parseAuthorAffiliations(
       }
     }
     if (found.length > 0) out.set(pmid, found);
+  }
+  return out;
+}
+
+export interface ArticleGrant {
+  id: string;
+  agency: string;
+}
+
+/** GrantList entries on each article, by PMID. Article-level, not PI proof. */
+export function parseArticleGrants(xml: string): Map<string, ArticleGrant[]> {
+  const out = new Map<string, ArticleGrant[]>();
+  for (const article of xml.split(/<PubmedArticle>/).slice(1)) {
+    const pmid = article.match(/<PMID[^>]*>(\d+)<\/PMID>/)?.[1];
+    if (!pmid) continue;
+    const grants: ArticleGrant[] = [];
+    const seen = new Set<string>();
+    for (const block of article.matchAll(
+      /<Grant\b[^>]*>([\s\S]*?)<\/Grant>/g,
+    )) {
+      const id = decodeXml(
+        block[1].match(/<GrantID>([\s\S]*?)<\/GrantID>/)?.[1] ?? '',
+      );
+      const agency = decodeXml(
+        block[1].match(/<Agency>([\s\S]*?)<\/Agency>/)?.[1] ?? '',
+      );
+      const key = `${id}|${agency}`;
+      if ((!id && !agency) || seen.has(key)) continue;
+      seen.add(key);
+      grants.push({ id, agency });
+    }
+    if (grants.length > 0) out.set(pmid, grants);
   }
   return out;
 }

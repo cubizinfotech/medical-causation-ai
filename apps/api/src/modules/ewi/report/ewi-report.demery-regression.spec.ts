@@ -247,12 +247,10 @@ describe('Demery report regression', () => {
     );
     expect(membership?.status).toBe('confirmed');
     expect(membership?.confirmedBy?.url).toBe(AACN);
-    expect(sectionText(document, 'board-certifications')).toContain(
-      'Not confirmed at the source',
+    expect(sectionText(document, 'board-certifications')).toMatch(
+      /not confirmed at the source/i,
     );
-    expect(sectionText(document, 'memberships')).toContain(
-      'Confirmed at the source',
-    );
+    expect(sectionText(document, 'memberships')).toMatch(/Confirmed on/);
   });
 
   it('lists degrees and the degree-granting institutions without claiming accreditation', () => {
@@ -279,31 +277,41 @@ describe('Demery report regression', () => {
     );
   });
 
-  it('never prints the generic empty line; empty sections say what was searched', () => {
+  it('never prints the generic empty line; empty sections use professional language', () => {
     const everything = document.sections
       .flatMap((section) => section.blocks.map((block) => block.text))
       .join('\n');
     expect(everything).not.toContain(GENERIC);
+    expect(everything).not.toContain('Search coverage');
+    expect(everything).not.toContain('[Court record]');
+    expect(everything).not.toMatch(/targeted web search/);
+    expect(everything).not.toMatch(/A search cannot prove that nothing exists/);
     for (const id of ['grants', 'patents', 'criminal', 'board-actions']) {
-      expect(sectionText(document, id)).toMatch(/targeted web search/);
-      expect(sectionText(document, id)).toMatch(/cannot prove/);
+      expect(sectionText(document, id)).toMatch(
+        /did not establish|was not searched/,
+      );
     }
+  });
+
+  it('files IME language from the practice site', () => {
+    expect(sectionText(document, 'ime')).toMatch(
+      /independent medical|forensic neuropsychological/i,
+    );
+    expect(sectionText(document, 'ime')).not.toContain(GENERIC);
   });
 
   it('reports a blocked registry as not read, not as absent', () => {
     const registry = dossier.records.find((record) => record.url === SUNBIZ);
     expect(registry?.read).toBe('restricted');
     expect(sectionText(document, 'web-research')).toMatch(
-      /restricted; the page was not read/,
-    );
-    expect(sectionText(document, 'web-research')).toMatch(
-      /Florida corporate records were not checked; this does not mean none exist/,
+      /could not be read|bot-protection|403/,
     );
   });
 
-  it('counts requests without printing more runs than were planned', () => {
+  it('does not print search-request counts in the client report', () => {
     const text = sectionText(document, 'web-research');
     expect(text).not.toMatch(/\d+ of \d+ planned/);
-    expect(text).toMatch(/search request\(s\) were sent/);
+    expect(text).not.toMatch(/search request\(s\) were sent/);
+    expect(text).toMatch(/different person|other person|Jason B\. Demery/);
   });
 });

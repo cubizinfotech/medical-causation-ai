@@ -43,6 +43,16 @@ export interface SearchHit {
   query: string;
   kind: WebSearchKind;
   place?: SearchPlace;
+  /**
+   * Model sentence about this page from a grounded search. A research lead
+   * only: it is not a finding until a fetched page supports it.
+   */
+  lead?: string;
+  /**
+   * Full grounded answer for this query (set on the first hit). A lead, not
+   * a finding.
+   */
+  answer?: string;
 }
 
 export type SearchFailureKind =
@@ -150,6 +160,7 @@ export type WebClaimTopic =
   | 'deposition'
   | 'testimony'
   | 'criminal'
+  | 'university_rules'
   | 'other';
 
 export const WEB_CLAIM_TOPICS: readonly WebClaimTopic[] = [
@@ -175,6 +186,7 @@ export const WEB_CLAIM_TOPICS: readonly WebClaimTopic[] = [
   'deposition',
   'testimony',
   'criminal',
+  'university_rules',
   'other',
 ];
 
@@ -324,6 +336,20 @@ export interface WebResearchDossier {
   companies?: WebCompanyTie[];
   /** Credential claims compared with the issuing bodies. */
   verifications?: WebVerification[];
+  /**
+   * A public photo of the subject, only when a fetched page about this
+   * person published one. Not present when none could be read.
+   */
+  portrait?: ExpertPortrait | null;
+}
+
+export interface ExpertPortrait {
+  dataUrl: string;
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
+  /** Page the photo was taken from. */
+  sourceUrl: string;
+  /** The image file itself. */
+  imageUrl: string;
 }
 
 export interface WebResearchSettings {

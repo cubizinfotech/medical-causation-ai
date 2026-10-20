@@ -96,6 +96,16 @@ export type PaintOp =
       name: string;
       outline?: string;
       layer: number;
+    }
+  | {
+      kind: 'image';
+      page: number;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      data: Buffer;
+      layer: number;
     };
 
 export type TextOp = Extract<PaintOp, { kind: 'text' }>;

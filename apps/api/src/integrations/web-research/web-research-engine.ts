@@ -17,13 +17,16 @@ import {
 import { excerptAround } from './page-text';
 import {
   basisFor,
+  claimText,
   extractFacts,
   factsFromSnippet,
+  isHeadingClaim,
   isOwnPage,
   organizationsIn,
   sentencesOf,
 } from './claim-topics';
 import { planFollowUps, planQueries, type PlannedQuery } from './query-planner';
+import { extractResearchLeads } from './research-leads';
 import { verifyClaims, type SearchedSource } from './verify-claims';
 import { parseCityState } from '../expert-research/live/location';
 import {
@@ -47,6 +50,7 @@ import {
   type SearchHit,
   type SearchProvider,
   type PageReadStatus,
+  type ExpertPortrait,
   type WebBlockedPage,
   type WebClaim,
   type WebCompanyTie,
@@ -212,7 +216,20 @@ export function mergeClaims(
   model: readonly WebClaim[],
   facts: readonly WebClaim[],
 ): WebClaim[] {
-  const out: WebClaim[] = [...model];
+  const out: WebClaim[] = model
+    .filter((claim) => !isHeadingClaim(claim.quote || claim.text))
+    .map((claim) =>
+      claim.topic === 'grant'
+        ? {
+            ...claim,
+            text: claimText(
+              'grant',
+              claim.quote || claim.text,
+              claim.basis ?? 'third_party',
+            ),
+          }
+        : claim,
+    );
   for (const fact of facts) {
     const quote = normalizeText(fact.quote);
     const duplicate = out.some((existing) => {
@@ -432,6 +449,7 @@ export class WebResearchEngine {
       topicStats.set(topic, entry);
     };
     const searchedSources: SearchedSource[] = [];
+    const answers: string[] = [];
 
     const addHit = (hit: SearchHit) => {
       let host = '';
@@ -443,6 +461,7 @@ export class WebResearchEngine {
       if (SEARCH_ENGINE_HOSTS.test(host) && !/\/maps\b/.test(hit.url)) {
         if (!/news\.google\.com$/.test(host)) return;
       }
+      if (hit.answer) answers.push(hit.answer);
       const key = canonicalUrl(hit.url);
       const page =
         pool.get(key) ??
@@ -740,17 +759,23 @@ export class WebResearchEngine {
     const followBy = started + settings.deadlineMs * 0.7;
     if (this.now() < followBy) {
       const acronyms = new Set<string>();
+      const pageTexts: string[] = [...answers];
       for (const page of pages) {
         const fetched = reads.get(page.id);
         if (fetched?.status !== 'read' || !fetched.text) continue;
         if (!fetched.text.toLowerCase().includes(surname)) continue;
+        pageTexts.push(fetched.text.slice(0, 8000));
         for (const org of organizationsIn(fetched.text)) {
           if (org.acronym) acronyms.add(org.acronym);
         }
       }
+      const leads = extractResearchLeads(pageTexts);
       const followPlans = planFollowUps(subject, {
         acronyms: [...acronyms],
         state: subjectState || null,
+        programs: leads.programs,
+        institutions: leads.institutions,
+        searchNih: true,
       });
       const followProviders = configured
         .filter(
@@ -1177,6 +1202,12 @@ export class WebResearchEngine {
       'A web search cannot prove that something does not exist. "Not found" means not found in what these search engines returned today.',
     );
 
+    const portrait = await this.readSubjectPortrait(
+      finalRecords,
+      reads,
+      subject.name.last,
+    );
+
     return {
       ranAt: new Date(started).toISOString(),
       durationMs: this.now() - started,
@@ -1208,6 +1239,75 @@ export class WebResearchEngine {
             topics: ['corporate'] as const,
           })),
       ]),
+      ...(portrait ? { portrait } : {}),
     };
+  }
+
+  /**
+   * One public photo from a page already judged to be about this person.
+   * News, court, video and social pages are never used.
+   */
+  private async readSubjectPortrait(
+    records: readonly WebRecord[],
+    reads: Map<string, FetchedPage>,
+    surname: string,
+  ): Promise<ExpertPortrait | null> {
+    if (typeof this.fetcher.fetchImage !== 'function') return null;
+    const kindRank: Partial<Record<WebSourceKind, number>> = {
+      expert_website: 0,
+      advertising: 1,
+      ime: 1,
+      profile: 2,
+      directory: 3,
+      university: 4,
+      other: 5,
+    };
+    const ranked = [...records]
+      .filter(
+        (record) =>
+          (record.match.level === 'strong' ||
+            record.match.level === 'possible') &&
+          record.read === 'read' &&
+          kindRank[record.kind] !== undefined,
+      )
+      .sort(
+        (a, b) =>
+          (a.match.level === 'strong' ? 0 : 1) -
+            (b.match.level === 'strong' ? 0 : 1) ||
+          (kindRank[a.kind] ?? 9) - (kindRank[b.kind] ?? 9),
+      )
+      .slice(0, 6);
+    const surnameRe = new RegExp(
+      `\\b${surname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+      'i',
+    );
+    const ownKinds = new Set([
+      'expert_website',
+      'advertising',
+      'ime',
+      'profile',
+      'other',
+    ]);
+    for (const record of ranked) {
+      const fetched = reads.get(record.id);
+      if (!fetched?.portraits?.length) continue;
+      const usable = fetched.portraits.filter((candidate) => {
+        if (candidate.via === 'img' || candidate.via === 'jsonld') {
+          return Boolean(candidate.label && surnameRe.test(candidate.label));
+        }
+        return ownKinds.has(record.kind);
+      });
+      for (const candidate of usable.slice(0, 3)) {
+        const image = await this.fetcher.fetchImage(candidate.url);
+        if (!image) continue;
+        return {
+          dataUrl: `data:${image.mimeType};base64,${image.bytes.toString('base64')}`,
+          mimeType: image.mimeType,
+          sourceUrl: record.url,
+          imageUrl: image.url,
+        };
+      }
+    }
+    return null;
   }
 }

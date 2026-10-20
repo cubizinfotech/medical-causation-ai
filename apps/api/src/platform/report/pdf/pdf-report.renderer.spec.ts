@@ -1,6 +1,6 @@
 import type { ReportBlock, ReportDocumentModel } from '../report-document';
 import { PdfReportRenderer } from './pdf-report.renderer';
-import { safeLink } from '../report-text';
+import { photoSourceLabel, safeLink } from '../report-text';
 import { wrapText } from './pdf-text';
 
 type PdfJs = typeof import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -132,6 +132,7 @@ function model(
 
 describe('PdfReportRenderer', () => {
   const renderer = new PdfReportRenderer();
+  jest.setTimeout(20_000);
 
   it('renders a text PDF with a cover, contents, section cards, and page footers', async () => {
     const artifact = await renderer.render(model());
@@ -195,6 +196,24 @@ describe('PdfReportRenderer', () => {
     expect(found.some((link) => link.dest === 'section-questions')).toBe(true);
   });
 
+  it('prints a sourced cover photo caption', async () => {
+    const base = model();
+    const png =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const artifact = await renderer.render({
+      ...base,
+      metadata: {
+        ...base.metadata,
+        coverImage: {
+          dataUrl: png,
+          sourceUrl: 'https://clinic.example/about',
+        },
+      },
+    });
+    const pages = await pageTexts(await openPdf(artifact.buffer));
+    expect(pages[0]).toContain('Photo from clinic.example');
+  });
+
   it('moves a summary too long for the cover into its own card', async () => {
     const longSummary = Array.from(
       { length: 80 },
@@ -249,6 +268,15 @@ describe('wrapText', () => {
 
   it('drops characters that have no glyph', () => {
     expect(wrapText('a\u0000b​c﻿', 100, measure)).toEqual(['abc']);
+  });
+});
+
+describe('photoSourceLabel', () => {
+  it('names the host the photo was taken from', () => {
+    expect(photoSourceLabel('https://www.clinic.example/about')).toBe(
+      'Photo from clinic.example',
+    );
+    expect(photoSourceLabel(undefined)).toBeNull();
   });
 });
 

@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { EwiInvestigationResult } from "@/features/ewi/types";
 import { InvestigationResults } from "./investigation-results";
+import { InvestigationSummaryDashboard } from "./investigation-summary-dashboard";
 
 /** A saved investigation in which every source came back empty. */
 const savedSummary = [
@@ -68,5 +69,44 @@ describe("InvestigationResults findings", () => {
     expect(html).not.toMatch(/Could not verify|Nothing was inferred/);
     expect(html).not.toContain("No verified identity profile findings");
     expect(html).not.toContain("No education, license, or board certification");
+  });
+
+  it("shows a sourced expert photo when web research found one", () => {
+    const html = renderToStaticMarkup(
+      createElement(InvestigationSummaryDashboard, {
+        expertName: result.expertName,
+        city: result.city,
+        specialty: result.specialty,
+        status: "completed",
+        startedAt: "2026-10-20T00:00:00.000Z",
+        completedAt: "2026-10-20T00:10:00.000Z",
+        result: {
+          ...result,
+          webResearch: {
+            ranAt: "2026-10-20T00:00:00.000Z",
+            durationMs: 1,
+            partial: false,
+            partialNote: null,
+            queriesPlanned: 1,
+            queriesRun: 1,
+            providers: [],
+            pagesRead: 1,
+            pagesBlocked: [],
+            candidates: [],
+            records: [],
+            registries: [],
+            limitations: [],
+            portrait: {
+              dataUrl: "data:image/png;base64,aaa",
+              mimeType: "image/png",
+              sourceUrl: "https://clinic.example/about",
+              imageUrl: "https://clinic.example/jason.png",
+            },
+          },
+        },
+      }),
+    );
+    expect(html).toContain("data:image/png;base64,aaa");
+    expect(html).toContain("Photo from clinic.example");
   });
 });

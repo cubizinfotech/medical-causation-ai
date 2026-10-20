@@ -13,8 +13,13 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * with its source, quote and who stands behind it; credential claims are
  * compared with the issuing body; a section with no finding says what was
  * searched and what limited the search instead of one generic line.
+ * 3.4.0: attorney-facing copy — professional empty sections, natural finding
+ * prose with hyperlinks, no search-log dump in section 39; Gemini answers
+ * are treated as leads and verified before they appear.
+ * 3.4.1: a public photo of the expert is shown on the cover when a sourced
+ * page published one.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.3.0';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.4.1';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis and other licensed PDFs are not stored unless legally permitted.';

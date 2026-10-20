@@ -38,6 +38,7 @@ export const TOPIC_LABEL: Record<WebClaimTopic, string> = {
   deposition: 'Deposition',
   testimony: 'Testimony',
   criminal: 'Criminal record',
+  university_rules: 'University rule or policy',
   other: 'Other',
 };
 
@@ -269,6 +270,34 @@ interface TopicRule {
   kinds?: readonly WebSourceKind[];
   /** Also requires this pattern in the sentence. */
   and?: RegExp;
+  /** Drop the sentence when this pattern also matches. */
+  unless?: RegExp;
+}
+
+/**
+ * Navigation labels and section headings are not findings. "Clinical Trials,
+ * Grants & Patents" on a directory is not a patent; "Award Winning Hospitals"
+ * on WebMD is not an award.
+ */
+export function isHeadingClaim(quote: string): boolean {
+  const text = quote.replace(/\s+/g, ' ').replace(/&amp;/g, '&').trim();
+  if (!text) return true;
+  if (
+    /^(certifications?(?:\s*(?:&|and)\s*licenses?)?|licenses?|clinical trials(?:[,& ]+grants?)?(?:[,& ]+patents?)?|grants?(?:\s*(?:&|and)\s*patents?)?|patents?|disciplinary actions?(?:\s*(?:&|and)\s*sanctions?)?|awards?|find a facility|award[- ]winning hospitals)\b/i.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  if (
+    text.length < 40 &&
+    !/\b(is|was|are|were|has|have|holds|held|earned|completed|appointed|testified|provides|offers|lists|serves|served|performs|conducts)\b/i.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  return false;
 }
 
 const COURTISH: readonly WebSourceKind[] = [
@@ -316,7 +345,7 @@ const RULES: readonly TopicRule[] = [
   {
     topic: 'grant',
     pattern:
-      /\b(?:grant (?:from|number|no\.)|funded by|funding from|principal investigator|R\d{2}\s?[A-Z]{2}\d{6})\b/i,
+      /\b(?:grant (?:from|number|no\.|award)|funded by|funding from|research funding|principal investigator|co-investigator|TRACK[- ]?TBI|R\d{2}\s?[A-Z]{2}\d{6}|(?:NIH|NINDS|NIMH|DoD|Department of Defense)\s+(?:grant|funded|support))\b/i,
   },
   { topic: 'patent', pattern: /\bpatent(?:s|ed)?\b|\bUSPTO\b/i },
   {
@@ -342,12 +371,12 @@ const RULES: readonly TopicRule[] = [
   {
     topic: 'ime',
     pattern:
-      /\bindependent (?:medical|psychological|neuropsychological) (?:exam\w*|evaluation\w*)\b|\bcompulsory (?:medical|mental|neuropsychological) exam\w*|\bRule 35\b|\bIMEs?\b/,
+      /\bindependent (?:medical|psychological|neuropsychological) (?:exam\w*|evaluation\w*)\b|\bcompulsory (?:medical|mental|neuropsychological) exam\w*|\bRule 35\b|\bIMEs?\b|\bforensic (?:neuro)?psychological (?:exam\w*|evaluation\w*|assessment\w*)\b|\bmedicolegal (?:exam\w*|evaluation\w*|service\w*)\b/i,
   },
   {
     topic: 'advertising',
     pattern:
-      /\b(?:expert witness services|services (?:include|offered|available)|available (?:for|to)|retained by|we offer|schedule an? (?:appointment|consultation)|evaluations? (?:to|for) (?:attorneys|courts))\b/i,
+      /\b(?:expert witness services|services (?:include|offered|available)|available (?:for|to)|retained by|we offer|schedule an? (?:appointment|consultation)|evaluations? (?:to|for) (?:attorneys|courts|the court)|consult(?:ing|ant)? (?:to|for) (?:attorneys|courts|pharmaceutical|medical device))\b/i,
     kinds: [
       'expert_website',
       'advertising',
@@ -379,6 +408,19 @@ const RULES: readonly TopicRule[] = [
     pattern:
       /\b(?:testified|testimony|took the stand|direct examination|cross-examination|expert witness)\b/i,
     kinds: COURTISH,
+  },
+  {
+    topic: 'criminal',
+    pattern:
+      /\b(?:arrest(?:ed)?|conviction|convicted of|criminal record|criminal history|mugshot|indicted)\b/i,
+    unless:
+      /\b(?:examin(?:e[ds]?|ing)|evaluat\w+|competenc\w+|testif\w+|appoint(?:ed|ment)|the defendant)\b/i,
+  },
+  {
+    topic: 'university_rules',
+    pattern:
+      /\b(?:conflict of interest|outside (?:activity|employment|consulting)|consulting policy|faculty handbook|academic (?:policy|rule)|instructor of record)\b/i,
+    and: /\b(?:University|College|Professor|Faculty|instructor)\b/i,
   },
 ];
 
@@ -491,6 +533,7 @@ const PROFILE_KINDS: ReadonlySet<WebSourceKind> = new Set([
   'university',
   'review',
   'maps',
+  'other',
 ]);
 
 const MAX_PER_TOPIC = 3;
@@ -508,8 +551,8 @@ export function extractFacts(input: FactInput): WebClaim[] {
   const titleNamesSubject = Boolean(input.title && surnameRe.test(input.title));
   const profilePage =
     input.ownPage ||
-    ((PROFILE_KINDS.has(input.kind) || titleNamesSubject) &&
-      surnameRe.test(`${input.title ?? ''} ${input.url}`));
+    (PROFILE_KINDS.has(input.kind) &&
+      (titleNamesSubject || surnameRe.test(input.url)));
 
   const claims: WebClaim[] = [];
   const perTopic = new Map<WebClaimTopic, number>();
@@ -531,9 +574,18 @@ export function extractFacts(input: FactInput): WebClaim[] {
       );
       if (!hit) continue;
       if (rule.and && !rule.and.test(piece)) continue;
+      if (rule.unless && rule.unless.test(piece)) continue;
       // Multi-person pages: the credential sentence must name the subject.
       if (!profilePage && !surnameRe.test(piece)) continue;
+      if (
+        rule.topic === 'university_rules' &&
+        /cell phones?|times new roman|late work|food and drinks/i.test(piece) &&
+        !/\b(instructor|taught by|professor)\b/i.test(piece)
+      ) {
+        continue;
+      }
       const quote = windowAround(piece, hit.index);
+      if (isHeadingClaim(quote)) continue;
       const key = `${rule.topic}|${quote.toLowerCase()}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -544,7 +596,7 @@ export function extractFacts(input: FactInput): WebClaim[] {
       });
       claims.push({
         type: claimTypeFor(rule.topic, basis),
-        text: `${TOPIC_LABEL[rule.topic]}: ${quote}`.slice(0, 400),
+        text: claimText(rule.topic, quote, basis),
         quote,
         topic: rule.topic,
         basis,
@@ -553,6 +605,24 @@ export function extractFacts(input: FactInput): WebClaim[] {
     }
   }
   return claims;
+}
+
+const PI_AWARD =
+  /\b(?:principal investigator|P\.?I\.?\b|awardee|personally (?:awarded|received))\b/i;
+
+export function claimText(
+  topic: WebClaimTopic,
+  quote: string,
+  basis: WebClaimBasis,
+): string {
+  if (topic === 'grant') {
+    const personal = PI_AWARD.test(quote) && basis === 'primary_source';
+    return `${personal ? 'Personal award' : 'Associated with grant-funded research'}: ${quote}`.slice(
+      0,
+      400,
+    );
+  }
+  return `${TOPIC_LABEL[topic]}: ${quote}`.slice(0, 400);
 }
 
 function claimTypeFor(
@@ -620,15 +690,18 @@ export function factsFromSnippet(input: {
       );
       if (!hit) continue;
       if (rule.and && !rule.and.test(piece)) continue;
+      if (rule.unless && rule.unless.test(piece)) continue;
+      if (isHeadingClaim(piece)) continue;
       const key = `${rule.topic}|${piece.toLowerCase()}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      const basis = basisFor(rule.topic, { url: input.url, ownPage: false });
       out.push({
-        type: claimTypeFor(rule.topic, 'third_party'),
-        text: `${TOPIC_LABEL[rule.topic]}: ${piece}`.slice(0, 400),
+        type: claimTypeFor(rule.topic, basis),
+        text: claimText(rule.topic, piece, basis),
         quote: piece,
         topic: rule.topic,
-        basis: basisFor(rule.topic, { url: input.url, ownPage: false }),
+        basis,
         from: 'snippet',
       });
       if (out.length >= 6) return out;

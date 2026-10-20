@@ -10,10 +10,16 @@ import {
 
 const REDIRECT_HOST = 'vertexaisearch.cloud.google.com';
 
+const CLOSER =
+  'Use Google Search. For each page, give its URL and one fact the page itself supports about this exact person. Do not list pages that do not mention the person. Do not treat a website heading, menu or navigation label as a finding. Do not list other people who share a similar name.';
+
+const THOROUGH =
+  /\b(grant|NIH|IME|independent medical|education|degree|criminal|arrest|court|testimony|license|forensic|university|certif)/i;
+
 /**
  * Google Search through Gemini grounding. Uses the existing GEMINI_API_KEY.
- * The model decides the Google queries; the result is the list of pages
- * Google returned, not the model's prose.
+ * Hits are the pages Google grounded. The model's short answer is kept on
+ * those hits as a research lead and is never itself a finding.
  */
 export class GeminiGroundedSearchProvider implements SearchProvider {
   readonly id = 'gemini_grounding';
@@ -49,7 +55,7 @@ export class GeminiGroundedSearchProvider implements SearchProvider {
             role: 'user',
             parts: [
               {
-                text: `${prompt}\n\nUse Google Search. List each page you found with its title and one sentence on what it says about the person. Do not list pages that do not mention the person.`,
+                text: `${prompt}\n\n${CLOSER}`,
               },
             ],
           },
@@ -57,7 +63,7 @@ export class GeminiGroundedSearchProvider implements SearchProvider {
         config: {
           tools: [{ googleSearch: {} }],
           temperature: 0,
-          maxOutputTokens: 1024,
+          maxOutputTokens: THOROUGH.test(prompt) ? 2048 : 1024,
           abortSignal: AbortSignal.timeout(timeoutMs),
         },
       });
@@ -97,6 +103,7 @@ export class GeminiGroundedSearchProvider implements SearchProvider {
       }
     }
 
+    const answer = (response.text ?? '').trim();
     const hits: SearchHit[] = [];
     const seen = new Set<string>();
     for (const [index, chunk] of chunks.entries()) {
@@ -105,13 +112,16 @@ export class GeminiGroundedSearchProvider implements SearchProvider {
       const url = await this.resolve(uri);
       if (!url || seen.has(url)) continue;
       seen.add(url);
+      const lead = snippets.get(index)?.join(' ').slice(0, 600);
       hits.push({
         url,
         title: chunk.web?.title ?? url,
-        snippet: snippets.get(index)?.join(' ').slice(0, 600),
+        snippet: lead,
         providerId: this.id,
         query: request.query,
         kind: request.kind,
+        ...(lead ? { lead } : {}),
+        ...(hits.length === 0 && answer ? { answer } : {}),
       });
     }
     return hits;
