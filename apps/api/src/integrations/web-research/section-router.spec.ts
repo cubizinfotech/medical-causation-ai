@@ -136,6 +136,40 @@ describe('routeWebFindings', () => {
     expect(action?.basisLabel).toMatch(/not established|Reported/);
   });
 
+  it('files a search-listed social profile under Social Media', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'li',
+          'https://www.linkedin.com/company/cleveland-clinic',
+          'social',
+          [],
+          'possible',
+          'cleveland-clinic',
+        ),
+        record(
+          'x',
+          'https://x.com/ClevelandClinic',
+          'social',
+          [],
+          'possible',
+          '@ClevelandClinic',
+        ),
+      ]),
+    );
+    const social = routed.get('social') ?? [];
+    expect(social.map((item) => item.url)).toEqual(
+      expect.arrayContaining([
+        'https://www.linkedin.com/company/cleveland-clinic',
+        'https://x.com/ClevelandClinic',
+      ]),
+    );
+    expect(social.some((item) => /institutional/i.test(item.title))).toBe(true);
+    expect(
+      social.some((item) => /not a personal profile/i.test(item.statement)),
+    ).toBe(true);
+  });
+
   it('never routes a page that is not tied to the expert', () => {
     const routed = routeWebFindings(
       dossier([

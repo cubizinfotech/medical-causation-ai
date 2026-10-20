@@ -27,6 +27,7 @@ import {
 } from './claim-topics';
 import { planFollowUps, planQueries, type PlannedQuery } from './query-planner';
 import { extractResearchLeads } from './research-leads';
+import { extractSocialLeads } from './social-leads';
 import { verifyClaims, type SearchedSource } from './verify-claims';
 import { parseCityState } from '../expert-research/live/location';
 import {
@@ -584,6 +585,19 @@ export class WebResearchEngine {
     const sunbizUrls = new Set(sunbiz.hits.map((h) => canonicalUrl(h.url)));
     for (const hit of sunbiz.hits) addHit(hit);
 
+    for (const answer of answers) {
+      for (const social of extractSocialLeads(answer)) {
+        addHit({
+          url: social.url,
+          title: social.title,
+          snippet: social.context,
+          providerId: 'gemini_grounding',
+          query: 'Social profile named in the grounded search answer',
+          kind: 'web',
+        });
+      }
+    }
+
     // Google News hides publisher addresses. Find each article by its headline
     // so the page itself can be read and the name checked in its text.
     await this.resolveNewsLeads(
@@ -878,6 +892,22 @@ export class WebResearchEngine {
         subject,
         { limitedText: limited },
       );
+      if (assessment.level === 'none') {
+        const social = classifyUrl(page.url, 'web');
+        const socialHaystack =
+          `${page.title} ${page.snippet} ${wordsFromUrl(page.url)}`.toLowerCase();
+        if (social.kind === 'social' && socialHaystack.includes(surname)) {
+          assessment = {
+            ...assessment,
+            level: 'possible',
+            confidence: 'low',
+            basis: [
+              'A search for this person returned this social profile address. The site was not opened because it is shown only to signed-in users. Attribution is from the search result, not from reading the profile.',
+            ],
+            quote: (page.snippet || page.title).slice(0, 280) || null,
+          };
+        }
+      }
       if (assessment.level === 'none' && isNewsLead(page.url)) {
         // A news index returned this headline for a search on the exact name,
         // but the headline does not carry it and the article is not reachable.

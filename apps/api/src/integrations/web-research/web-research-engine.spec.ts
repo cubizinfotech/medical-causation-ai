@@ -318,6 +318,33 @@ describe('WebResearchEngine', () => {
     expect(provider.requests.length).toBe(after);
   });
 
+  it('lists social profile addresses named in a grounded search answer', async () => {
+    const provider = fakeProvider('fake_search', [
+      {
+        ...hit(
+          SUBJECT_URL,
+          'About Dr. Demery',
+          'Dr. Jason A. Demery neuropsychologist',
+        ),
+        answer:
+          'Dr. Jason A. Demery is a neuropsychologist. Official work updates are posted on X/Twitter @UFHealth and LinkedIn https://www.linkedin.com/company/uf-health',
+      },
+    ]);
+    const dossier = await new WebResearchEngine({
+      settings,
+      providers: [provider],
+      fetcher: fakeFetcher(),
+    }).run(query);
+    const urls = dossier.records.map((record) => record.url);
+    expect(urls.some((url) => /x\.com\/UFHealth/i.test(url))).toBe(true);
+    expect(
+      urls.some((url) => /linkedin\.com\/company\/uf-health/i.test(url)),
+    ).toBe(true);
+    const social = dossier.records.filter((record) => record.kind === 'social');
+    expect(social.length).toBeGreaterThan(0);
+    expect(social.every((record) => record.match.level !== 'none')).toBe(true);
+  });
+
   it('keeps a public photo from a page about the expert', async () => {
     const photo = 'https://neuro-clinic.example/jason.png';
     const png = Buffer.from(

@@ -754,6 +754,62 @@ describe('EWI report web research section', () => {
     expect(document.subtitle).toBe('Jason A. Demery — Neuropsychology');
   });
 
+  it('lists search-found social accounts in Social Media', () => {
+    const document = buildEwiReportDocument({
+      ...base,
+      city: 'Cleveland, OH',
+      webResearch: {
+        ranAt: '2026-10-20T00:00:00.000Z',
+        durationMs: 1,
+        partial: false,
+        partialNote: null,
+        queriesPlanned: 1,
+        queriesRun: 1,
+        providers: [],
+        pagesRead: 0,
+        pagesBlocked: [],
+        candidates: [],
+        records: [
+          {
+            ...record(
+              'x1',
+              '@ClevelandClinic',
+              'https://x.com/ClevelandClinic',
+              'possible',
+            ),
+            kind: 'social',
+            platform: 'x',
+            snippet: 'X / Twitter: @ClevelandClinic',
+            read: 'restricted',
+          },
+          {
+            ...record(
+              'li1',
+              'cleveland-clinic',
+              'https://www.linkedin.com/company/cleveland-clinic',
+              'possible',
+            ),
+            kind: 'social',
+            platform: 'linkedin',
+            snippet: 'LinkedIn: Cleveland Clinic',
+            read: 'restricted',
+          },
+        ],
+        registries: [],
+        limitations: [],
+      },
+    });
+    const text =
+      document.sections
+        .find((s) => s.id === 'social')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(text).toContain('https://x.com/ClevelandClinic');
+    expect(text).toContain('linkedin.com/company/cleveland-clinic');
+    expect(text).toMatch(/institutional/i);
+    expect(text).not.toMatch(/did not establish a public social media profile/);
+  });
+
   it('puts a sourced photo on the cover when web research found one', () => {
     const document = buildEwiReportDocument({
       ...base,

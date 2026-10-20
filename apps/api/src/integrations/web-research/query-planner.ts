@@ -177,7 +177,7 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
   });
   add('social', {
     query: `${clause} ${profession} (site:linkedin.com OR site:facebook.com OR site:instagram.com OR site:x.com OR site:twitter.com OR site:tiktok.com)`,
-    prompt: `Find public social media profiles and posts (LinkedIn, Facebook, Instagram, X/Twitter, TikTok, YouTube, Threads, Bluesky) belonging to ${subjectLine}. Give the profile URL and visible handle only for profiles that match this person.`,
+    prompt: `Find public social media profiles (LinkedIn, Facebook, Instagram, X/Twitter, TikTok, Threads, Bluesky) for ${subjectLine}. Give the https URL and visible handle. Include (1) personal profiles of this person and (2) official employer or institutional accounts named as channels for this person's work, labelled institutional not personal. If no personal profile is found, still list the institutional URLs the pages name.`,
   });
   add('business', {
     query: `${clause} ${profession} (LLC OR "P.A." OR PLLC OR Inc OR corporation OR "registered agent" OR sunbiz OR opencorporates)${where}`,

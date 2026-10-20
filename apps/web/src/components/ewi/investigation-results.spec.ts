@@ -71,6 +71,35 @@ describe("InvestigationResults findings", () => {
     expect(html).not.toContain("No education, license, or board certification");
   });
 
+  it("renders two Sunbiz rows that share a title", () => {
+    const html = renderToStaticMarkup(
+      createElement(InvestigationResults, {
+        summary: savedSummary,
+        result: {
+          ...result,
+          evidence: [
+            {
+              sourceId: "corporate_affiliations",
+              category: "corporate",
+              title: "Detail by Officer/Registered Agent Name",
+              summary: "First officer listing.",
+              url: "https://search.sunbiz.org/a",
+            },
+            {
+              sourceId: "corporate_affiliations",
+              category: "corporate",
+              title: "Detail by Officer/Registered Agent Name",
+              summary: "Second officer listing.",
+              url: "https://search.sunbiz.org/b",
+            },
+          ],
+        },
+      }),
+    );
+    expect(html).toContain("First officer listing.");
+    expect(html).toContain("Second officer listing.");
+  });
+
   it("shows a sourced expert photo when web research found one", () => {
     const html = renderToStaticMarkup(
       createElement(InvestigationSummaryDashboard, {

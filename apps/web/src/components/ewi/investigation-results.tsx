@@ -199,6 +199,13 @@ function filterEvidence(
   );
 }
 
+/** Sunbiz and similar sources reuse the same page title for several rows. */
+function evidenceKey(item: EwiEvidenceItem, index: number): string {
+  return [item.sourceId, item.category, item.title, item.url ?? "", index].join(
+    "|",
+  );
+}
+
 export function InvestigationResults(props: {
   summary: string | null;
   result: EwiInvestigationResult | null;
@@ -331,8 +338,8 @@ function InvestigationResultTabs({
             </EmptyCopy>
           ) : (
             <ul className="space-y-4">
-              {evidence.map((item) => (
-                <li key={`${item.sourceId}-${item.title}`} className="text-sm">
+              {evidence.map((item, index) => (
+                <li key={evidenceKey(item, index)} className="text-sm">
                   <FindingItem item={item} />
                 </li>
               ))}
@@ -564,8 +571,8 @@ function InvestigationResultTabs({
             </EmptyCopy>
           ) : (
             <ul className="space-y-4">
-              {publications.map((item) => (
-                <li key={`${item.sourceId}-${item.title}`} className="text-sm">
+              {publications.map((item, index) => (
+                <li key={evidenceKey(item, index)} className="text-sm">
                   <FindingItem item={item} />
                 </li>
               ))}
@@ -583,8 +590,8 @@ function InvestigationResultTabs({
             </EmptyCopy>
           ) : (
             <ul className="space-y-4">
-              {credentials.map((item) => (
-                <li key={`${item.sourceId}-${item.title}`} className="text-sm">
+              {credentials.map((item, index) => (
+                <li key={evidenceKey(item, index)} className="text-sm">
                   <FindingItem item={item} />
                 </li>
               ))}

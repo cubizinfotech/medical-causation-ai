@@ -44,6 +44,14 @@ describe('planQueries', () => {
     }
   });
 
+  it('asks for personal and institutional social profile URLs', () => {
+    const social = planQueries(subject()).find(
+      (plan) => plan.topic === 'social',
+    );
+    expect(social?.request.prompt).toMatch(/institutional/i);
+    expect(social?.request.prompt).toMatch(/https URL/i);
+  });
+
   it('uses the profession and the place to narrow the search', () => {
     const identity = planQueries(subject()).find(
       (plan) => plan.topic === 'identity',

@@ -469,14 +469,21 @@ export function routeWebFindings(
     }
 
     if (record.kind === 'social') {
+      const institutional = /\/company\/|\/school\//i.test(record.url);
+      const platform = record.platform
+        ? record.platform.replace(/^./, (c) => c.toUpperCase())
+        : 'Social';
       push({
         ...base,
         sectionId: 'social',
-        title: record.platform
-          ? `${record.platform.replace(/^./, (c) => c.toUpperCase())} profile`
-          : short(record.title, 90),
-        statement:
-          record.read === 'read'
+        title: institutional
+          ? `Institutional ${platform} page listed in search`
+          : record.platform
+            ? `${platform} profile`
+            : short(record.title, 90),
+        statement: institutional
+          ? 'A search result listed this as an official or employer social account connected to the expert’s work. It is not a personal profile of the expert. The page was not opened because it is shown only to signed-in users.'
+          : record.read === 'read'
             ? record.summary
             : 'A search result listed this profile. The page was not opened because it is shown only to signed-in users.',
         quote: record.match.quote ?? record.snippet,

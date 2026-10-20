@@ -1,5 +1,6 @@
 import { createGeminiClient } from '@ai/utils/gemini-client.util';
 import { classifyGeminiError } from '@ai/utils/gemini-errors.util';
+import { extractSocialLeads } from '../social-leads';
 import {
   SearchProviderError,
   type SearchHit,
@@ -121,9 +122,22 @@ export class GeminiGroundedSearchProvider implements SearchProvider {
         query: request.query,
         kind: request.kind,
         ...(lead ? { lead } : {}),
-        ...(hits.length === 0 && answer ? { answer } : {}),
       });
     }
+    for (const social of extractSocialLeads(answer)) {
+      if (seen.has(social.url)) continue;
+      seen.add(social.url);
+      hits.push({
+        url: social.url,
+        title: social.title,
+        snippet: social.context,
+        providerId: this.id,
+        query: request.query,
+        kind: request.kind,
+        lead: social.context,
+      });
+    }
+    if (hits[0] && answer) hits[0].answer = answer;
     return hits;
   }
 
