@@ -7,6 +7,57 @@ const base = {
 };
 
 describe("expert investigation form", () => {
+  it("requires the name and the specialty or profession", () => {
+    const noName = expertInvestigationSchema.safeParse({ ...base, expertName: " " });
+    expect(noName.success).toBe(false);
+    const noSpecialty = expertInvestigationSchema.safeParse({
+      ...base,
+      specialty: "",
+    });
+    expect(noSpecialty.success).toBe(false);
+    expect(noSpecialty.error?.issues[0]?.message).toMatch(
+      /specialty or profession is required/i,
+    );
+  });
+
+  it("accepts any profession, not only medical specialties", () => {
+    const parsed = expertInvestigationSchema.parse({
+      ...base,
+      specialty: "Licensed electrician",
+    });
+    expect(parsed.specialty).toBe("Licensed electrician");
+  });
+
+  it("treats the city as optional", () => {
+    expect(expertInvestigationSchema.parse({ ...base, city: "" }).city).toBe("");
+    expect(
+      expertInvestigationSchema.parse({ ...base, city: "  " }).city,
+    ).toBe("");
+    expect(expertInvestigationSchema.safeParse({ ...base, city: "B" }).success).toBe(
+      false,
+    );
+  });
+
+  it("keeps multiline additional context and drops it when blank", () => {
+    const parsed = expertInvestigationSchema.parse({
+      ...base,
+      additionalContext: "  Also known as J. Smith\nWorked at Acme Clinic  ",
+    });
+    expect(parsed.additionalContext).toBe(
+      "Also known as J. Smith\nWorked at Acme Clinic",
+    );
+    expect(
+      expertInvestigationSchema.parse({ ...base, additionalContext: "  \n " })
+        .additionalContext,
+    ).toBeUndefined();
+    expect(
+      expertInvestigationSchema.safeParse({
+        ...base,
+        additionalContext: "x".repeat(2001),
+      }).success,
+    ).toBe(false);
+  });
+
   it("treats the NPI as optional", () => {
     const parsed = expertInvestigationSchema.parse({ ...base, npi: "  " });
     expect(parsed.npi).toBeUndefined();

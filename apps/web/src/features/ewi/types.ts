@@ -9,11 +9,130 @@ export type EwiJobStatus =
 
 export type EwiJobStep = (typeof EWI_PROGRESS_STEPS)[number]["id"];
 
+export type EwiQuestionLabel = "verified" | "allegation" | "unresolved";
+
+export interface EwiQuestionSource {
+  name: string;
+  url?: string;
+  date?: string;
+}
+
 export interface EwiCrossExamQuestion {
   number: number;
   category: string;
   question: string;
   evidenceBasis: string;
+  /** verified fact, unproven allegation, or unresolved identity or conflict. */
+  label?: EwiQuestionLabel;
+  sources?: EwiQuestionSource[];
+}
+
+export type EwiWebMatchLevel =
+  | "strong"
+  | "possible"
+  | "weak"
+  | "other_person"
+  | "none";
+
+export interface EwiWebClaim {
+  type:
+    | "advertising"
+    | "forensic"
+    | "credential"
+    | "allegation"
+    | "rating"
+    | "other";
+  text: string;
+  quote: string;
+  topic?: string;
+  basis?: "subject_stated" | "third_party" | "primary_source" | "allegation";
+  from?: "page" | "snippet";
+}
+
+/** A credential claim compared with the body that issues it. */
+export interface EwiWebVerification {
+  id: string;
+  topic: string;
+  claim: string;
+  status: "confirmed" | "not_confirmed" | "not_checked";
+  claimedAt: string[];
+  confirmedBy: { name: string; url: string; quote: string | null } | null;
+  note: string;
+}
+
+export interface EwiWebRecord {
+  id: string;
+  url: string;
+  title: string;
+  kind: string;
+  platform?: string;
+  snippet: string | null;
+  summary: string;
+  publishedAt: string | null;
+  retrievedAt: string;
+  read: "read" | "snippet_only" | "restricted" | "failed" | "not_read";
+  readNote: string | null;
+  archiveUrl?: string;
+  match: {
+    level: EwiWebMatchLevel;
+    confidence: "high" | "medium" | "low" | null;
+    basis: string[];
+    conflicts: string[];
+    quote: string | null;
+    quoteVerified: boolean;
+  };
+  candidateId: string | null;
+  claims: EwiWebClaim[];
+  rating?: string | null;
+}
+
+export interface EwiWebCandidate {
+  id: string;
+  label: string;
+  role: "subject" | "other";
+  confidence: "high" | "medium" | "low";
+  basis: string[];
+  recordIds: string[];
+}
+
+export interface EwiWebProviderReport {
+  providerId: string;
+  name: string;
+  configured: boolean;
+  requests: number;
+  hits: number;
+  failures: Array<{ kind: string; message: string }>;
+}
+
+export interface EwiWebResearchDossier {
+  ranAt: string;
+  durationMs: number;
+  partial: boolean;
+  partialNote: string | null;
+  queriesPlanned: number;
+  queriesRun: number;
+  providers: EwiWebProviderReport[];
+  pagesRead: number;
+  pagesBlocked: Array<{ url: string; reason: string }>;
+  candidates: EwiWebCandidate[];
+  records: EwiWebRecord[];
+  registries: Array<{
+    id: string;
+    name: string;
+    status: "checked" | "failed" | "not_applicable";
+    message: string;
+    url?: string;
+  }>;
+  limitations: string[];
+  /** Absent in dossiers saved before report version 3.3. */
+  topics?: Array<{ topic: string; queries: number; hits: number }>;
+  companies?: Array<{
+    name: string;
+    url: string;
+    scope: "own_page" | "other_page";
+    quote: string | null;
+  }>;
+  verifications?: EwiWebVerification[];
 }
 
 export interface EwiInconsistencySource {
@@ -340,6 +459,9 @@ export interface EwiInvestigationResult {
   city: string;
   specialty: string;
   npi?: string | null;
+  additionalContext?: string | null;
+  /** Global web search findings; null when the web layer did not run. */
+  webResearch?: EwiWebResearchDossier | null;
   identity?: EwiIdentityResolution | null;
   /** Present when the expert's CV was uploaded. */
   cvCheck?: EwiCvCheck | null;
@@ -416,6 +538,7 @@ export interface EwiHistoryListItem {
   city: string;
   specialty: string;
   npi?: string | null;
+  additionalContext?: string | null;
   status: EwiJobStatus;
   step: string | null;
   stepLabel: string | null;

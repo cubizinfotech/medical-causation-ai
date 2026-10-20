@@ -14,7 +14,7 @@ const OLD_COLLECTED_LINE =
   /^(\d+) item\(s\) were collected\. Not verified and conflicting items could not be verified\.$/;
 
 export const NO_RECORDS_LINE =
-  "No records about this expert were found in the sources searched. The source list shows what was checked.";
+  "No information about this expert was confirmed from the sources retrieved. This is not proof that none exists; the source list shows what was reached and what was not.";
 
 /** The investigation summary without its per-source gap lines. */
 export function presentableSummaryLines(

@@ -1,3 +1,7 @@
+import {
+  WEB_RESEARCH_SOURCE_IDS,
+  WEB_SOURCE_LABEL,
+} from '../../web-research/source-kind';
 import type { ProviderDefinition } from '../expert-research.types';
 
 /**
@@ -24,9 +28,35 @@ export const LIVE_SOURCE_IDS = [
   'justia',
   'pubmed',
   'grants',
+  // Answered by the global web research layer.
+  ...WEB_RESEARCH_SOURCE_IDS,
 ] as const;
 
-export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
+const WEB_SOURCE_ID_SET = new Set<string>(WEB_RESEARCH_SOURCE_IDS);
+
+/**
+ * Sources the global web research layer answers in live mode. They find and
+ * read public pages through the configured search providers; content behind
+ * a login, CAPTCHA, robots.txt rule or paywall is reported as not read.
+ */
+function withWebResearch(
+  entries: readonly ProviderDefinition[],
+): readonly ProviderDefinition[] {
+  return entries.map((entry) => {
+    if (!WEB_SOURCE_ID_SET.has(entry.id)) return entry;
+    const label = WEB_SOURCE_LABEL[entry.id] ?? 'public web pages';
+    return {
+      ...entry,
+      accessClass: 'public' as const,
+      requirement: 'free_api' as const,
+      credentialEnv: undefined,
+      liveImplemented: true,
+      summary: `Public web research: finds and reads ${label} for this person through the configured search providers (Gemini Google Search grounding, news indexes, and any Serper/Brave/Tavily key). A page behind a login, CAPTCHA, robots.txt rule or paywall is listed as not read and never bypassed. Same-name pages are attributed only when the profession, place, NPI or intake note agrees.`,
+    };
+  });
+}
+
+const BASE_CATALOG: readonly ProviderDefinition[] = [
   source(
     {
       id: 'npi_registry',
@@ -113,17 +143,18 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     summary:
       'Organization record supplied for the investigation. No membership is invented.',
   }),
-  source({
-    id: 'pubmed',
-    name: 'Publications (PubMed / NCBI)',
-    category: 'publication',
-    accessClass: 'public',
-    requirement: 'free_api',
-    credentialEnv: 'PUBMED_API_KEY',
-    summary:
-      'Free NCBI E-utilities. Lists PubMed articles whose author name matches the expert’s last name and initials. Affiliation is not confirmed from the summary alone.',
-  },
-  true,
+  source(
+    {
+      id: 'pubmed',
+      name: 'Publications (PubMed / NCBI)',
+      category: 'publication',
+      accessClass: 'public',
+      requirement: 'free_api',
+      credentialEnv: 'PUBMED_API_KEY',
+      summary:
+        'Free NCBI E-utilities. Lists PubMed articles whose author name matches the expert’s last name and initials. Affiliation is not confirmed from the summary alone.',
+    },
+    true,
   ),
   source({
     id: 'author_verification',
@@ -176,16 +207,17 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
     summary:
       'Free public ORCID API. A member client id is optional. Not called locally.',
   }),
-  source({
-    id: 'grants',
-    name: 'Grants',
-    category: 'grant',
-    accessClass: 'public',
-    requirement: 'free_api',
-    summary:
-      'Free NIH RePORTER search. Lists grants whose investigator name matches. A grant is not proof of identity unless the organization also fits.',
-  },
-  true,
+  source(
+    {
+      id: 'grants',
+      name: 'Grants',
+      category: 'grant',
+      accessClass: 'public',
+      requirement: 'free_api',
+      summary:
+        'Free NIH RePORTER search. Lists grants whose investigator name matches. A grant is not proof of identity unless the organization also fits.',
+    },
+    true,
   ),
   source({
     id: 'grant_results',
@@ -623,3 +655,6 @@ export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] = [
       'Authorized access only. NPDB and similar databases are not scraped, and no claim is invented.',
   }),
 ];
+
+export const EXPERT_RESEARCH_CATALOG: readonly ProviderDefinition[] =
+  withWebResearch(BASE_CATALOG);

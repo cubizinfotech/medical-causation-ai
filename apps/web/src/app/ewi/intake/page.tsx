@@ -6,8 +6,8 @@ import { ExpertIntakeForm } from "@/components/ewi/expert-intake-form";
 export default function EwiIntakePage() {
   return (
     <div className="border-b border-border bg-gradient-to-b from-accent/30 to-background">
-      <PageContainer className="pb-10 pt-10">
-        <div className="mb-8 max-w-2xl">
+      <PageContainer size="wide" className="pb-10 pt-10">
+        <div className="mb-8 max-w-3xl">
           <Badge variant="secondary" className="mb-3">
             Expert Witness Investigation
           </Badge>
@@ -20,7 +20,7 @@ export default function EwiIntakePage() {
                 New Investigation
               </h1>
               <p className="mt-1 text-muted-foreground">
-                Enter the expert name, city, and medical specialty. Research
+                Enter the expert name and specialty or profession. City, NPI and extra context are optional. Research
                 starts automatically after you submit.
               </p>
             </div>

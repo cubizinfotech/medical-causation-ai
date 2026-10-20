@@ -55,6 +55,8 @@ export interface OpenAlexWork {
   cited_by_count?: number;
   is_retracted?: boolean;
   type?: string | null;
+  /** OpenAlex cuts author lists over 100 names and sets this flag. */
+  is_authors_truncated?: boolean;
 }
 
 interface ListResponse<T> {
@@ -73,7 +75,7 @@ export interface OpenAlexClientOptions {
 const AUTHOR_FIELDS =
   'id,display_name,display_name_alternatives,orcid,works_count,cited_by_count,summary_stats,affiliations,last_known_institutions,topics';
 const WORK_FIELDS =
-  'id,doi,title,publication_year,publication_date,primary_location,authorships,cited_by_count,is_retracted,type';
+  'id,doi,title,publication_year,publication_date,primary_location,authorships,cited_by_count,is_retracted,type,is_authors_truncated';
 
 /** Public OpenAlex API. A key and contact address are optional. */
 export class OpenAlexClient {

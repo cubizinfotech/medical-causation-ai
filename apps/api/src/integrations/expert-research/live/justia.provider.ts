@@ -4,10 +4,7 @@ import type {
   ProviderDefinition,
 } from '../expert-research.types';
 import { LiveHttpError } from './live-http';
-import {
-  LiveResearchProvider,
-  type LiveRunResult,
-} from './live-provider.base';
+import { LiveResearchProvider, type LiveRunResult } from './live-provider.base';
 import { displayName, parsePersonName } from './person-name';
 
 const SEARCH_HOST = 'https://law.justia.com';
@@ -32,7 +29,10 @@ export function parseJustiaHits(html: string, lastName: string): JustiaHit[] {
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(html)) !== null && hits.length < MAX_LINKS) {
     const href = match[1];
-    const title = match[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const title = match[2]
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     if (!title.toLowerCase().includes(last)) continue;
     const url = href.startsWith('http') ? href : `${SEARCH_HOST}${href}`;
     if (!url.startsWith(`${SEARCH_HOST}/`)) continue;

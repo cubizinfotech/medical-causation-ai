@@ -1,7 +1,9 @@
 import { EXPERT_RESEARCH_CATALOG } from '../providers/provider-catalog';
 import { parseJustiaHits, JustiaResearchProvider } from './justia.provider';
 
-const definition = EXPERT_RESEARCH_CATALOG.find((entry) => entry.id === 'justia');
+const definition = EXPERT_RESEARCH_CATALOG.find(
+  (entry) => entry.id === 'justia',
+);
 
 describe('parseJustiaHits', () => {
   it('keeps case links that mention the last name and drops other links', () => {
@@ -24,10 +26,8 @@ describe('JustiaResearchProvider', () => {
     const provider = new JustiaResearchProvider(
       definition,
       jest.fn(() =>
-        Promise.resolve(
-          new Response('Just a moment', { status: 200 }),
-        ),
-      ) as unknown as typeof fetch,
+        Promise.resolve(new Response('Just a moment', { status: 200 })),
+      ),
     );
     const result = await provider.search({
       expertName: 'Jason Demery',

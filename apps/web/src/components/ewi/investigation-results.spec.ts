@@ -63,7 +63,7 @@ describe("InvestigationResults findings", () => {
 
     expect(html).toContain("Investigation of Dr Matthew Cahill (Anesthesiology).");
     expect(html).toContain(
-      "No records about this expert were found in the sources searched.",
+      "No information about this expert was confirmed from the sources retrieved.",
     );
     expect(html).not.toMatch(/Could not verify|Nothing was inferred/);
     expect(html).not.toContain("No verified identity profile findings");

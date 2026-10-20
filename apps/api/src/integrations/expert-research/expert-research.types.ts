@@ -115,6 +115,8 @@ export interface ExpertResearchQuery {
   specialty: string;
   /** National Provider Identifier supplied by the attorney (10 digits). */
   npi?: string;
+  /** Free-text note from the attorney: aliases, employers, case names. */
+  context?: string;
 }
 
 /**

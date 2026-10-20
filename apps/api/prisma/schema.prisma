@@ -297,24 +297,26 @@ model Expert {
 }
 
 model Investigation {
-  id           String              @id @default(uuid()) @db.Uuid
-  expertId     String              @map("expert_id") @db.Uuid
-  jobId        String              @unique @map("job_id")
-  status       InvestigationStatus @default(pending)
-  currentStage String?             @map("current_stage")
-  stageLabel   String?             @map("stage_label")
-  progress     Int                 @default(0)
-  message      String?
-  errorMessage String?             @map("error_message")
-  notes        String?
+  id                String              @id @default(uuid()) @db.Uuid
+  expertId          String              @map("expert_id") @db.Uuid
+  jobId             String              @unique @map("job_id")
+  status            InvestigationStatus @default(pending)
+  currentStage      String?             @map("current_stage")
+  stageLabel        String?             @map("stage_label")
+  progress          Int                 @default(0)
+  message           String?
+  errorMessage      String?             @map("error_message")
+  notes             String?
   /// Optional NPI supplied by the attorney to confirm the expert.
-  npi          String?             @db.VarChar(10)
-  startedAt    DateTime?           @map("started_at")
-  completedAt  DateTime?           @map("completed_at")
-  cancelledAt  DateTime?           @map("cancelled_at")
-  createdAt    DateTime            @default(now()) @map("created_at")
-  updatedAt    DateTime            @updatedAt @map("updated_at")
-  ownerUserId  String?             @map("owner_user_id") @db.Uuid
+  npi               String?             @db.VarChar(10)
+  /// Optional free text from the attorney (aliases, employers, case names).
+  additionalContext String?             @map("additional_context")
+  startedAt         DateTime?           @map("started_at")
+  completedAt       DateTime?           @map("completed_at")
+  cancelledAt       DateTime?           @map("cancelled_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  ownerUserId       String?             @map("owner_user_id") @db.Uuid
 
   expert        Expert                 @relation(fields: [expertId], references: [id])
   profile       ExpertProfile?

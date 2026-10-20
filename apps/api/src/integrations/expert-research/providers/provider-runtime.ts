@@ -14,6 +14,7 @@ export interface ProviderRuntimeOptions {
 
 const NAME_MIN = 2;
 const NAME_MAX = 200;
+export const CONTEXT_MAX = 2000;
 
 export class ProviderTimeoutError extends Error {
   constructor() {
@@ -59,26 +60,35 @@ export function validateExpertResearchQuery(query: {
   city?: string;
   specialty?: string;
   npi?: string;
+  context?: string;
 }): QueryValidation {
   const expertName = query.expertName?.trim() ?? '';
   const city = query.city?.trim() ?? '';
   const specialty = query.specialty?.trim() ?? '';
+  const context = query.context?.trim() ?? '';
   if (expertName.length < NAME_MIN || expertName.length > NAME_MAX) {
     return {
       ok: false,
       message: 'Expert name must be between 2 and 200 characters.',
     };
   }
-  if (city.length < NAME_MIN || city.length > NAME_MAX) {
+  // City is optional: the search narrows by place when it is given.
+  if (city.length > NAME_MAX || (city.length > 0 && city.length < NAME_MIN)) {
     return {
       ok: false,
-      message: 'City must be between 2 and 200 characters.',
+      message: 'City, when given, must be between 2 and 200 characters.',
     };
   }
   if (specialty.length < NAME_MIN || specialty.length > NAME_MAX) {
     return {
       ok: false,
-      message: 'Medical specialty must be between 2 and 200 characters.',
+      message: 'Specialty or profession must be between 2 and 200 characters.',
+    };
+  }
+  if (context.length > CONTEXT_MAX) {
+    return {
+      ok: false,
+      message: `Additional context must be at most ${CONTEXT_MAX} characters.`,
     };
   }
   const npi = query.npi?.replace(/\s+/g, '') ?? '';
@@ -90,9 +100,13 @@ export function validateExpertResearchQuery(query: {
   }
   return {
     ok: true,
-    value: npi
-      ? { expertName, city, specialty, npi }
-      : { expertName, city, specialty },
+    value: {
+      expertName,
+      city,
+      specialty,
+      ...(npi ? { npi } : {}),
+      ...(context ? { context } : {}),
+    },
   };
 }
 

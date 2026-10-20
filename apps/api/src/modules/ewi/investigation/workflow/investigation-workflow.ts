@@ -9,6 +9,7 @@ import {
   type ExpertResearchSourceResult,
   type PublicationLookupResult,
 } from '@integrations/expert-research';
+import type { WebResearchDossier } from '@integrations/web-research';
 import { compareCv, cvDiscrepancies } from '../../cv/cv-comparison';
 import type { CvCheck, CvExtraction } from '../../cv/cv.types';
 import { DiscrepancyAnalyzer } from '../../research/discrepancy-analyzer';
@@ -33,18 +34,19 @@ import {
   type ProfessionalBackgroundDossier,
 } from '../../research/professional-background';
 import type { EwiPdfReportService } from '../../report/ewi-pdf-report.service';
-import { buildGroundedCrossExamQuestions } from '../../report/ewi-report-questions';
-import type { CrossExamQuestion } from '../../research/cross-exam-question.generator';
+import {
+  buildQuestionDrafts,
+  finalizeQuestions,
+  type QuestionDraft,
+} from '../../report/ewi-report-questions';
 import {
   buildAnalysisPacket,
   buildDeterministicAnalysis,
 } from '../analysis/deterministic-analysis';
 import type {
   AnalysisPacket,
-  EwiAnalysisQuestion,
   EwiAnalysisRecord,
 } from '../analysis/ewi-analysis.types';
-import { MIN_LEADING_QUESTIONS } from '../analysis/ewi-analysis.types';
 import type {
   EwiInvestigationRequest,
   EwiInvestigationResult,
@@ -78,7 +80,17 @@ export class InvestigationCancelledError extends Error {
   }
 }
 
+/** The research query for a request: the attorney's extra context travels as context. */
+export function toResearchQuery(
+  request: EwiInvestigationRequest,
+): ExpertResearchQuery {
+  const { additionalContext, ...rest } = request;
+  return additionalContext ? { ...rest, context: additionalContext } : rest;
+}
+
 export interface InvestigationResearchPort {
+  /** The shared global web research for this subject (memoized). Optional. */
+  webDossier?(query: ExpertResearchQuery): Promise<WebResearchDossier | null>;
   collectProviders(
     query: ExpertResearchQuery,
     providerIds: readonly ExpertResearchProviderId[],
@@ -107,6 +119,8 @@ export interface InvestigationWorkflowDependencies {
     onProgress: (message: string) => Promise<void>,
   ) => Promise<CvExtraction | null>;
   /** Reads Daubert/Frye rulings from opinion excerpts (AI). Optional. */
+  /** Tightens question wording with a model; rewrites are validated. Optional. */
+  polishQuestions?: (drafts: QuestionDraft[]) => Promise<QuestionDraft[]>;
   readChallengeRulings?: (input: {
     expertName: string;
     surname: string;
@@ -190,7 +204,7 @@ export function describeResearchStage(
   );
   if (none.length > 0) {
     parts.push(
-      `${none.length} source(s) returned no record. That is not evidence of absence.`,
+      `${none.length} source(s) were searched and returned no matching record. That is not evidence of absence.`,
     );
   }
   if (unavailable.length > 0) {
@@ -316,12 +330,12 @@ export async function executeInvestigationWorkflow(
       const name = request.expertName?.trim() ?? '';
       const city = request.city?.trim() ?? '';
       const specialty = request.specialty?.trim() ?? '';
-      if (name.length < 2 || city.length < 2 || specialty.length < 2) {
+      if (name.length < 2 || specialty.length < 2) {
         throw new Error(
-          'Expert name, city, and medical specialty are required to start an investigation.',
+          'A name and a specialty or profession are required to start an investigation.',
         );
       }
-      const message = `Identified ${name} in ${city} (${specialty})${request.npi ? ` with NPI ${request.npi}` : ''}. Research plan created with ${stages.filter((item) => item.kind === 'research').length} research stages. Identity is confirmed against the NPI Registry before other sources are attributed.`;
+      const message = `Identified ${name}${city ? ` in ${city}` : ''} (${specialty})${request.npi ? ` with NPI ${request.npi}` : ''}. Research plan created with ${stages.filter((item) => item.kind === 'research').length} research stages. Identity is confirmed against the NPI Registry before other sources are attributed.`;
       stageNotes.push({ label: stage.label, message });
       await report(dependencies, stage, progress, message);
       await persistCheckpoint(stage.id);
@@ -424,7 +438,7 @@ export async function executeInvestigationWorkflow(
       const challengeCount = legalResearch.challenges.length;
       const message =
         (legalResearch.matters.length === 0
-          ? 'Legal analysis complete. No legal matter was collected. Nothing was inferred.'
+          ? 'Legal analysis complete. No legal matter was confirmed in the sources and pages retrieved. This is not proof that none exist; see the source coverage list.'
           : `Legal analysis complete. ${legalResearch.matters.length} matter(s), ${legalResearch.orders.length} order(s), ${legalResearch.depositions.length} deposition(s).`) +
         (challengeCount > 0
           ? ` ${challengeCount} opinion(s) mention an admissibility challenge (Daubert, Frye, Rule 702); ${rulings.determined} ruling(s) were read from the court's own words and the rest were not determined.`
@@ -443,7 +457,7 @@ export async function executeInvestigationWorkflow(
       });
       const message =
         onlinePresence.records.length === 0
-          ? 'Online presence analysis complete. No public presence record was collected. Nothing was inferred.'
+          ? 'Online presence analysis complete. No public presence record was confirmed in the pages retrieved. This is not proof that none exist; see the source coverage list.'
           : `Online presence analysis complete. ${onlinePresence.records.length} record(s) grouped.`;
       stageNotes.push({ label: stage.label, message });
       await report(dependencies, stage, progress, message);
@@ -460,7 +474,7 @@ export async function executeInvestigationWorkflow(
       const message =
         professionalBackground.financial.length === 0 &&
         professionalBackground.records.length === 0
-          ? 'Income/bias analysis complete. No public financial or professional background record was collected. Percentages were not estimated.'
+          ? 'Income/bias analysis complete. No public financial or professional background record was confirmed in the sources retrieved; this is not proof that none exist. Percentages were not estimated.'
           : `Income/bias and professional background analysis complete. ${professionalBackground.financial.length} financial record(s), ${professionalBackground.records.length} professional record(s). Percentages shown only when stated.`;
       stageNotes.push({ label: stage.label, message });
       await report(dependencies, stage, progress, message);
@@ -546,33 +560,36 @@ export async function executeInvestigationWorkflow(
       sourceResults,
       professionalProviderIds: PROFESSIONAL_BACKGROUND_PROVIDER_IDS,
     });
-  const analysisQuestions = toCrossExamQuestions(analysis.document.questions);
-  const questions =
-    analysisQuestions ??
-    buildGroundedCrossExamQuestions({
-      expertName: request.expertName,
-      evidence,
-      discrepancies,
-    });
-  const generatedAt = new Date().toISOString();
-  const identity = identityFromResearch(request, sourceResults, evidence);
-  const reportArtifact = await dependencies.report.build({
+  const drafts = buildQuestionDrafts({
     expertName: request.expertName,
-    city: request.city,
-    specialty: request.specialty,
     evidence,
     discrepancies,
-    questions,
-    generatedAt,
-    summary,
-    analysis: analysis.document,
-    legalResearch,
-    onlinePresence,
-    professionalBackground,
-    identity,
-    cvCheck,
   });
-
+  let worded = drafts;
+  if (dependencies.polishQuestions && drafts.length > 0) {
+    try {
+      worded = await dependencies.polishQuestions(drafts);
+    } catch (error) {
+      dependencies.logger?.warn(
+        `Question wording kept as drafted: ${error instanceof Error ? error.message : 'rewrite failed'}`,
+      );
+    }
+  }
+  const questions = finalizeQuestions(worded);
+  const generatedAt = new Date().toISOString();
+  const identity = identityFromResearch(request, sourceResults, evidence);
+  let webResearch: WebResearchDossier | null = null;
+  if (dependencies.research.webDossier) {
+    try {
+      webResearch = await dependencies.research.webDossier(
+        toResearchQuery(request),
+      );
+    } catch (error) {
+      dependencies.logger?.warn(
+        `Web research dossier unavailable for the report: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    }
+  }
   const sourceStatuses: EwiSourceAttemptStatus[] = sourceResults.map(
     (resultItem) => {
       const skipped = /already collected/i.test(resultItem.message ?? '');
@@ -588,12 +605,33 @@ export async function executeInvestigationWorkflow(
       };
     },
   );
+  const reportArtifact = await dependencies.report.build({
+    expertName: request.expertName,
+    city: request.city,
+    specialty: request.specialty,
+    additionalContext: request.additionalContext ?? null,
+    webResearch,
+    evidence,
+    discrepancies,
+    questions,
+    generatedAt,
+    summary,
+    analysis: analysis.document,
+    legalResearch,
+    onlinePresence,
+    professionalBackground,
+    identity,
+    cvCheck,
+    sourceStatuses,
+  });
 
   const result: EwiInvestigationResult = {
     expertName: request.expertName,
     city: request.city,
     specialty: request.specialty,
     npi: request.npi ?? null,
+    additionalContext: request.additionalContext ?? null,
+    webResearch,
     identity,
     cvCheck: cvCheck ?? null,
     evidence,
@@ -641,6 +679,7 @@ async function runResearchStage(
 ): Promise<ExpertResearchSourceResult[]> {
   if (stage.providers.length === 0) return [];
 
+  const query = toResearchQuery(request);
   const skipped: ExpertResearchSourceResult[] = [];
   const pending = new Set<ExpertResearchProviderId>();
   const finished = new Map<string, ExpertResearchSourceResult>();
@@ -671,7 +710,7 @@ async function runResearchStage(
       skipped.push(skip);
       continue;
     }
-    const cached = cache?.get(request, providerId);
+    const cached = cache?.get(query, providerId);
     if (cached) {
       finished.set(providerId, cached);
       continue;
@@ -687,9 +726,7 @@ async function runResearchStage(
 
     let batch: ExpertResearchSourceResult[];
     try {
-      batch = await dependencies.research.collectProviders(request, [
-        ...pending,
-      ]);
+      batch = await dependencies.research.collectProviders(query, [...pending]);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Research stage failed';
@@ -713,7 +750,7 @@ async function runResearchStage(
       }
       finished.set(result.sourceId, result);
       pending.delete(result.sourceId);
-      cache?.set(request, result);
+      cache?.set(query, result);
     }
 
     if (pending.size > 0 && attempt < maxAttempts) {
@@ -968,20 +1005,6 @@ function failedResult(
     retrievedAt: new Date().toISOString(),
     items: [],
   };
-}
-
-function toCrossExamQuestions(
-  analysisQuestions: EwiAnalysisQuestion[],
-): CrossExamQuestion[] | null {
-  if (analysisQuestions.length < MIN_LEADING_QUESTIONS) return null;
-  return analysisQuestions.map((item, index) => ({
-    number: index + 1,
-    category: item.category,
-    question: item.question,
-    evidenceBasis: [item.sourceRefs.join(', '), item.uncertaintyNote]
-      .filter(Boolean)
-      .join(' — '),
-  }));
 }
 
 async function report(

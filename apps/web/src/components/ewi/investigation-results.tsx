@@ -11,9 +11,12 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { WebResearchPanel } from "@/components/ewi/web-research-panel";
 import type {
+  EwiCrossExamQuestion,
   EwiEvidenceItem,
   EwiInvestigationResult,
+  EwiQuestionLabel,
   EwiPresenceRecord,
   EwiProfessionalRecord,
   EwiSourceStatus,
@@ -156,6 +159,37 @@ function isOpenPaymentsTotals(record: EwiProfessionalRecord): boolean {
   );
 }
 
+const QUESTION_LABEL_TEXT: Record<EwiQuestionLabel, string> = {
+  verified: "Verified",
+  allegation: "Allegation",
+  unresolved: "Unresolved",
+};
+
+const QUESTION_LABEL_VARIANT: Record<
+  EwiQuestionLabel,
+  "default" | "secondary" | "outline"
+> = {
+  verified: "default",
+  allegation: "secondary",
+  unresolved: "outline",
+};
+
+/** Keeps the order the questions were generated in, grouped by theme. */
+function groupQuestions(
+  questions: EwiCrossExamQuestion[],
+): Array<{ category: string; items: EwiCrossExamQuestion[] }> {
+  const groups = new Map<string, EwiCrossExamQuestion[]>();
+  for (const question of questions) {
+    const list = groups.get(question.category) ?? [];
+    list.push(question);
+    groups.set(question.category, list);
+  }
+  return [...groups.entries()].map(([category, items]) => ({
+    category,
+    items,
+  }));
+}
+
 function filterEvidence(
   evidence: EwiEvidenceItem[],
   categories: Set<string>,
@@ -206,6 +240,8 @@ function InvestigationResultTabs({
       source.attemptStatus === "failed",
   );
 
+  const webCandidateCount = result?.webResearch?.candidates.length ?? 0;
+  const questionGroups = groupQuestions(questions);
   const challenges = legal?.challenges ?? [];
   const cvConflicts =
     result?.cvCheck?.comparisons.filter((row) => row.label === "conflicting")
@@ -236,6 +272,10 @@ function InvestigationResultTabs({
           {cvConflicts > 0 ? ` (${cvConflicts})` : ""}
         </TabsTrigger>
         <TabsTrigger value="legal">Legal Research</TabsTrigger>
+        <TabsTrigger value="web">
+          Web Research
+          {webCandidateCount > 1 ? ` (${webCandidateCount} people)` : ""}
+        </TabsTrigger>
         <TabsTrigger value="publications">Publications</TabsTrigger>
         <TabsTrigger value="credentials">Credentials</TabsTrigger>
         <TabsTrigger value="presence">Online Presence</TabsTrigger>
@@ -285,8 +325,9 @@ function InvestigationResultTabs({
           ) : null}
           {evidence.length === 0 ? (
             <EmptyCopy>
-              No records about this expert were found in the sources searched.
-              The Sources tab shows what was checked.
+              No information about this expert was confirmed from the sources
+              retrieved. This is not proof that none exists. The Sources tab
+              shows what was reached and what was not.
             </EmptyCopy>
           ) : (
             <ul className="space-y-4">
@@ -398,7 +439,8 @@ function InvestigationResultTabs({
         <ResultPanel title="Legal research">
           {!legal || legal.matters.length === 0 ? (
             <EmptyCopy>
-              No legal matters were found in the sources searched.
+              No legal matter was confirmed in the sources retrieved. This is
+              not proof that none exists; check the Sources tab for coverage.
             </EmptyCopy>
           ) : (
             <div className="space-y-6 text-sm">
@@ -506,11 +548,19 @@ function InvestigationResultTabs({
         </ResultPanel>
       </TabsContent>
 
+      <TabsContent value="web">
+        <ResultPanel title="Global web research">
+          <WebResearchPanel dossier={result?.webResearch} />
+        </ResultPanel>
+      </TabsContent>
+
       <TabsContent value="publications">
         <ResultPanel title="Publications">
           {publications.length === 0 ? (
             <EmptyCopy>
-              No publication records were collected for this expert.
+              No publication was confirmed for this expert in the sources that
+              were searched. Many journals and chapters are not indexed, so
+              this is not proof that none exist.
             </EmptyCopy>
           ) : (
             <ul className="space-y-4">
@@ -583,9 +633,10 @@ function InvestigationResultTabs({
         <ResultPanel title="Income and bias indicators">
           {financial.length === 0 ? (
             <EmptyCopy>
-              No public financial record was collected from the sources that
+              No public financial record was confirmed in the sources that
               were searched. A blank section is not proof that no income
-              exists.
+              exists. Check the source coverage list for what was and was not
+              reachable.
             </EmptyCopy>
           ) : (
             <div className="space-y-4 text-sm">
@@ -647,17 +698,67 @@ function InvestigationResultTabs({
               invented to fill the list.
             </EmptyCopy>
           ) : (
-            <ol className="max-h-[40rem] list-decimal space-y-3 overflow-y-auto pl-5 text-sm">
-              {questions.map((question) => (
-                <li key={question.number}>
-                  <span className="font-medium">{question.category}:</span>{" "}
-                  {question.question}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Basis: {question.evidenceBasis}
-                  </p>
-                </li>
+            <div className="max-h-[48rem] space-y-6 overflow-y-auto pr-1 text-sm">
+              <p className="text-xs text-muted-foreground">
+                Each question cites a collected fact. &ldquo;Verified&rdquo;
+                rests on a record that was read; &ldquo;Allegation&rdquo; is an
+                unproven claim in a source; &ldquo;Unresolved&rdquo; means
+                identity or a conflict between sources is still open and the
+                question should be settled before use.
+              </p>
+              {questionGroups.map((group) => (
+                <section key={group.category} aria-label={group.category}>
+                  <h3 className="mb-2 font-semibold">{group.category}</h3>
+                  <ul className="space-y-3">
+                    {group.items.map((question) => (
+                      <li
+                        key={question.number}
+                        className="rounded-lg border border-border p-3"
+                      >
+                        <div className="flex flex-wrap items-start gap-2">
+                          <span className="tabular-nums text-muted-foreground">
+                            {question.number}.
+                          </span>
+                          <p className="min-w-0 flex-1">{question.question}</p>
+                          {question.label ? (
+                            <Badge
+                              variant={QUESTION_LABEL_VARIANT[question.label]}
+                              className="text-[10px]"
+                            >
+                              {QUESTION_LABEL_TEXT[question.label]}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Basis: {question.evidenceBasis}
+                        </p>
+                        {question.sources && question.sources.length > 0 ? (
+                          <ul className="mt-1 space-y-0.5 text-xs">
+                            {question.sources.map((source) => (
+                              <li key={`${source.name}-${source.url ?? ""}`}>
+                                {source.url ? (
+                                  <ExternalLink href={source.url}>
+                                    {source.name}
+                                  </ExternalLink>
+                                ) : (
+                                  <span>{source.name}</span>
+                                )}
+                                {source.date ? (
+                                  <span className="text-muted-foreground">
+                                    {" "}
+                                    · {source.date}
+                                  </span>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ol>
+            </div>
           )}
         </ResultPanel>
       </TabsContent>
@@ -828,8 +929,9 @@ function PresenceGroup({
       <div>
         <p className="font-medium">{title}</p>
         <p className="mt-1 text-muted-foreground">
-          Not searched, or no public record was collected. This is not a
-          finding that nothing exists in this category.
+          Nothing in this category was confirmed from the pages retrieved, or
+          the source was not reachable. This is not a finding that nothing
+          exists in this category.
         </p>
       </div>
     );

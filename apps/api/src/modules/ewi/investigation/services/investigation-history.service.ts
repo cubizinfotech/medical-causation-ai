@@ -42,6 +42,9 @@ function reportInput(result: EwiInvestigationResult): EwiReportInput {
     professionalBackground: result.professionalBackground,
     identity: result.identity ?? null,
     cvCheck: result.cvCheck ?? null,
+    additionalContext: result.additionalContext ?? null,
+    webResearch: result.webResearch ?? null,
+    sourceStatuses: result.sourceStatuses ?? [],
   };
 }
 

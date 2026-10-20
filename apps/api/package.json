@@ -28,7 +28,8 @@
     "prisma:migrate:dev": "node scripts/prisma-with-env.cjs migrate dev",
     "seed:demo-users": "ts-node -r tsconfig-paths/register scripts/seed-demo-users.ts",
     "user:create": "ts-node -r tsconfig-paths/register scripts/create-user.ts",
-    "clear:histories": "ts-node -r tsconfig-paths/register scripts/clear-histories.ts"
+    "clear:histories": "ts-node -r tsconfig-paths/register scripts/clear-histories.ts",
+    "research:web": "ts-node -r tsconfig-paths/register scripts/live-web-research.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

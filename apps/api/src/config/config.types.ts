@@ -219,6 +219,28 @@ export interface ResearchProviderSettings {
   openAlexMailto?: string;
   /** Most recent CMS Open Payments program years to total. */
   openPaymentsYears: number;
+  /** Global web research layer (search providers + page reading). */
+  web: WebResearchConfig;
+}
+
+export interface WebResearchConfig {
+  /** Provider ids to use. Unconfigured ones are skipped and reported. */
+  providers: string[];
+  serperApiKey?: string;
+  braveApiKey?: string;
+  tavilyApiKey?: string;
+  /** Gemini Google Search grounding; reuses GEMINI_API_KEY. */
+  geminiApiKey?: string;
+  geminiModel?: string;
+  maxQueries: number;
+  maxPages: number;
+  searchTimeoutMs: number;
+  fetchTimeoutMs: number;
+  maxFetchPages: number;
+  /** Whole-run limit; the job lock is 10 minutes. */
+  deadlineMs: number;
+  /** Read the Internet Archive copy of a page whose site blocks bots. */
+  archiveFallback: boolean;
 }
 
 export interface IndexingConfigSettings {

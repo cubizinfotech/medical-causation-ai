@@ -58,6 +58,8 @@ export class ExpertIdentityResolver {
   ): Promise<ResolvedExpertIdentity> {
     const name = parsePersonName(query.expertName);
     const location = parseCityState(query.city);
+    const hasCity = location.city.length > 0;
+    const inPlace = hasCity ? ` in ${location.city}` : '';
     if (query.npi) {
       return this.bySuppliedNpi(query, query.npi, name, location.city);
     }
@@ -72,21 +74,23 @@ export class ExpertIdentityResolver {
     const named = (record: NpiRecord) => individualNamed(record, variants);
     const comparesSpecialty = specialtyStems(query.specialty).length > 0;
     const fits = (record: NpiRecord) =>
-      inCity(record, location.city) &&
+      (!hasCity || inCity(record, location.city)) &&
       (!comparesSpecialty || hasSpecialty(record, query.specialty));
 
     let pool: NpiRecord[] = [];
     let confirmed: NpiRecord[] = [];
     for (const variant of variants) {
-      const inCityRecords = await this.client.search({
-        firstName: variant.first,
-        lastName: variant.last,
-        city: location.city,
-        state: location.state,
-      });
-      pool = merge(pool, inCityRecords);
-      confirmed = pool.filter((record) => named(record) && fits(record));
-      if (confirmed.length > 0) break;
+      if (hasCity) {
+        const inCityRecords = await this.client.search({
+          firstName: variant.first,
+          lastName: variant.last,
+          city: location.city,
+          state: location.state,
+        });
+        pool = merge(pool, inCityRecords);
+        confirmed = pool.filter((record) => named(record) && fits(record));
+        if (confirmed.length > 0) break;
+      }
       // NPPES matches the city text exactly ("St. Louis" vs "SAINT LOUIS"),
       // so also search by name alone and compare cities here.
       const byName = await this.client.search({
@@ -99,8 +103,16 @@ export class ExpertIdentityResolver {
       if (confirmed.length > 0 || pool.some(named)) break;
     }
 
-    const basis = ['name', 'practice city'];
+    const basis = hasCity ? ['name', 'practice city'] : ['name'];
     if (comparesSpecialty) basis.push('specialty');
+    // Without a city and without a comparable specialty a name alone cannot
+    // single out one person, so several records are never collapsed to one.
+    if (!hasCity && !comparesSpecialty && confirmed.length > 0) {
+      return ambiguous(
+        confirmed,
+        `${confirmed.length} NPI Registry record(s) match the name. No city was given and the specialty could not be compared, so identity was not confirmed. Add the expert’s NPI or a city to narrow it.`,
+      );
+    }
     if (confirmed.length === 1) {
       const record = confirmed[0];
       return {
@@ -109,7 +121,7 @@ export class ExpertIdentityResolver {
           status: 'confirmed',
           identity: candidateOf(record),
           basis,
-          note: `NPI ${record.npi} (${describe(record)}) is the only NPI Registry record that matches the name, practice city${comparesSpecialty ? ', and specialty' : ''}.`,
+          note: `NPI ${record.npi} (${describe(record)}) is the only NPI Registry record that matches the name${comparesSpecialty ? ', and specialty' : ''}.`,
           notes: [
             ...nameVariantNote(record, name),
             ...(comparesSpecialty
@@ -125,7 +137,7 @@ export class ExpertIdentityResolver {
     if (confirmed.length > 1) {
       return ambiguous(
         confirmed,
-        `${confirmed.length} NPI Registry records match the name, practice city${comparesSpecialty ? ', and specialty' : ''}. Identity was not confirmed. Add the expert’s NPI to the investigation to confirm it.`,
+        `${confirmed.length} NPI Registry records match the name${hasCity ? ', practice city' : ''}${comparesSpecialty ? ', and specialty' : ''}. Identity was not confirmed. Add the expert’s NPI to the investigation to confirm it.`,
       );
     }
 
@@ -144,10 +156,10 @@ export class ExpertIdentityResolver {
             status: 'confirmed',
             identity: candidateOf(record),
             basis: ['full name', 'specialty', 'state'],
-            note: `NPI ${record.npi} (${describe(record)}) is the only NPI Registry record that matches the full name and specialty in ${location.state}. The practice city on the registry is ${listedCity}, not ${location.city}.`,
+            note: `NPI ${record.npi} (${describe(record)}) is the only NPI Registry record that matches the full name and specialty in ${location.state}. The practice city on the registry is ${listedCity}${hasCity ? `, not ${location.city}` : ''}.`,
             notes: [
               ...nameVariantNote(record, name),
-              `The city entered was ${location.city}. Other public records are attributed to this one NPI because the full name, specialty, and state match a single registry record. Taxonomy is self-reported and is not board certification.`,
+              `${hasCity ? `The city entered was ${location.city}. ` : ''}Other public records are attributed to this one NPI because the full name, specialty, and state match a single registry record. Taxonomy is self-reported and is not board certification.`,
             ],
             candidates: [],
           },
@@ -157,14 +169,16 @@ export class ExpertIdentityResolver {
     if (sameSpecialty.length > 0) {
       return ambiguous(
         sameSpecialty,
-        `No NPI Registry record matches the name and specialty in ${location.city}, but ${sameSpecialty.length} record(s) match the name and specialty elsewhere. Each NPI is listed separately and was not merged. Identity was not confirmed. Add the expert’s NPI to confirm it.`,
+        `No NPI Registry record matches the name and specialty${inPlace}, but ${sameSpecialty.length} record(s) match the name and specialty elsewhere. Each NPI is listed separately and was not merged. Identity was not confirmed. Add the expert’s NPI to confirm it.`,
       );
     }
-    const sameCity = sameName.filter((record) => inCity(record, location.city));
+    const sameCity = hasCity
+      ? sameName.filter((record) => inCity(record, location.city))
+      : [];
     if (sameCity.length > 0) {
       return ambiguous(
         sameCity,
-        `${sameCity.length} NPI Registry record(s) match the name in ${location.city}, but the registry taxonomy does not match “${query.specialty}”. Identity was not confirmed. Add the expert’s NPI to confirm it.`,
+        `${sameCity.length} NPI Registry record(s) match the name${inPlace}, but the registry taxonomy does not match “${query.specialty}”. Identity was not confirmed. Add the expert’s NPI to confirm it.`,
       );
     }
     const nicknames = pool.filter(
@@ -178,12 +192,12 @@ export class ExpertIdentityResolver {
     if (nicknames.length > 0) {
       return ambiguous(
         nicknames,
-        `The NPI Registry lists ${nicknames.length} record(s) in ${location.city} with the same last name and specialty but a different first name (for example a nickname). Identity was not confirmed. Add the expert’s NPI to confirm it.`,
+        `The NPI Registry lists ${nicknames.length} record(s)${inPlace} with the same last name and specialty but a different first name (for example a nickname). Identity was not confirmed. Add the expert’s NPI to confirm it.`,
       );
     }
     return unresolved(
       'not_found',
-      `No NPI Registry record matched ${displayName(name)}${comparesSpecialty ? ` (${query.specialty})` : ''} in ${location.city}${sameName.length > 0 ? `. ${sameName.length} record(s) share the name but not the city or specialty` : ''}. The registry lists US clinicians with an NPI; a missing record is not evidence that the expert is unlicensed.`,
+      `No NPI Registry record matched ${displayName(name)}${comparesSpecialty ? ` (${query.specialty})` : ''}${inPlace}${sameName.length > 0 ? `. ${sameName.length} record(s) share the name but not the ${hasCity ? 'city or ' : ''}specialty` : ''}. The registry lists US clinicians with an NPI; a missing record is not evidence that the expert is unlicensed.`,
     );
   }
 
@@ -223,9 +237,9 @@ export class ExpertIdentityResolver {
     }
     const basis = ['NPI supplied', 'name'];
     const notes: string[] = name ? nameVariantNote(record, name) : [];
-    if (inCity(record, city)) {
+    if (city && inCity(record, city)) {
       basis.push('practice city');
-    } else {
+    } else if (city) {
       const where = record.locations[0];
       notes.push(
         where

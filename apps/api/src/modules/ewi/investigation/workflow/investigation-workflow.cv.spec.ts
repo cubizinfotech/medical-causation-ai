@@ -146,7 +146,7 @@ describe('investigation workflow with an uploaded CV', () => {
     // The conflict is also an inconsistency for the report and questions.
     expect(
       outcome.result.discrepancies.some((row) =>
-        row.title.includes('expert is not listed as an author'),
+        row.title.includes('do not list the expert as an author'),
       ),
     ).toBe(true);
     expect(build).toHaveBeenCalledWith(

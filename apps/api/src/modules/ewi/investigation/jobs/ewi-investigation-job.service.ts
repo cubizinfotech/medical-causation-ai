@@ -115,9 +115,12 @@ export class EwiInvestigationJobService
           jobId,
           request: {
             expertName: dto.expertName.trim(),
-            city: dto.city.trim(),
+            city: dto.city?.trim() ?? '',
             specialty: dto.specialty.trim(),
             ...(dto.npi ? { npi: dto.npi } : {}),
+            ...(dto.additionalContext?.trim()
+              ? { additionalContext: dto.additionalContext.trim() }
+              : {}),
             ...(investigation.cvDocumentId
               ? { cvDocumentId: investigation.cvDocumentId }
               : {}),

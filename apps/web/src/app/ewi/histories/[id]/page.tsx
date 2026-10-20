@@ -208,6 +208,7 @@ export default function EwiHistoryDetailPage() {
       city: detail.city || "",
       specialty: detail.specialty,
       npi: detail.npi ?? undefined,
+      additionalContext: detail.additionalContext ?? undefined,
       // The server copies the CV for the new investigation.
       cvDocumentId: detail.cvDocument?.id,
     });

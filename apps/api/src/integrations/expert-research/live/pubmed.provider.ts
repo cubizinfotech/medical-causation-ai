@@ -5,6 +5,7 @@ import type {
 } from '../expert-research.types';
 import { fetchJson } from './live-http';
 import { LiveResearchProvider, type LiveRunResult } from './live-provider.base';
+import { parseCityState } from './location';
 import { parsePersonName, type PersonName } from './person-name';
 
 const MAX_ARTICLES = 12;
@@ -48,8 +49,7 @@ export class PubMedResearchProvider extends LiveResearchProvider {
       return {
         items: [],
         status: 'unavailable',
-        message:
-          'Not searched. PubMed needs the expert’s first and last name.',
+        message: 'Not searched. PubMed needs the expert’s first and last name.',
       };
     }
     const ids = await this.searchIds(name);
@@ -60,24 +60,77 @@ export class PubMedResearchProvider extends LiveResearchProvider {
       };
     }
     const summaries = await this.summaries(ids);
-    const items = summaries
+    const matched = summaries
       .filter((article) =>
         (article.authors ?? []).some((author) =>
           authorListed(author.name ?? '', name),
         ),
       )
-      .slice(0, MAX_ARTICLES)
-      .map((article) => this.articleItem(article, name, retrievedAt));
-    if (items.length === 0) {
+      .slice(0, MAX_ARTICLES);
+    if (matched.length === 0) {
       return {
         items: [],
         message: `PubMed returned ${ids.length} id(s) for ${name.last}, but none of the author lists matched the expert’s initials. Nothing was attributed.`,
       };
     }
+    const affiliations = await this.affiliations(
+      matched.map((article) => article.uid ?? '').filter(Boolean),
+      name,
+    );
+    const confirmed: string[] = [];
+    const unconfirmed: string[] = [];
+    const items = matched.map((article) => {
+      const listed = affiliations.get(article.uid ?? '') ?? [];
+      const agreement = affiliationAgrees(listed, query);
+      (agreement ? confirmed : unconfirmed).push(
+        `“${article.title ?? 'Untitled'}”${article.pubdate ? ` (${article.pubdate.slice(0, 4)})` : ''}`,
+      );
+      return this.articleItem(
+        article,
+        name,
+        retrievedAt,
+        listed,
+        agreement,
+        query,
+      );
+    });
+    const checked = affiliations.size > 0;
     return {
       items,
-      message: `${items.length} PubMed article(s) list an author matching ${name.last} and the expert’s initials. Affiliation was not confirmed from the PubMed summary.`,
+      message: [
+        `${items.length} PubMed article(s) list an author matching ${name.last} and the expert’s initials.`,
+        confirmed.length > 0
+          ? `${confirmed.length} also list an affiliation that agrees with the expert’s place, specialty or note and are attributed to the expert.`
+          : null,
+        unconfirmed.length > 0
+          ? checked
+            ? `${unconfirmed.length} could not be tied to the expert (no affiliation listed, or one that does not agree) and are not attributed: ${unconfirmed.slice(0, 6).join('; ')}${unconfirmed.length > 6 ? '; …' : ''}.`
+            : `Affiliations could not be read from PubMed, so ${unconfirmed.length} article(s) are not attributed: ${unconfirmed.slice(0, 6).join('; ')}${unconfirmed.length > 6 ? '; …' : ''}.`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' '),
     };
+  }
+
+  /** Affiliation strings listed for the expert's own author entry, by PMID. */
+  private async affiliations(
+    pmids: string[],
+    name: PersonName,
+  ): Promise<Map<string, string[]>> {
+    if (pmids.length === 0) return new Map();
+    try {
+      const url = this.endpoint('efetch.fcgi', { id: pmids.join(',') });
+      url.searchParams.set('retmode', 'xml');
+      const response = await (this.fetchImpl ?? fetch)(url, {
+        headers: { Accept: 'application/xml' },
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      if (!response.ok) return new Map();
+      return parseAuthorAffiliations(await response.text(), name);
+    } catch {
+      return new Map();
+    }
   }
 
   private async searchIds(name: PersonName): Promise<string[]> {
@@ -123,12 +176,16 @@ export class PubMedResearchProvider extends LiveResearchProvider {
     article: PubMedSummary,
     name: PersonName,
     retrievedAt: string,
+    affiliations: string[],
+    agreement: string | null,
+    query: ExpertResearchQuery,
   ): ExpertEvidenceItem {
     const pmid = article.uid ?? '';
     const authors = (article.authors ?? [])
       .map((author) => author.name)
       .filter((value): value is string => Boolean(value));
-    const journal = article.fulljournalname || article.source || 'journal not listed';
+    const journal =
+      article.fulljournalname || article.source || 'journal not listed';
     const year = article.pubdate?.slice(0, 4);
     return this.item({
       category: 'publication',
@@ -139,14 +196,33 @@ export class PubMedResearchProvider extends LiveResearchProvider {
         `in ${journal}.`,
         authors.length > 0 ? `Authors: ${authors.join(', ')}.` : null,
         `An author string matches ${name.last} and the expert’s initials.`,
-        'This summary does not confirm the author’s institution, so it is not proof the article belongs to this expert.',
+        affiliations.length > 0
+          ? `Affiliation listed for this author: ${affiliations[0].slice(0, 300)}.`
+          : null,
+        agreement
+          ? `The affiliation agrees with the expert (${agreement}). An affiliation is not proof of identity.`
+          : 'No affiliation that agrees with the expert’s place or specialty was found, so it is not proof the article belongs to this expert.',
       ]
         .filter(Boolean)
         .join(' '),
       url: pmid ? `https://pubmed.ncbi.nlm.nih.gov/${pmid}/` : undefined,
       retrievedAt,
       informationStatus: 'unverified',
-      raw: { pmid, authors, journal, pubdate: article.pubdate ?? null },
+      raw: {
+        pmid,
+        authors,
+        journal,
+        pubdate: article.pubdate ?? null,
+        affiliations,
+        ...(agreement
+          ? {
+              identity: {
+                name: query.expertName,
+                verifiedBy: 'source_match',
+              },
+            }
+          : {}),
+      },
     });
   }
 }
@@ -165,4 +241,88 @@ export function authorListed(author: string, name: PersonName): boolean {
   const middle = name.middle[0]?.[0];
   if (middle && rest.length >= 2) return rest[1] === middle;
   return true;
+}
+
+function decodeXml(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Affiliations PubMed lists for the expert's own author entry, by PMID.
+ * Only the entry whose name matches the expert is read; co-authors'
+ * affiliations never count.
+ */
+export function parseAuthorAffiliations(
+  xml: string,
+  name: PersonName,
+): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const article of xml.split(/<PubmedArticle>/).slice(1)) {
+    const pmid = article.match(/<PMID[^>]*>(\d+)<\/PMID>/)?.[1];
+    if (!pmid) continue;
+    const found: string[] = [];
+    for (const author of article.matchAll(
+      /<Author\b[^>]*>([\s\S]*?)<\/Author>/g,
+    )) {
+      const body = author[1];
+      const last = body.match(/<LastName>([\s\S]*?)<\/LastName>/)?.[1];
+      const given =
+        body.match(/<ForeName>([\s\S]*?)<\/ForeName>/)?.[1] ??
+        body.match(/<Initials>([\s\S]*?)<\/Initials>/)?.[1];
+      if (!last || !given) continue;
+      if (!authorListed(`${decodeXml(last)} ${decodeXml(given)}`, name))
+        continue;
+      for (const affiliation of body.matchAll(
+        /<Affiliation>([\s\S]*?)<\/Affiliation>/g,
+      )) {
+        const text = decodeXml(affiliation[1]);
+        if (text) found.push(text);
+      }
+    }
+    if (found.length > 0) out.set(pmid, found);
+  }
+  return out;
+}
+
+function stem(word: string): string {
+  return word
+    .toLowerCase()
+    .replace(/(ists?|y|ics?|ic|ian|ology)$/, '')
+    .slice(0, 12);
+}
+
+/**
+ * Whether a listed affiliation agrees with the expert's place, specialty or
+ * the attorney's note. Returns what it agreed on, or null.
+ */
+export function affiliationAgrees(
+  affiliations: string[],
+  query: ExpertResearchQuery,
+): string | null {
+  if (affiliations.length === 0) return null;
+  const text = affiliations.join(' ').toLowerCase();
+  const city = parseCityState(query.city || '').city?.toLowerCase();
+  if (city && city.length > 2 && text.includes(city)) {
+    return `place: ${city}`;
+  }
+  const specialty = query.specialty
+    .split(/[\s,/&-]+/)
+    .filter((word) => word.length > 4)
+    .map(stem)
+    .find((root) => root.length >= 5 && text.includes(root));
+  if (specialty) return `specialty: ${query.specialty.trim()}`;
+  const terms = (query.context ?? '')
+    .split(/[,;\n]+/)
+    .map((term) => term.trim().toLowerCase())
+    .filter((term) => term.length >= 6 && term.length <= 70);
+  const hit = terms.find((term) => text.includes(term));
+  return hit ? `note: ${hit}` : null;
 }

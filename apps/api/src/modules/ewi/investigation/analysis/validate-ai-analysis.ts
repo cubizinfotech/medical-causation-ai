@@ -3,16 +3,11 @@ import type {
   EwiAnalysisConclusion,
   EwiAnalysisDocument,
   EwiAnalysisFindingNote,
-  EwiAnalysisQuestion,
   EwiAnalysisSectionId,
   EwiAnalysisSectionSummary,
   EwiAssessment,
 } from './ewi-analysis.types';
-import {
-  EWI_ANALYSIS_SECTIONS,
-  EWI_ASSESSMENTS,
-  MIN_LEADING_QUESTIONS,
-} from './ewi-analysis.types';
+import { EWI_ANALYSIS_SECTIONS, EWI_ASSESSMENTS } from './ewi-analysis.types';
 
 export class AnalysisValidationError extends Error {
   constructor(
@@ -33,7 +28,8 @@ const SECTION_SET = new Set<string>(EWI_ANALYSIS_SECTIONS);
 export interface AiAnalysisWording {
   summary: string;
   conclusions: EwiAnalysisConclusion[];
-  questions: EwiAnalysisQuestion[];
+  /** Always empty: questions are built from the evidence, not by the model. */
+  questions: never[];
   sectionSummaries?: EwiAnalysisSectionSummary[];
   investigationFindings?: EwiAnalysisFindingNote[];
 }
@@ -50,7 +46,6 @@ export function validateAiAnalysis(
   const parsed = parseJsonObject(raw);
   const summary = readString(parsed.summary, 'summary');
   const conclusions = readConclusions(parsed.conclusions);
-  const questions = readQuestions(parsed.questions);
   const sectionSummaries =
     parsed.sectionSummaries === undefined
       ? undefined
@@ -67,14 +62,6 @@ export function validateAiAnalysis(
   for (const conclusion of conclusions) {
     assertRefs(conclusion.sourceRefs, allowed, 'conclusion');
     assertGrounded(conclusion.text, corpus, 'conclusion');
-  }
-  for (const question of questions) {
-    assertRefs(question.sourceRefs, allowed, 'question');
-    assertGrounded(question.question, corpus, 'question');
-    assertGrounded(question.category, corpus, 'question category');
-    if (question.uncertaintyNote) {
-      assertGrounded(question.uncertaintyNote, corpus, 'uncertaintyNote');
-    }
   }
 
   if (sectionSummaries) {
@@ -96,17 +83,12 @@ export function validateAiAnalysis(
     }
   }
 
-  if (questions.length < MIN_LEADING_QUESTIONS) {
-    throw new AnalysisValidationError(
-      'malformed',
-      `AI analysis questions must contain at least ${MIN_LEADING_QUESTIONS} evidence-grounded items (got ${questions.length}).`,
-    );
-  }
-
   return {
     summary,
     conclusions,
-    questions,
+    // Cross-examination questions are built from the evidence elsewhere
+    // (ewi-report-questions); model questions are not used.
+    questions: [],
     ...(sectionSummaries ? { sectionSummaries } : {}),
     ...(investigationFindings ? { investigationFindings } : {}),
   };
@@ -128,7 +110,6 @@ export function applyAiWording(
     ...document,
     summary: wording.summary,
     conclusions: wording.conclusions,
-    questions: wording.questions,
     sectionSummaries,
     investigationFindings,
   };
@@ -283,34 +264,6 @@ function readConclusions(value: unknown): EwiAnalysisConclusion[] {
     return {
       text: readString(record.text, 'conclusion text'),
       sourceRefs: readRefs(record.sourceRefs),
-    };
-  });
-}
-
-function readQuestions(value: unknown): EwiAnalysisQuestion[] {
-  if (!Array.isArray(value)) {
-    throw new AnalysisValidationError(
-      'malformed',
-      'AI analysis questions must be an array.',
-    );
-  }
-  return value.map((item) => {
-    if (!item || typeof item !== 'object') {
-      throw new AnalysisValidationError(
-        'malformed',
-        'AI question must be an object.',
-      );
-    }
-    const record = item as Record<string, unknown>;
-    const uncertaintyNote =
-      record.uncertaintyNote === undefined || record.uncertaintyNote === null
-        ? undefined
-        : readString(record.uncertaintyNote, 'uncertaintyNote');
-    return {
-      category: readString(record.category, 'question category'),
-      question: readString(record.question, 'question'),
-      sourceRefs: readRefs(record.sourceRefs),
-      ...(uncertaintyNote ? { uncertaintyNote } : {}),
     };
   });
 }

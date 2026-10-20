@@ -1,10 +1,7 @@
 import { buildDeterministicAnalysis } from './deterministic-analysis';
 import { EwiAnalysisService } from './ewi-analysis.service';
 import type { AnalysisPacket } from './ewi-analysis.types';
-import {
-  EWI_ANALYSIS_SECTIONS,
-  MIN_LEADING_QUESTIONS,
-} from './ewi-analysis.types';
+import { EWI_ANALYSIS_SECTIONS } from './ewi-analysis.types';
 import {
   AnalysisValidationError,
   applyAiWording,
@@ -39,7 +36,7 @@ const packet: AnalysisPacket = {
   ],
 };
 
-function groundedQuestionBank(count = MIN_LEADING_QUESTIONS) {
+function groundedQuestionBank(count = 3) {
   return Array.from({ length: count }, (_, index) => ({
     category: index % 2 === 0 ? 'publication' : 'identity',
     question:
@@ -139,9 +136,9 @@ describe('validateAiAnalysis', () => {
     );
   });
 
-  it('rejects a question that cites a source that was not collected', () => {
+  it('ignores model-written questions and needs no minimum count', () => {
     const raw = JSON.stringify({
-      summary: 'Could not verify the collected citation.',
+      summary: 'Could not verify Development fixture: sample citation.',
       conclusions: [
         {
           text: 'Could not verify Development fixture: sample citation.',
@@ -154,28 +151,9 @@ describe('validateAiAnalysis', () => {
           question: 'Explain the LinkedIn post.',
           sourceRefs: ['f99'],
         },
-        ...groundedQuestionBank(MIN_LEADING_QUESTIONS - 1),
       ],
     });
-
-    expect(() => validateAiAnalysis(raw, packet)).toThrow(
-      /not a collected source/i,
-    );
-  });
-
-  it('rejects fewer than 100 questions', () => {
-    const raw = JSON.stringify({
-      summary: 'Could not verify Development fixture: sample citation.',
-      conclusions: [
-        {
-          text: 'Could not verify Development fixture: sample citation.',
-          sourceRefs: ['f1'],
-        },
-      ],
-      questions: groundedQuestionBank(10),
-    });
-
-    expect(() => validateAiAnalysis(raw, packet)).toThrow(/at least 100/i);
+    expect(validateAiAnalysis(raw, packet).questions).toEqual([]);
   });
 
   it('accepts wording that only restates collected findings', () => {
@@ -208,10 +186,7 @@ describe('validateAiAnalysis', () => {
     });
 
     const wording = validateAiAnalysis(raw, packet);
-    expect(wording.questions.length).toBeGreaterThanOrEqual(
-      MIN_LEADING_QUESTIONS,
-    );
-    expect(wording.questions[0]?.sourceRefs).toEqual(['f1']);
+    expect(wording.questions).toEqual([]);
     expect(wording.sectionSummaries?.[0]?.section).toBe('publications');
   });
 
@@ -297,14 +272,9 @@ describe('buildDeterministicAnalysis', () => {
     expect(document.sectionSummaries).toHaveLength(
       EWI_ANALYSIS_SECTIONS.length,
     );
-    expect(document.questions.length).toBeGreaterThanOrEqual(
-      MIN_LEADING_QUESTIONS,
-    );
+    expect(document.questions).toEqual([]);
     expect(JSON.stringify(document)).not.toMatch(
       /holds a phd|board-certified/i,
-    );
-    expect(document.questions.every((item) => item.sourceRefs.length > 0)).toBe(
-      true,
     );
   });
 
@@ -339,9 +309,7 @@ describe('applyAiWording', () => {
     const merged = applyAiWording(document, wording);
     expect(merged.assessments[0]?.assessment).toBe('not_verified');
     expect(merged.summary).toBe(wording.summary);
-    expect(merged.questions.length).toBeGreaterThanOrEqual(
-      MIN_LEADING_QUESTIONS,
-    );
+    expect(merged.questions).toEqual([]);
   });
 });
 
@@ -352,9 +320,7 @@ describe('EwiAnalysisService', () => {
     expect(record.origin).toBe('deterministic');
     expect(record.document.assessments[0]?.assessment).toBe('not_verified');
     expect(record.document.summary).not.toMatch(/phd/i);
-    expect(record.document.questions.length).toBeGreaterThanOrEqual(
-      MIN_LEADING_QUESTIONS,
-    );
+    expect(record.document.questions).toEqual([]);
   });
 
   it('discards hallucinated model output', async () => {
@@ -396,9 +362,7 @@ describe('EwiAnalysisService', () => {
     expect(record.origin).toBe('ai');
     expect(record.providerName).toBe('test-provider');
     expect(record.document.assessments[0]?.assessment).toBe('not_verified');
-    expect(record.document.questions.length).toBeGreaterThanOrEqual(
-      MIN_LEADING_QUESTIONS,
-    );
+    expect(record.document.questions).toEqual([]);
   });
 });
 

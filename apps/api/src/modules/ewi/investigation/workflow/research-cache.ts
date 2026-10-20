@@ -2,6 +2,7 @@ import type {
   ExpertResearchQuery,
   ExpertResearchSourceResult,
 } from '@integrations/expert-research';
+import { WEB_RESEARCH_SOURCE_IDS } from '@integrations/web-research/source-kind';
 
 export interface ResearchCacheEntry {
   result: ExpertResearchSourceResult;
@@ -25,6 +26,7 @@ export class PublicResearchCache {
       normalize(query.city),
       normalize(query.specialty),
       query.npi?.trim() ?? '',
+      normalize(query.context ?? ''),
     ].join('|');
   }
 
@@ -64,7 +66,12 @@ export class PublicResearchCache {
   }
 }
 
+const WEB_SOURCES = new Set<string>(WEB_RESEARCH_SOURCE_IDS);
+
 function isCacheable(result: ExpertResearchSourceResult): boolean {
+  // The web engine keeps its own short-lived run; a cut-short or partly failed
+  // search must not be replayed as a finished "no result".
+  if (WEB_SOURCES.has(result.sourceId)) return false;
   if (result.access === 'restricted') return false;
   if (result.status === 'error') return false;
   if (result.outcome === 'restricted') return false;

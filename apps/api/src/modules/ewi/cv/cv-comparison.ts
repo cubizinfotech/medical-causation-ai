@@ -1,4 +1,5 @@
 import {
+  describePosition,
   stateName,
   taxonomyMatches,
   type ExpertEvidenceItem,
@@ -334,47 +335,98 @@ function publicationTitleRows(
     const lookup = byTitle.get(title.trim());
     if (!lookup || lookup.status === 'unavailable') continue;
     const work = lookup.work;
+    const catalogs = checkedCatalogs(lookup);
+    const place =
+      lookup.authorPosition &&
+      lookup.authorIndex !== undefined &&
+      lookup.authorCount
+        ? describePosition(
+            lookup.authorPosition,
+            lookup.authorIndex,
+            lookup.authorCount,
+          )
+        : null;
+    const statement = `${work?.title}${work?.year ? ` (${work.year})` : ''}. Authors: ${work?.authors.join(', ') || 'not listed'}.`;
     if (lookup.status === 'authored') {
+      const differs = lookup.positionCheck === 'differs';
       rows.push({
         topic: 'publication',
-        label: 'verified',
-        severity: 'low',
-        title: `Publication found with the expert as an author: ${title}`,
+        label: differs ? 'conflicting' : 'verified',
+        severity: differs ? 'medium' : 'low',
+        title: differs
+          ? `Publication found; the expert's author position differs from the CV: ${title}`
+          : `Publication found with the expert as an author (${place}): ${title}`,
         cv: cvSide(claim),
         source: {
           name: lookup.catalog ?? 'OpenAlex',
-          statement: `${work?.title}${work?.year ? ` (${work.year})` : ''}. Authors: ${work?.authors.join(', ')}.`,
+          statement,
           url: work?.url,
         },
-        note: '',
+        note: [
+          place ? `${lookup.catalog} lists the expert as ${place}.` : '',
+          differs
+            ? `The CV citation lists the expert as ${lookup.cvAuthorPosition}.`
+            : '',
+          lookup.positionCheck === 'confirmed'
+            ? 'The CV position matches the catalog.'
+            : '',
+          lookup.positionCheck === 'not_verifiable' ||
+          lookup.authorListIncomplete
+            ? 'At least one catalog returned a shorter author list than the CV citation, so the exact position was not confirmed.'
+            : '',
+          `Catalogs checked: ${catalogs}.`,
+        ]
+          .filter(Boolean)
+          .join(' '),
       });
     } else if (lookup.status === 'not_author') {
       rows.push({
         topic: 'publication',
         label: 'conflicting',
         severity: 'high',
-        title: `Publication found, but the expert is not listed as an author: ${title}`,
+        title: `Publication found, but at least two catalogs do not list the expert as an author: ${title}`,
         cv: cvSide(claim),
         source: {
           name: lookup.catalog ?? 'OpenAlex',
-          statement: `${work?.title}${work?.year ? ` (${work.year})` : ''}. Authors: ${work?.authors.join(', ') || 'not listed'}.`,
+          statement,
           url: work?.url,
         },
-        note: 'Check the published author list. OpenAlex sometimes truncates long author lists or records a name differently.',
+        note: `Catalogs checked: ${catalogs}. Compare with the published article before relying on this.`,
+      });
+    } else if (lookup.status === 'author_unconfirmed') {
+      rows.push({
+        topic: 'publication',
+        label: 'unable_to_verify',
+        severity: 'medium',
+        title: `Publication found; the expert's authorship could not be confirmed from the catalogs: ${title}`,
+        cv: cvSide(claim),
+        source: {
+          name: lookup.catalog ?? 'OpenAlex',
+          statement,
+          url: work?.url,
+        },
+        note: `The author list we could read is ${lookup.authorListIncomplete ? 'incomplete or from a single catalog' : 'missing the expert'}${lookup.cvAuthorCount ? ` (the CV lists ${lookup.cvAuthorCount} authors; the catalog lists ${lookup.authorCount ?? 0})` : ''}. This is not a finding that the expert did not write it. Catalogs checked: ${catalogs}. Ask for the article or check the publisher page.`,
       });
     } else {
       rows.push({
         topic: 'publication',
         label: 'not_found',
         severity: 'medium',
-        title: `Publication not found in OpenAlex: ${title}`,
+        title: `Publication not found in the catalogs checked: ${title}`,
         cv: cvSide(claim),
-        source: { name: 'OpenAlex', statement: 'No work with this title.' },
-        note: 'It may be in a source OpenAlex does not index (some journals, abstracts, chapters). Ask the expert for a copy.',
+        source: { name: catalogs, statement: 'No work with this title.' },
+        note: 'It may be in a source these catalogs do not index (some journals, abstracts, chapters). Ask the expert for a copy.',
       });
     }
   }
   return rows;
+}
+
+function checkedCatalogs(lookup: PublicationLookupResult): string {
+  const reached = (lookup.checks ?? [])
+    .filter((check) => check.outcome !== 'error')
+    .map((check) => check.catalog);
+  return reached.length > 0 ? reached.join(', ') : 'OpenAlex';
 }
 
 function payerKey(name: string): string {

@@ -169,5 +169,3 @@ export const SECTION_CATEGORY_MAP: Record<
   missing_unverified: [],
   investigation_findings: [],
 };
-
-export const MIN_LEADING_QUESTIONS = 100;

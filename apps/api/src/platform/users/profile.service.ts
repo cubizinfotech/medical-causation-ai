@@ -100,7 +100,9 @@ export class ProfileService {
         product: 'ewi' as const,
         id: row.id,
         title: row.expert.name,
-        subtitle: `${row.expert.city} · ${row.expert.specialty}`,
+        subtitle: [row.expert.city, row.expert.specialty]
+          .filter(Boolean)
+          .join(' · '),
         status: row.status,
         createdAt: row.createdAt.toISOString(),
       })),

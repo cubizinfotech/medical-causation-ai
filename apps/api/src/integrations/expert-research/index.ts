@@ -12,7 +12,10 @@ export * from './live/live-sources';
 export type {
   PublicationLookupResult,
   PublicationLookupStatus,
+  CatalogCheck,
 } from './live/publication-lookup';
+export { describePosition } from './live/author-position';
+export type { AuthorPosition } from './live/author-position';
 export { articleTitle, sameTitle } from './live/publication-lookup';
 export { specialtyMatches, taxonomyMatches } from './live/specialty-match';
 export { stateCode, stateName } from './live/location';

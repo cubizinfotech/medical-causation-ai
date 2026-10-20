@@ -7,9 +7,15 @@ import type {
   IExpertResearchProvider,
   ProviderDefinition,
 } from './expert-research.types';
+import { WebResearchEngine } from '../web-research/web-research-engine';
+import type {
+  WebResearchDossier,
+  WebResearchLlm,
+} from '../web-research/web-research.types';
 import { CatalogExpertResearchProvider } from './providers/catalog-expert-research.provider';
 import { EXPERT_RESEARCH_CATALOG } from './providers/provider-catalog';
 import { createLiveSourceProviders } from './live/live-sources';
+import { CrossrefClient } from './live/crossref.client';
 import { OpenAlexClient } from './live/openalex.client';
 import {
   PublicationTitleLookup,
@@ -27,8 +33,10 @@ import {
 
 export function createExpertResearchRuntime(
   settings?: ResearchProviderSettings,
+  options: { webLlm?: WebResearchLlm; fetchImpl?: typeof fetch } = {},
 ): ProviderRuntimeOptions {
   const timeoutMs = settings?.timeoutMs ?? 20000;
+  const live = settings?.mode === 'live';
   return {
     mode: settings?.mode === 'live' ? 'live' : 'mock',
     timeoutMs,
@@ -42,6 +50,15 @@ export function createExpertResearchRuntime(
       openPaymentsYears: settings?.openPaymentsYears,
       pubmedApiKey: process.env.PUBMED_API_KEY?.trim() || undefined,
       pubmedEmail: process.env.PUBMED_EMAIL?.trim() || undefined,
+      fetchImpl: options.fetchImpl,
+      webEngine:
+        live && settings?.web
+          ? new WebResearchEngine({
+              settings: settings.web,
+              llm: options.webLlm,
+              fetchImpl: options.fetchImpl,
+            })
+          : undefined,
     },
   };
 }
@@ -87,6 +104,11 @@ export function createPublicationLookup(
       apiKey: live.pubmedApiKey,
       email: live.pubmedEmail,
     },
+    new CrossrefClient({
+      timeoutMs: live.timeoutMs,
+      fetchImpl: live.fetchImpl,
+      mailto: live.openAlexMailto ?? live.pubmedEmail,
+    }),
   );
 }
 
@@ -95,7 +117,29 @@ export class ExpertResearchService {
   constructor(
     private readonly providers: IExpertResearchProvider[],
     private readonly publicationLookup: PublicationTitleLookup | null = null,
+    private readonly webEngine: WebResearchEngine | null = null,
   ) {}
+
+  /**
+   * The shared web research dossier for this subject: candidates, pages,
+   * coverage and limits. Null when the web layer is not enabled (mock mode).
+   * Shares the memoized run the web-backed sources already used.
+   */
+  async webDossier(
+    query: ExpertResearchQuery,
+  ): Promise<WebResearchDossier | null> {
+    if (!this.webEngine) return null;
+    const validated = validateExpertResearchQuery(query);
+    if (!validated.ok) return null;
+    const value = validated.value;
+    return this.webEngine.research({
+      expertName: value.expertName,
+      city: value.city,
+      specialty: value.specialty,
+      npi: value.npi,
+      context: value.context,
+    });
+  }
 
   /**
    * Checks publication titles (from an uploaded CV) against OpenAlex.

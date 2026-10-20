@@ -65,6 +65,7 @@ export interface InvestigationView {
   city: string;
   specialty: string;
   npi: string | null;
+  additionalContext?: string | null;
   status: InvestigationStatus;
   step: string | null;
   stepLabel: string | null;
@@ -95,7 +96,7 @@ export class ExpertInvestigationRepository {
     ownerUserId: string,
   ) {
     const name = dto.expertName.trim();
-    const city = dto.city.trim();
+    const city = dto.city?.trim() ?? '';
     const specialty = dto.specialty.trim();
 
     const created = await this.prisma.$transaction(async (tx) => {
@@ -115,6 +116,7 @@ export class ExpertInvestigationRepository {
           progress: 0,
           ownerUserId,
           npi: dto.npi ?? null,
+          additionalContext: dto.additionalContext?.trim() || null,
           profile: {
             create: { displayName: name, city, specialty },
           },
@@ -431,6 +433,9 @@ export class ExpertInvestigationRepository {
               sourceStatuses: result.sourceStatuses ?? [],
               identity: result.identity ?? null,
               cvCheck: result.cvCheck ?? null,
+              webResearch: result.webResearch ?? null,
+              // Questions keep their label and sources here; the table keeps the text.
+              questions: result.questions,
             } as unknown as Prisma.InputJsonValue,
           },
         });
@@ -637,6 +642,7 @@ export class ExpertInvestigationRepository {
     errorMessage: string | null;
     notes: string | null;
     npi?: string | null;
+    additionalContext?: string | null;
     createdAt: Date;
     updatedAt: Date;
     completedAt: Date | null;
@@ -656,6 +662,7 @@ export class ExpertInvestigationRepository {
       city: row.expert.city,
       specialty: row.expert.specialty,
       npi: row.npi ?? null,
+      additionalContext: row.additionalContext ?? null,
       status: row.status,
       step: row.currentStage,
       stepLabel: row.stageLabel,
@@ -727,6 +734,8 @@ export class ExpertInvestigationRepository {
           city: row.expert.city,
           specialty: row.expert.specialty,
           npi: row.npi ?? null,
+          additionalContext: row.additionalContext ?? null,
+          webResearch: readStoredWebResearch(row.analysis?.payload),
           identity: readStoredIdentity(row.analysis?.payload),
           cvCheck: readStoredCvCheck(row.analysis?.payload),
           evidence,
@@ -748,12 +757,7 @@ export class ExpertInvestigationRepository {
             priority: item.priority,
             sources: readInconsistencySources(item.evidence),
           })),
-          questions: row.questions.map((item) => ({
-            number: item.number,
-            category: item.category,
-            question: item.question,
-            evidenceBasis: item.evidenceBasis,
-          })),
+          questions: readStoredQuestions(row.analysis?.payload, row.questions),
           questionCount: row.questions.length,
           sourceStatuses: readSourceStatuses(row),
           reportFileName: row.report?.fileName ?? '',
@@ -867,6 +871,55 @@ function readStoredIdentity(
   return typeof record.status === 'string' && typeof record.note === 'string'
     ? (identity as NonNullable<EwiInvestigationResult['identity']>)
     : null;
+}
+
+function readStoredWebResearch(
+  payload: unknown,
+): EwiInvestigationResult['webResearch'] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const dossier = (payload as Record<string, unknown>).webResearch;
+  if (!dossier || typeof dossier !== 'object' || Array.isArray(dossier)) {
+    return null;
+  }
+  const record = dossier as Record<string, unknown>;
+  return Array.isArray(record.records) && Array.isArray(record.candidates)
+    ? (dossier as NonNullable<EwiInvestigationResult['webResearch']>)
+    : null;
+}
+
+/** Questions with their label and sources when stored; otherwise the plain rows. */
+function readStoredQuestions(
+  payload: unknown,
+  rows: Array<{
+    number: number;
+    category: string;
+    question: string;
+    evidenceBasis: string;
+  }>,
+): EwiInvestigationResult['questions'] {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const stored = (payload as Record<string, unknown>).questions;
+    if (
+      Array.isArray(stored) &&
+      stored.length === rows.length &&
+      stored.every(
+        (item) =>
+          item &&
+          typeof item === 'object' &&
+          typeof (item as Record<string, unknown>).question === 'string',
+      )
+    ) {
+      return stored as EwiInvestigationResult['questions'];
+    }
+  }
+  return rows.map((item) => ({
+    number: item.number,
+    category: item.category,
+    question: item.question,
+    evidenceBasis: item.evidenceBasis,
+  }));
 }
 
 function readStoredCvCheck(

@@ -103,7 +103,7 @@ export class OpenAlexResearchProvider extends LiveResearchProvider {
     if (candidates.length === 0) {
       return {
         items: [],
-        message: `${authors.length} OpenAlex author profile(s) are named ${displayName(name)}, but none has both ${query.specialty} research topics and an institution in ${where}. Nothing was attributed to the expert.`,
+        message: `${authors.length} OpenAlex author profile(s) are named ${displayName(name)}, but none has ${query.specialty} research topics${hasPlace(place) ? ` and an institution in ${where}` : ''}. Nothing was attributed to the expert.`,
       };
     }
     const chosen = sameOrcid(candidates);
@@ -111,7 +111,7 @@ export class OpenAlexResearchProvider extends LiveResearchProvider {
       return {
         items: [],
         outcome: 'conflicting',
-        message: `${candidates.length} OpenAlex author profiles fit the name, ${query.specialty} topics, and ${where}: ${candidates
+        message: `${candidates.length} OpenAlex author profiles fit the name and ${query.specialty} topics${hasPlace(place) ? ` and ${where}` : ''}: ${candidates
           .map(
             (candidate) =>
               `${candidate.author.display_name} (${candidate.matchedInstitutions.join(', ') || 'institution not listed'}; ${candidate.author.works_count ?? 0} works; ${candidate.author.id})`,
@@ -127,7 +127,9 @@ export class OpenAlexResearchProvider extends LiveResearchProvider {
       city: query.city,
       specialty: query.specialty,
       verifiedBy: 'source_match',
-      basis: ['name', 'research topics', 'institution location'],
+      basis: hasPlace(place)
+        ? ['name', 'research topics', 'institution location']
+        : ['name', 'research topics'],
       openalexId: chosen.author.id,
     };
     const [topCited, recent, retracted] = await Promise.all([
@@ -319,22 +321,24 @@ function placeFor(
   identity: ResolvedExpertIdentity | null,
 ): Place {
   const parsed = parseCityState(query.city);
-  const cities = [parsed.city];
+  const cities = parsed.city ? [parsed.city] : [];
   const states = new Set<string>();
   const queryState = stateName(parsed.state);
   if (queryState) states.add(queryState);
   for (const location of identity?.record?.locations ?? []) {
-    cities.push(location.city);
+    if (location.city) cities.push(location.city);
     const name = stateName(location.state);
     if (name) states.add(name);
   }
   return { cities, states: [...states] };
 }
 
+function hasPlace(place: Place): boolean {
+  return place.cities.length > 0 || place.states.length > 0;
+}
+
 function describePlace(place: Place): string {
-  return place.states.length > 0
-    ? `${place.cities[0]} or ${place.states.join('/')}`
-    : place.cities[0];
+  return [...place.cities.slice(0, 1), ...place.states].join(' or ');
 }
 
 function candidateFor(
@@ -365,7 +369,9 @@ function candidateFor(
       institutionIds(author)
         .map((id) => institutions.get(shortId(id)))
         .filter((institution): institution is OpenAlexInstitution =>
-          Boolean(institution && inPlace(institution, place)),
+          Boolean(
+            institution && (!hasPlace(place) || inPlace(institution, place)),
+          ),
         )
         .map((institution) => {
           const geo = institution.geo;
@@ -373,7 +379,7 @@ function candidateFor(
         }),
     ),
   ];
-  if (matchedInstitutions.length === 0) return null;
+  if (hasPlace(place) && matchedInstitutions.length === 0) return null;
   return { author, matchedTopics, matchedInstitutions };
 }
 

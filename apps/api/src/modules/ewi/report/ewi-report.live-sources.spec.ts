@@ -204,9 +204,7 @@ describe('EWI report with live sources', () => {
 
   it('shows the identity result in the background section', () => {
     const text = sectionText(document, 'background');
-    expect(text).toMatch(
-      /Identity not confirmed — one possible NPI record/,
-    );
+    expect(text).toMatch(/Identity not confirmed — one possible NPI record/);
     expect(text).toMatch(
       /Possible record: NPI 1234567893 — Jane A\. Smith, MD/,
     );

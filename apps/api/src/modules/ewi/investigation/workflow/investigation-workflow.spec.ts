@@ -73,7 +73,7 @@ describe('investigation workflow', () => {
     // The summary says plainly that nothing was found; it does not list a
     // "could not verify" line for every source.
     expect(outcome.result.summary).toMatch(
-      /No records about this expert were found in the sources searched/,
+      /No information about this expert was confirmed from the sources retrieved/,
     );
     expect(outcome.result.summary).not.toMatch(
       /Could not verify|Nothing was inferred/,
@@ -83,8 +83,8 @@ describe('investigation workflow', () => {
     expect(outcome.result.summary).not.toMatch(
       /award recipient|received a medal/i,
     );
-    // Empty findings still yield uncertainty questions grounded in empty source attempts.
-    expect(outcome.result.questionCount).toBeGreaterThanOrEqual(100);
+    // No finding means no question: questions are never padded or invented.
+    expect(outcome.result.questionCount).toBe(0);
     expect(
       outcome.result.questions.every((item) => item.evidenceBasis.length > 0),
     ).toBe(true);
@@ -201,7 +201,21 @@ describe('investigation workflow', () => {
           research: { collectProviders: () => Promise.resolve([]) },
         },
       ),
-    ).rejects.toThrow(/expert name, city, and medical specialty/i);
+    ).rejects.toThrow(/name and a specialty or profession are required/i);
+  });
+
+  it('runs without a city', async () => {
+    const outcome = await executeInvestigationWorkflow(
+      { expertName: 'Jane Smith', city: '', specialty: 'Orthopedics' },
+      {
+        stages: EWI_WORKFLOW_STAGES.filter(
+          (stage) => stage.id === 'identify-expert',
+        ),
+        report,
+        research: { collectProviders: () => Promise.resolve([]) },
+      },
+    );
+    expect(outcome.result.expertName).toBe('Jane Smith');
   });
 
   it('stops when the investigation is cancelled mid-run', async () => {

@@ -29,7 +29,7 @@ async function pdfPages(buffer: Buffer): Promise<string[]> {
 describe('EWI report template', () => {
   const renderer = new PdfReportRenderer();
 
-  it('includes the full 41-section outline with metadata, TOC, version, and disclaimer', () => {
+  it('includes the full 42-section outline with metadata, TOC, version, and disclaimer', () => {
     const document = buildEwiReportDocument({
       expertName: 'Jane Doe',
       city: 'Boston',
@@ -40,7 +40,7 @@ describe('EWI report template', () => {
       generatedAt: '2026-09-23T00:00:00.000Z',
     });
 
-    expect(document.sections).toHaveLength(41);
+    expect(document.sections).toHaveLength(42);
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
@@ -91,7 +91,9 @@ describe('EWI report template', () => {
         .find((section) => section.id === 'board-certifications')
         ?.blocks.map((block) => block.text)
         .join(' '),
-    ).toBe('No records for this section were found in the sources searched.');
+    ).toBe(
+      'The web search did not run for this investigation, so a board certification was not searched for on the web. A search cannot prove that nothing exists.',
+    );
     expect(
       document.sections.find((section) => section.id === 'questions')?.blocks[0]
         ?.text,
@@ -139,7 +141,7 @@ describe('EWI report template', () => {
         .join('\n') ?? '';
 
     expect(sectionText('summary')).toContain(
-      'No records about this expert were found in the sources searched.',
+      'No information about this expert was confirmed from the sources retrieved.',
     );
     for (const id of ['summary', 'overall-findings']) {
       expect(sectionText(id)).not.toMatch(
@@ -483,18 +485,16 @@ describe('EWI report template', () => {
     );
   });
 
-  it('writes a PDF with a cover, contents, and at least 100 boxed questions', async () => {
-    const evidence = [
-      {
-        sourceId: 'pubmed' as const,
-        category: 'publication',
-        title: 'Development fixture: spine study',
-        summary: 'Development fixture only.',
-        url: 'https://pubmed.ncbi.nlm.nih.gov/1/',
-        access: 'public' as const,
-        informationStatus: 'unverified' as const,
-      },
-    ];
+  it('writes a PDF with a cover, contents, and many boxed questions', async () => {
+    const evidence = Array.from({ length: 60 }, (_, index) => ({
+      sourceId: 'pubmed' as const,
+      category: 'publication',
+      title: `Development fixture: spine study ${index + 1}`,
+      summary: `Development fixture article number ${index + 1} about lumbar fusion outcomes in adults.`,
+      url: `https://pubmed.ncbi.nlm.nih.gov/${index + 1}/`,
+      access: 'public' as const,
+      informationStatus: 'unverified' as const,
+    }));
     const questions = buildGroundedCrossExamQuestions({
       expertName: 'Jane Doe',
       evidence,
@@ -513,7 +513,7 @@ describe('EWI report template', () => {
     const pages = await pdfPages(rendered.buffer);
     const all = pages.join('\n');
 
-    expect(questions.length).toBeGreaterThanOrEqual(100);
+    expect(questions.length).toBe(60);
     expect(rendered.buffer.subarray(0, 5).toString()).toBe('%PDF-');
     expect(rendered.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(rendered.mimeType).toBe('application/pdf');
@@ -526,10 +526,10 @@ describe('EWI report template', () => {
       'The collected publication record is listed under Publications.',
     );
     expect(all).toContain('Contents');
-    expect(all).toContain('41. Cross-Examination Questions');
-    expect(all).toContain(`1. ${questions[0].question.slice(0, 40)}`);
+    expect(all).toContain('42. Cross-Examination Questions');
+    expect(all).toContain(questions[0].question.slice(0, 40));
     expect(all).toContain(
-      `${questions.length}. ${questions[questions.length - 1].question.slice(0, 30)}`,
+      questions[questions.length - 1].question.slice(0, 30),
     );
     expect(all).toContain('(continued)');
     expect(all).toContain('Disclaimer');
@@ -633,12 +633,145 @@ describe('EwiWordReportService', () => {
       '6. Expert Background',
       '31. Social Media',
       'Public LinkedIn listing',
-      '41. Cross-Examination Questions',
-      `1. ${questions[0].question}`,
+      '42. Cross-Examination Questions',
+      `1. [Unresolved] ${questions[0].question}`,
       'Disclaimer',
     ]) {
       expect(text).toContain(expected);
     }
     expect(html).toContain('<a href="https://linkedin.example/jane">');
+  });
+});
+
+describe('EWI report web research section', () => {
+  const base = {
+    expertName: 'Jason A. Demery',
+    specialty: 'Neuropsychology',
+    evidence: [],
+    discrepancies: [],
+    questions: [],
+    generatedAt: '2026-10-20T00:00:00.000Z',
+  };
+  const record = (id: string, title: string, url: string, level: string) => ({
+    id,
+    url,
+    title,
+    kind: 'news',
+    snippet: null,
+    summary: `${title} summary`,
+    publishedAt: '2026-09-01T00:00:00.000Z',
+    retrievedAt: '2026-10-20T00:00:00.000Z',
+    searchProviders: ['gemini'],
+    queries: [],
+    read: 'read',
+    readNote: null,
+    match: {
+      level,
+      confidence: 'high',
+      basis: ['name', 'specialty'],
+      conflicts: [],
+      quote: 'Dr. Jason A. Demery testified',
+      quoteVerified: true,
+      classifiedBy: 'rules',
+    },
+    candidateId: null,
+    claims: [],
+  });
+
+  it('lists same-name candidates separately and works without a city', () => {
+    const subject = record(
+      'r1',
+      'Court TV article',
+      'https://courttv.example/a',
+      'strong',
+    );
+    const other = record(
+      'r2',
+      'Another Jason Demery',
+      'https://other.example/b',
+      'other_person',
+    );
+    const document = buildEwiReportDocument({
+      ...base,
+      city: '',
+      additionalContext: 'Also known as J. Demery\nGainesville clinic',
+      webResearch: {
+        ranAt: '2026-10-20T00:00:00.000Z',
+        durationMs: 1000,
+        partial: false,
+        partialNote: null,
+        queriesPlanned: 4,
+        queriesRun: 4,
+        providers: [
+          {
+            providerId: 'gemini',
+            name: 'Gemini Search',
+            configured: true,
+            requests: 4,
+            hits: 7,
+            failures: [],
+          },
+        ],
+        pagesRead: 2,
+        pagesBlocked: [
+          { url: 'https://blocked.example/x', reason: 'Login required' },
+        ],
+        candidates: [
+          {
+            id: 'c1',
+            label: 'Jason A. Demery, PhD, neuropsychologist',
+            role: 'subject',
+            confidence: 'high',
+            basis: ['name', 'specialty'],
+            recordIds: ['r1'],
+          },
+          {
+            id: 'c2',
+            label: 'Jason Demery, contractor',
+            role: 'other',
+            confidence: 'medium',
+            basis: ['name'],
+            recordIds: ['r2'],
+          },
+        ],
+        records: [subject, other],
+        registries: [],
+        limitations: ['Social platforms were not opened.'],
+      } as never,
+    });
+    const section = document.sections.find((s) => s.id === 'web-research');
+    const text = section?.blocks.map((block) => block.text).join('\n') ?? '';
+    expect(section?.title).toBe(
+      '39. Global Web Research and Same-Name Candidates',
+    );
+    expect(text).toContain('2 different people share this name');
+    expect(text).toContain(
+      'Jason A. Demery, PhD, neuropsychologist — likely the expert',
+    );
+    expect(text).toContain('Jason Demery, contractor — a different person');
+    expect(text).toContain('Nothing below is attributed to the expert');
+    expect(text).toContain('published 2026-09-01');
+    expect(text).toContain('https://courttv.example/a');
+    expect(text).toContain('Also known as J. Demery');
+    expect(text).toContain('Login required');
+    expect(text).toContain('Social platforms were not opened.');
+    expect(
+      document.sections.find((s) => s.id === 'city')?.blocks[0]?.text,
+    ).toMatch(/Not provided/);
+    expect(document.subtitle).toBe('Jason A. Demery — Neuropsychology');
+  });
+
+  it('says the web search did not run instead of claiming nothing exists', () => {
+    const document = buildEwiReportDocument({
+      ...base,
+      city: 'Gainesville, FL',
+    });
+    const text =
+      document.sections
+        .find((s) => s.id === 'web-research')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(text).toMatch(/did not run/);
+    expect(text).toMatch(/not a finding that none exist/);
   });
 });

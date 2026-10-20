@@ -59,6 +59,7 @@ export class ExpertInvestigationService {
       research: this.research,
       report: this.reportService,
       analyze: (packet) => this.analysis.interpret(packet),
+      polishQuestions: (drafts) => this.analysis.polishQuestions(drafts),
       readChallengeRulings: (input) =>
         this.analysis.readChallengeRulings(input),
       readCv: (documentId, onProgress) =>

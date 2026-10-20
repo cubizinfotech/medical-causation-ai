@@ -3,17 +3,20 @@ import { CrossExamQuestionGenerator } from './cross-exam-question.generator';
 describe('CrossExamQuestionGenerator', () => {
   const generator = new CrossExamQuestionGenerator();
 
-  it('generates at least 100 questions', () => {
+  it('builds specific questions from the findings and does not pad to a count', () => {
     const questions = generator.generate({
       expertName: 'Jane Doe',
       specialty: 'Neurology',
       evidence: [
         {
-          sourceId: 'mock',
+          sourceId: 'state_license',
           category: 'license',
           title: 'CA License',
-          summary: 'Active',
-          simulated: true,
+          summary:
+            'California physician license A12345 is listed as active since 2009.',
+          url: 'https://example.test/license',
+          informationStatus: 'verified',
+          identityMatch: 'matched',
         },
       ],
       discrepancies: [
@@ -21,26 +24,28 @@ describe('CrossExamQuestionGenerator', () => {
           id: 'x',
           severity: 'medium',
           title: 'Mismatch',
-          description: 'Test mismatch',
+          description:
+            'The CV says the license was issued in 2005 but the state record says 2009.',
           evidenceIds: ['CA License'],
-          relatedUrls: [],
+          relatedUrls: ['https://example.test/license'],
           label: 'conflicting',
           field: 'license',
           previousValue: null,
           currentValue: null,
           change: null,
           cvDate: null,
-          cvSource: null,
-          supportingSource: null,
+          cvSource: 'CV page 2',
+          supportingSource: 'California DCA',
           priority: 1,
           sources: [],
         },
       ],
     });
 
-    expect(questions.length).toBeGreaterThanOrEqual(100);
-    expect(questions[0]?.question).toContain('Jane Doe');
-    expect(questions.some((item) => item.question.includes('CA License'))).toBe(
+    expect(questions).toHaveLength(2);
+    expect(questions.map((item) => item.question).join(' ')).toMatch(/A12345/);
+    expect(questions.map((item) => item.question).join(' ')).toMatch(/2005/);
+    expect(questions.every((item) => (item.sources ?? []).length > 0)).toBe(
       true,
     );
     expect(questions.map((item) => item.question).join(' ')).not.toMatch(

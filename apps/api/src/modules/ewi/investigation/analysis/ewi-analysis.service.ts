@@ -13,10 +13,11 @@ import {
 } from './validate-ai-analysis';
 import { buildDeterministicAnalysis } from './deterministic-analysis';
 import {
-  MIN_LEADING_QUESTIONS,
   type AnalysisPacket,
   type EwiAnalysisRecord,
 } from './ewi-analysis.types';
+import { polishQuestions } from '../../report/ewi-question-polisher';
+import type { QuestionDraft } from '../../report/ewi-report-questions';
 import type {
   ChallengeCandidate,
   ChallengeReading,
@@ -124,9 +125,6 @@ export class EwiAnalysisService {
                   'unavailable',
                   'restricted',
                 ],
-                // Asks for a margin over the 100 the validator requires: a
-                // model asked for exactly 100 often stops a few short.
-                minQuestions: MIN_LEADING_QUESTIONS + 15,
               }),
             },
           }),
@@ -158,6 +156,47 @@ export class EwiAnalysisService {
         providerName: null,
         document: deterministic,
       };
+    }
+  }
+
+  /**
+   * Tightens the wording of evidence-based questions. A rewrite is kept only
+   * when it still contains the quoted fact and adds no new number; otherwise
+   * the original wording stays. Without a model the drafts are returned as is.
+   */
+  async polishQuestions(drafts: QuestionDraft[]): Promise<QuestionDraft[]> {
+    try {
+      const provider = this.ai.getActiveLlmProvider();
+      if (!provider.isAvailable()) return drafts;
+      return await polishQuestions(
+        drafts,
+        async ({ system, user, maxTokens }) => {
+          const response = await retryOnRateLimit(
+            () =>
+              this.ai.complete({
+                temperature: 0,
+                maxTokens,
+                metadata: {
+                  product: 'ewi',
+                  task: 'question-wording',
+                  responseFormat: 'json',
+                },
+                messages: [
+                  { role: 'system', content: system },
+                  { role: 'user', content: user },
+                ],
+              }),
+            BACKGROUND_RATE_LIMIT_RETRY,
+          );
+          return response.content;
+        },
+        (message) => this.logger.warn(message),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Question wording kept as drafted: ${describeError(error)}`,
+      );
+      return drafts;
     }
   }
 

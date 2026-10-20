@@ -42,7 +42,13 @@ export function assessIdentityMatch(
   if (hints.verifiedBy === 'npi' || hints.verifiedBy === 'source_match') {
     return 'matched';
   }
-  if (hints.city && !sameCity(hints.city, query.city)) return 'uncertain';
+  if (
+    hints.city &&
+    query.city.trim().length > 0 &&
+    !sameCity(hints.city, query.city)
+  ) {
+    return 'uncertain';
+  }
   if (hints.specialty && !sameSpecialty(hints.specialty, query.specialty)) {
     return 'uncertain';
   }

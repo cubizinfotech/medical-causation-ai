@@ -68,6 +68,40 @@ describe('ExpertIdentityResolver', () => {
     expect(resolution.note).toMatch(/Add the expert’s NPI/);
   });
 
+  it('confirms a single name and specialty match when no city is given', async () => {
+    const { resolver } = resolverFor([
+      neurologist,
+      {
+        ...neurologist,
+        npi: '1043159890',
+        middle: 'B',
+        taxonomy: 'Psychiatry & Neurology, Psychiatry',
+      },
+    ]);
+    const { resolution, record } = await resolver.resolve({
+      ...query,
+      city: '',
+    });
+    expect(resolution.status).toBe('confirmed');
+    expect(record?.npi).toBe('1234567893');
+    expect(resolution.basis).toEqual(['name', 'specialty']);
+  });
+
+  it('keeps same-name records apart when no city is given and both fit', async () => {
+    const { resolver } = resolverFor([
+      neurologist,
+      { ...neurologist, npi: '1457767758', city: 'Tucson' },
+    ]);
+    const { resolution, record } = await resolver.resolve({
+      ...query,
+      city: '',
+    });
+    expect(resolution.status).toBe('ambiguous');
+    expect(record).toBeNull();
+    expect(resolution.candidates).toHaveLength(2);
+    expect(resolution.note).not.toMatch(/practice city/);
+  });
+
   it('confirms one full-name match in the same state when only the city differs', async () => {
     const { resolver } = resolverFor([{ ...neurologist, city: 'Scottsdale' }]);
     const { resolution, record } = await resolver.resolve({

@@ -50,7 +50,8 @@ export class NihReporterResearchProvider extends LiveResearchProvider {
       return {
         items: [],
         status: 'unavailable',
-        message: 'Not searched. NIH RePORTER needs the expert’s first and last name.',
+        message:
+          'Not searched. NIH RePORTER needs the expert’s first and last name.',
       };
     }
     const payload = await fetchJson<{ results?: ReporterProject[] }>(
@@ -106,14 +107,17 @@ export class NihReporterResearchProvider extends LiveResearchProvider {
         : undefined;
     return this.item({
       category: 'grant',
-      title: project.project_title?.trim() || project.project_num || 'NIH project',
+      title:
+        project.project_title?.trim() || project.project_num || 'NIH project',
       summary: [
         project.project_num ? `Project ${project.project_num}.` : null,
         project.fiscal_year ? `Fiscal year ${project.fiscal_year}.` : null,
         project.agency_ic_admin?.abbreviation
           ? `Agency ${project.agency_ic_admin.abbreviation}.`
           : null,
-        org?.org_name ? `Organization: ${org.org_name}${place ? ` (${place})` : ''}.` : null,
+        org?.org_name
+          ? `Organization: ${org.org_name}${place ? ` (${place})` : ''}.`
+          : null,
         typeof project.award_amount === 'number'
           ? `Award amount reported by NIH: ${project.award_amount}.`
           : null,

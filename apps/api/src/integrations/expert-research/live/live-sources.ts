@@ -15,6 +15,8 @@ import { OpenAlexClient } from './openalex.client';
 import { OpenAlexResearchProvider } from './openalex.provider';
 import { OpenPaymentsClient } from './open-payments.client';
 import { OpenPaymentsResearchProvider } from './open-payments.provider';
+import { createWebSourceProviders } from '../../web-research/web-source-providers';
+import type { WebResearchEngine } from '../../web-research/web-research-engine';
 
 export interface LiveSourceSettings {
   timeoutMs: number;
@@ -26,6 +28,8 @@ export interface LiveSourceSettings {
   pubmedApiKey?: string;
   pubmedEmail?: string;
   fetchImpl?: typeof fetch;
+  /** Shared web research run. When set, web-backed catalog sources are live. */
+  webEngine?: WebResearchEngine;
 }
 
 /**
@@ -120,6 +124,16 @@ export function createLiveSourceProviders(
         }),
       ),
     );
+  }
+  // Web-backed sources. Justia's own search page needs a browser, so the
+  // web layer (search + page reading) answers for it when available.
+  if (settings.webEngine) {
+    for (const [id, provider] of createWebSourceProviders(
+      definitions,
+      settings.webEngine,
+    )) {
+      providers.set(id, provider);
+    }
   }
   return providers;
 }

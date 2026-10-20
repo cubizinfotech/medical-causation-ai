@@ -13,6 +13,8 @@ import type { OnlinePresenceDossier } from '../research/online-presence';
 import type { ProfessionalBackgroundDossier } from '../research/professional-background';
 import { buildEwiReportDocument } from './ewi-report.template';
 import type { CvCheck } from '../cv/cv.types';
+import type { WebResearchDossier } from '@integrations/web-research';
+import type { ReportSourceStatus } from './ewi-report.template';
 
 export interface EwiReportInput {
   expertName: string;
@@ -29,6 +31,12 @@ export interface EwiReportInput {
   professionalBackground?: ProfessionalBackgroundDossier;
   identity?: ExpertIdentityResolution | null;
   cvCheck?: CvCheck | null;
+  /** Free text the attorney added to the intake form. */
+  additionalContext?: string | null;
+  /** Global web research: candidates, pages, coverage and limits. */
+  webResearch?: WebResearchDossier | null;
+  /** What each catalog source did, for the "not checked" lines of empty sections. */
+  sourceStatuses?: ReportSourceStatus[];
 }
 
 export interface EwiReportOutput extends ReportArtifact {

@@ -7,19 +7,12 @@ import {
 } from './provider-runtime';
 
 describe('expert research provider runtime', () => {
-  it('rejects an empty expert name, city, and specialty', () => {
+  it('rejects an empty expert name and specialty', () => {
     expect(
       validateExpertResearchQuery({
         expertName: ' ',
         city: 'Boston',
         specialty: 'Ortho',
-      }).ok,
-    ).toBe(false);
-    expect(
-      validateExpertResearchQuery({
-        expertName: 'Ada Lovelace',
-        city: ' ',
-        specialty: 'Orthopedics',
       }).ok,
     ).toBe(false);
     expect(
@@ -45,6 +38,39 @@ describe('expert research provider runtime', () => {
         specialty: 'Orthopedics',
       },
     });
+  });
+
+  it('makes the city optional and carries the additional context', () => {
+    expect(
+      validateExpertResearchQuery({
+        expertName: 'Ada Lovelace',
+        city: ' ',
+        specialty: 'Structural engineer',
+        context: '  Also known as A. Byron  ',
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        expertName: 'Ada Lovelace',
+        city: '',
+        specialty: 'Structural engineer',
+        context: 'Also known as A. Byron',
+      },
+    });
+    expect(
+      validateExpertResearchQuery({
+        expertName: 'Ada Lovelace',
+        city: 'B',
+        specialty: 'Engineer',
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateExpertResearchQuery({
+        expertName: 'Ada Lovelace',
+        specialty: 'Engineer',
+        context: 'x'.repeat(2001),
+      }).ok,
+    ).toBe(false);
   });
 
   it('times out work that exceeds the limit', async () => {

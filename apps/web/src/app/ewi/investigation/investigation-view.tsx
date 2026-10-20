@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PageContainer } from "@/components/layout";
 import { InvestigationTimeline } from "@/components/ewi/investigation-timeline";
 import { InvestigationResults } from "@/components/ewi/investigation-results";
+import { ProcessingTimer } from "@/components/ewi/processing-timer";
 import {
   displayStageLabel,
   resolveStageStatuses,
@@ -152,7 +153,7 @@ export default function EwiInvestigationView() {
 
   if (!bootstrapped && !failed && phase === "idle") {
     return (
-      <PageContainer className="py-10">
+      <PageContainer size="wide" className="py-10">
         <div
           className="space-y-4"
           aria-busy="true"
@@ -167,7 +168,7 @@ export default function EwiInvestigationView() {
   }
 
   return (
-    <PageContainer className="py-10">
+    <PageContainer size="wide" className="py-10">
       <div className="mb-8">
         <Badge variant="secondary">Expert Witness Investigation</Badge>
         <h1 className="mt-3 text-3xl font-bold tracking-tight">
@@ -175,7 +176,7 @@ export default function EwiInvestigationView() {
         </h1>
         <p className="mt-2 text-muted-foreground">
           {expert
-            ? `${expert.city} · ${expert.specialty}. Research runs automatically. Unavailable sources are recorded and the investigation continues.`
+            ? `${[expert.city, expert.specialty].filter(Boolean).join(" · ")}. Research runs automatically. Unavailable sources are recorded and the investigation continues.`
             : "Researching credentials, publications, and legal history."}
         </p>
       </div>
@@ -183,8 +184,15 @@ export default function EwiInvestigationView() {
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-3">
               <CardTitle className="text-base">{stageLabel}</CardTitle>
+              {job || running ? (
+                <ProcessingTimer
+                  startedAt={job?.createdAt}
+                  endedAt={job?.updatedAt}
+                  running={running}
+                />
+              ) : null}
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
