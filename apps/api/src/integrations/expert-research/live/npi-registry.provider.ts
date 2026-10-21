@@ -146,6 +146,7 @@ export class NpiRegistryResearchProvider extends LiveResearchProvider {
         identity,
         npi: record.npi,
         nppesLicenses: unique,
+        verificationStatus: 'nppes_self_reported',
         verificationNote: 'Self-reported to NPPES. Not a license verification.',
         evidenceReference: `NPI Registry record ${record.npi}`,
       },

@@ -35,6 +35,8 @@ npm run prisma:migrate        # create the tables
 npm run seed:demo-users       # 2 default sign-ins, password "password"
 ```
 
+`.env.example` lists every setting. `JWT_SECRET` is required to start the API. AI keys are required only for MCA analysis and live EWI web search. `RESEARCH_PROVIDER=mock` and `EMAIL_DELIVERY_ENABLED=false` are the safe local defaults. Optional provider keys that are empty are reported as not configured; they are not empty searches.
+
 Then, in two terminals:
 
 ```bash

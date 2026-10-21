@@ -56,7 +56,7 @@ If the website says port 3000 is in use, stop the other program. The API must st
 
 Open http://localhost:5050.
 
-Sign in with `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` from `.env`. The example file uses `admin@medical-causation.ai` and `admin`. Change those before any shared machine.
+Sign in with `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` from `.env`. `.env.example` uses `admin@example.com` and `change-me`. Change those before any shared machine.
 
 Add a server in pgAdmin:
 

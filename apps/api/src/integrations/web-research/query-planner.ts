@@ -151,6 +151,18 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${clause} "expert witness" OR "expert directory" OR "forensic" ${profession}`,
     prompt: `Find expert witness directory or marketplace listings for ${subjectLine}. Look at SEAK, JurisPro, ExpertPages, ExpertWitness.com, DRI, ALM Experts, ExpertLaw and similar sites, plus the person's forensic or IME advertising.`,
   });
+  add('directories', {
+    query: `${clause} site:seakexperts.com`,
+    prompt: `Find the public SEAK expert directory listing for ${subjectLine}, if one exists. Do not treat a missing listing as proof that none exists.`,
+  });
+  add('directories', {
+    query: `${clause} site:jurispro.com`,
+    prompt: `Find the public JurisPro listing for ${subjectLine}, if one exists. Do not treat a missing listing as proof that none exists.`,
+  });
+  add('directories', {
+    query: `${clause} site:expertpages.com`,
+    prompt: `Find the public ExpertPages listing for ${subjectLine}, if one exists. Do not treat a missing listing as proof that none exists.`,
+  });
   add('court_documents', {
     query: `${clause} ("motion to compel" OR "order" OR "memorandum" OR "report and recommendation" OR "appointed" OR "competency") filetype:pdf`,
     prompt: `Find court orders, motions, pleadings and reports that name ${subjectLine} as an examining, appointed or testifying expert. Prefer the court's own PDF or docket page.`,

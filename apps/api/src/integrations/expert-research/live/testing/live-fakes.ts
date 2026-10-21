@@ -1,5 +1,13 @@
 /** Test helpers for live adapters: a fetch that answers from a route list. */
 
+function parseBody(raw: string): unknown {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
+}
+
 export type FakeRoute = {
   match: (url: URL, init?: RequestInit) => boolean;
   respond: (url: URL, init?: RequestInit) => unknown;
@@ -16,9 +24,7 @@ export function fakeFetch(routes: FakeRoute[]): FakeFetch {
   const impl = (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : input);
     const body =
-      typeof init?.body === 'string'
-        ? (JSON.parse(init.body) as unknown)
-        : undefined;
+      typeof init?.body === 'string' ? parseBody(init.body) : undefined;
     calls.push({ url, body });
     const route = routes.find((entry) => entry.match(url, init));
     if (!route) {

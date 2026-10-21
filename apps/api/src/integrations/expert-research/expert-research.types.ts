@@ -84,6 +84,8 @@ export type InformationStatus =
  * Normalized provider outcome.
  * no_result means the source was consulted and returned nothing.
  * That is not evidence that a qualification is absent.
+ * not_implemented — placeholder; no search request was sent.
+ * not_configured — a required API key or credential is missing.
  */
 export type ResearchOutcome =
   | 'success'
@@ -94,7 +96,23 @@ export type ResearchOutcome =
   | 'rate_limited'
   | 'timeout'
   | 'api_failure'
-  | 'conflicting';
+  | 'conflicting'
+  | 'not_implemented'
+  | 'not_configured';
+
+/**
+ * How a source should be described in orchestration and the report.
+ * searched_no_results is used only after a completed search returned nothing.
+ */
+export type ResearchCoverage =
+  | 'searched_with_results'
+  | 'searched_no_results'
+  | 'not_configured'
+  | 'not_implemented'
+  | 'blocked_or_access_denied'
+  | 'failed'
+  | 'skipped'
+  | 'pending';
 
 /** Same name alone is not a match. Uncertain items are not merged. */
 export type IdentityMatch = 'matched' | 'uncertain';

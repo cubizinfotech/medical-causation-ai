@@ -277,18 +277,47 @@ describe('routeWebFindings', () => {
 });
 
 describe('coverageLine', () => {
-  it('states a professional negative when the topic was searched', () => {
+  it('does not treat a topic-level web query as proof that nothing exists', () => {
     const line = coverageLine(
       dossier([], { topics: [{ topic: 'grants', queries: 2, hits: 14 }] }),
       'grants',
       [],
       'Jason A. Demery',
     );
-    expect(line).toMatch(
-      /did not establish a research grant award directly attributable to Jason A. Demery/,
-    );
+    expect(line).toMatch(/included this topic/);
+    expect(line).toMatch(/remains unverified/);
+    expect(line).not.toMatch(/did not establish/);
     expect(line).not.toMatch(/targeted web search/);
     expect(line).not.toMatch(/cannot prove/);
+  });
+
+  it('does not treat a global web run as a search of every category', () => {
+    const ran = dossier([], {
+      topics: [{ topic: 'identity', queries: 4, hits: 0 }],
+    });
+    expect(coverageLine(ran, 'grants')).toMatch(/was not searched/);
+    expect(coverageLine(ran, 'grants')).not.toMatch(/did not establish/);
+    expect(coverageLine(ran, 'education')).toMatch(/was not searched/);
+    expect(coverageLine(dossier([], {}), 'patents')).toMatch(
+      /was not searched/,
+    );
+    expect(coverageLine(dossier([], {}), 'patents')).not.toMatch(
+      /did not establish/,
+    );
+  });
+
+  it('lets a dedicated empty search speak without a "did not establish" prefix', () => {
+    const line = coverageLine(
+      dossier([], { topics: [{ topic: 'license', queries: 1, hits: 0 }] }),
+      'licenses',
+      [
+        'NPI Registry (NPPES) was searched and returned no matching record. That is not proof that none exist.',
+      ],
+    );
+    expect(line).toMatch(/NPI Registry/);
+    expect(line).toMatch(/returned no matching record/);
+    expect(line).not.toMatch(/did not establish/);
+    expect(line).not.toMatch(/included this topic/);
   });
 
   it('says not searched when the web run did not work or did not run', () => {

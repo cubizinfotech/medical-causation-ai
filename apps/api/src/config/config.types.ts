@@ -197,6 +197,11 @@ export interface JobsSettings {
   concurrency: number;
   /** A job whose lock is not renewed for this long counts as stalled. */
   lockDurationMs: number;
+  /**
+   * Times a stalled job may be recovered. 0 fails on the first stall so the
+   * work is never started a second time.
+   */
+  maxStalledCount: number;
   /** Analyses plus investigations one user may start in 24 hours (0 = no limit). */
   dailyLimitPerUser: number;
 }
@@ -217,6 +222,17 @@ export interface ResearchProviderSettings {
   openAlexApiKey?: string;
   /** Optional contact address OpenAlex asks API users to send. */
   openAlexMailto?: string;
+  /**
+   * Optional polite contact for Crossref. When omitted, OpenAlex or PubMed
+   * mailto is reused. This is not a paid key.
+   */
+  crossrefMailto?: string;
+  /**
+   * Optional ORCID Public API client credentials. Search is not attempted
+   * until both are set. Free registration: orcid.org/developer-tools.
+   */
+  orcidClientId?: string;
+  orcidClientSecret?: string;
   /** Most recent CMS Open Payments program years to total. */
   openPaymentsYears: number;
   /** Global web research layer (search providers + page reading). */

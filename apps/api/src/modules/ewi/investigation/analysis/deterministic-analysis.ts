@@ -1,5 +1,6 @@
 import { EXPERT_RESEARCH_CATALOG } from '@integrations/expert-research';
 import type { ExpertEvidenceItem } from '@integrations/expert-research';
+import { isWebCoverageSummary } from '@integrations/web-research';
 import type { ExpertResearchSourceResult } from '@integrations/expert-research';
 import { DiscrepancyAnalyzer } from '../../research/discrepancy-analyzer';
 import { NO_RECORDS_LINE, collectedLine } from './summary-lines';
@@ -28,17 +29,19 @@ export function buildAnalysisPacket(input: {
   evidence: ExpertEvidenceItem[];
   sourceResults: ExpertResearchSourceResult[];
 }): AnalysisPacket {
-  const findings: AnalysisFinding[] = input.evidence.map((item, index) => ({
-    findingKey: `f${index + 1}`,
-    category: item.category,
-    title: item.title,
-    summary: item.access === 'restricted' ? '' : item.summary,
-    url: item.url,
-    providerId: item.sourceId,
-    informationStatus: item.informationStatus ?? 'unverified',
-    access: item.access ?? 'public',
-    raw: item.access === 'restricted' ? undefined : item.raw,
-  }));
+  const findings: AnalysisFinding[] = input.evidence
+    .filter((item) => !isWebCoverageSummary(item))
+    .map((item, index) => ({
+      findingKey: `f${index + 1}`,
+      category: item.category,
+      title: item.title,
+      summary: item.access === 'restricted' ? '' : item.summary,
+      url: item.url,
+      providerId: item.sourceId,
+      informationStatus: item.informationStatus ?? 'unverified',
+      access: item.access ?? 'public',
+      raw: item.access === 'restricted' ? undefined : item.raw,
+    }));
 
   const sourceAttempts: AnalysisSourceAttempt[] = input.sourceResults.map(
     (result) => ({

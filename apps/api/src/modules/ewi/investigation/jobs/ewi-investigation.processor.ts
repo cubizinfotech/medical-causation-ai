@@ -9,7 +9,7 @@ import { Worker } from 'bullmq';
 import { RedisService } from '@redis/redis.service';
 import { describeAiFailure, describeError } from '@ai/utils';
 import { QUEUE_PREFIXES } from '@platform/jobs/job.types';
-import { workerOptions } from '@platform/jobs/worker-options';
+import { workerConnection, workerOptions } from '@platform/jobs/worker-options';
 import { EWI_INVESTIGATION_QUEUE_NAME } from './ewi-investigation-job.constants';
 import { EwiInvestigationJobService } from './ewi-investigation-job.service';
 import type { EwiInvestigationJobPayload } from './ewi-investigation-job.types';
@@ -51,7 +51,7 @@ export class EwiInvestigationProcessor
       EWI_INVESTIGATION_QUEUE_NAME,
       async (job) => this.process(job.data),
       {
-        connection: this.redisService.getConnectionOptions(),
+        connection: workerConnection(this.redisService.getConnectionOptions()),
         prefix: QUEUE_PREFIXES.EWI,
         ...workerOptions(this.config),
       },

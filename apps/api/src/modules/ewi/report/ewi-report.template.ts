@@ -1,10 +1,16 @@
-import type {
-  ExpertEvidenceItem,
-  ExpertIdentityResolution,
+import {
+  EXPERT_RESEARCH_CATALOG,
+  researchCoverageFor,
+  type ExpertEvidenceItem,
+  type ExpertIdentityResolution,
+  type ResearchCoverage,
+  type ResearchOutcome,
 } from '@integrations/expert-research';
-import { EXPERT_RESEARCH_CATALOG } from '@integrations/expert-research';
 import type { ExpertDiscrepancy } from '../research/discrepancy-analyzer';
-import type { CrossExamQuestion } from '../research/cross-exam-question.generator';
+import type {
+  CrossExamQuestion,
+  QuestionBasisKind,
+} from '../research/cross-exam-question.generator';
 import type { EwiAnalysisDocument } from '../investigation/analysis/ewi-analysis.types';
 import {
   NO_RECORDS_LINE,
@@ -59,6 +65,7 @@ import type {
 import {
   coverageLine,
   isRoutedSection,
+  isWebCoverageSummary,
   routeWebFindings,
   sectionVerification,
 } from '@integrations/web-research';
@@ -373,6 +380,8 @@ export function buildEwiReportDocument(input: {
   webResearch?: WebResearchDossier | null;
   /** What each catalog source did in this investigation (checked, not connected, failed). */
   sourceStatuses?: ReportSourceStatus[];
+  /** Shown when stored questions were rebuilt from current evidence. */
+  questionsNote?: string;
 }): ReportDocumentModel {
   const routedWeb = routeWebFindings(input.webResearch);
   const tracker: ClaimTracker = {
@@ -434,11 +443,7 @@ export function buildEwiReportDocument(input: {
           titleHints: ['accredit', 'university'],
         });
       case 'licenses':
-        return evidenceSection(spec, tracker, {
-          categories: ['license', 'state_license'],
-          providers: ['state_license'],
-          excludeHints: ['disciplin', 'board action', 'sanction'],
-        });
+        return licensesSection(spec, tracker);
       case 'board-actions':
         return boardActionsSection(spec, tracker);
       case 'board-certifications':
@@ -609,7 +614,7 @@ export function buildEwiReportDocument(input: {
       case 'source-index':
         return sourceIndexSection(spec, input.evidence);
       case 'questions':
-        return questionsSection(spec, input.questions);
+        return questionsSection(spec, input.questions, input.questionsNote);
       default:
         return {
           id: spec.id,
@@ -658,7 +663,11 @@ export function buildEwiReportDocument(input: {
       ...input.evidence.flatMap((item) => [item.sourceId, item.category]),
     ],
     highlights: [
-      countLabel(input.evidence.length, 'collected item', 'collected items'),
+      countLabel(
+        reportableEvidence(input.evidence).length,
+        'collected item',
+        'collected items',
+      ),
       countLabel(
         input.discrepancies.length + (input.analysis?.conflicts.length ?? 0),
         'inconsistency',
@@ -729,9 +738,12 @@ function withNpiLocation(
 export interface ReportSourceStatus {
   sourceId: string;
   status: string;
+  outcome?: ResearchOutcome | null;
+  coverage?: ResearchCoverage;
   message?: string | null;
   itemCount?: number;
   checked?: boolean;
+  retrievedAt?: string;
 }
 
 /** Catalog sources that answer each routed section, for the coverage line. */
@@ -743,15 +755,26 @@ const SECTION_SOURCES: Partial<Record<RoutedSectionId, string[]>> = {
   'board-certifications': ['board_certification'],
   'certification-orgs': ['certification_organization'],
   memberships: ['memberships', 'professional_organizations'],
-  publications: ['pubmed', 'openalex', 'crossref', 'author_verification'],
+  publications: [
+    'pubmed',
+    'openalex',
+    'crossref',
+    'orcid',
+    'author_verification',
+  ],
   grants: ['grants', 'grant_results'],
   patents: ['patents', 'trademarks'],
   'awards-military': ['awards', 'military_claims'],
-  orders: ['orders', 'courtlistener'],
+  orders: ['orders'],
   pleadings: ['motions', 'pleadings'],
   depositions: ['depositions'],
   'testimony-inconsistencies': ['expert_testimony'],
-  lawsuits: ['malpractice_records', 'state_court_records'],
+  lawsuits: [
+    'courtlistener',
+    'justia',
+    'malpractice_records',
+    'state_court_records',
+  ],
   criminal: ['criminal_records'],
   corporate: ['corporate_affiliations'],
   'patient-reviews': ['patient_reviews'],
@@ -762,6 +785,19 @@ function sourceName(id: string): string {
   return EXPERT_RESEARCH_CATALOG.find((p) => p.id === id)?.name ?? id;
 }
 
+const COVERAGE_PHRASE: Record<ResearchCoverage, string> = {
+  searched_with_results: 'was searched and returned records',
+  searched_no_results:
+    'was searched and returned no matching record. That is not proof that none exist',
+  not_configured: 'was not searched (API key or credential not configured)',
+  not_implemented: 'is not implemented in this investigation',
+  blocked_or_access_denied:
+    'could not be accessed (login, subscription, bot protection, or similar restriction)',
+  failed: 'failed technically and was not treated as an empty search',
+  skipped: 'was skipped',
+  pending: 'has not been searched yet',
+};
+
 /** Which of the section's registry sources were checked and which were not reachable. */
 function structuredCoverage(
   sectionId: string,
@@ -770,23 +806,51 @@ function structuredCoverage(
   if (!isRoutedSection(sectionId)) return [];
   const ids = SECTION_SOURCES[sectionId] ?? [];
   if (ids.length === 0 || statuses.length === 0) return [];
-  const checked: string[] = [];
-  const notChecked: string[] = [];
+  const groups = new Map<ResearchCoverage, string[]>();
   for (const id of ids) {
     const status = statuses.find((s) => s.sourceId === id);
     if (!status) continue;
-    (status.checked ? checked : notChecked).push(sourceName(id));
+    const coverage =
+      status.coverage ??
+      researchCoverageFor({
+        status: status.status,
+        outcome: status.outcome,
+        message: status.message,
+        itemCount: status.itemCount,
+      });
+    const list = groups.get(coverage) ?? [];
+    list.push(sourceName(id));
+    groups.set(coverage, list);
   }
+  const order: ResearchCoverage[] = [
+    'searched_with_results',
+    'searched_no_results',
+    'not_configured',
+    'not_implemented',
+    'blocked_or_access_denied',
+    'failed',
+    'skipped',
+    'pending',
+  ];
   const parts: string[] = [];
-  if (checked.length > 0) {
-    parts.push(`${checked.join(', ')} returned no matching record.`);
-  }
-  if (notChecked.length > 0) {
-    parts.push(
-      `${notChecked.join(', ')} was not reachable in this investigation.`,
-    );
+  for (const coverage of order) {
+    const names = groups.get(coverage);
+    if (!names || names.length === 0) continue;
+    if (coverage === 'searched_with_results') {
+      parts.push(
+        `${joinNames(names)} returned records in other sections; that does not mean this section was comprehensively searched.`,
+      );
+      continue;
+    }
+    parts.push(`${joinNames(names)} ${COVERAGE_PHRASE[coverage]}.`);
   }
   return parts;
+}
+
+function joinNames(names: string[]): string {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
 }
 
 function webFindingBlocks(finding: RoutedFinding): ReportBlock[] {
@@ -891,6 +955,13 @@ function withWebFindings(
 
 function countLabel(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
+}
+
+/** Findings about the expert. The web coverage summary is an audit line. */
+function reportableEvidence(
+  evidence: ExpertEvidenceItem[],
+): ExpertEvidenceItem[] {
+  return evidence.filter((item) => !isWebCoverageSummary(item));
 }
 
 function formatInvestigationDate(iso: string): string {
@@ -1085,6 +1156,9 @@ function summarySection(
 ): ReportSectionModel {
   const text =
     input.summary?.trim() || input.analysis?.summary || NO_RECORDS_LINE;
+  const findings = reportableEvidence(input.evidence).length;
+  const collectedCount =
+    /^\d+ item\(s\) were collected from the sources searched\.$/;
   // A line saying an item was not verified is left out here; the item is
   // listed under Overall Research Findings.
   const blocks: ReportBlock[] = presentableSummaryLines(
@@ -1092,6 +1166,13 @@ function summarySection(
     input.analysis?.missing,
   )
     .map(withoutUnverifiedSentences)
+    .map((line) =>
+      collectedCount.test(line)
+        ? findings
+          ? collectedLine(findings)
+          : ''
+        : line,
+    )
     .filter(Boolean)
     .map((line) => ({ text: line }));
   const webLines = input.webLines ?? [];
@@ -1103,9 +1184,7 @@ function summarySection(
   blocks.splice(0, blocks.length, ...own);
   if (blocks.length === 0 && webLines.length === 0) {
     blocks.push({
-      text: input.evidence.length
-        ? collectedLine(input.evidence.length)
-        : NO_RECORDS_LINE,
+      text: findings ? collectedLine(findings) : NO_RECORDS_LINE,
     });
   }
   if (webLines.length > 0) {
@@ -1342,10 +1421,26 @@ function cvComparisonBlocks(row: CvComparison): ReportBlock[] {
   return blocks;
 }
 
+function cvCoverageLine(check: CvCheck): string {
+  const unread = [
+    ...new Set([
+      ...check.document.unreadablePages,
+      ...(check.incompletePages ?? []),
+    ]),
+  ].sort((a, b) => a - b);
+  if (unread.length > 0) {
+    return `The CV was not fully reviewed. Unread or partially extracted pages: ${unread.join(', ')}.`;
+  }
+  if (check.status === 'completed') {
+    return 'The readable pages of the uploaded CV were reviewed.';
+  }
+  return 'CV extraction was partial; some pages were not finished.';
+}
+
 function cvCheckBlocks(check: CvCheck): ReportBlock[] {
   const blocks: ReportBlock[] = [
     {
-      text: `Uploaded CV: ${check.document.name} (${check.document.pageCount} page${check.document.pageCount === 1 ? '' : 's'}). ${check.claims.length} claim(s) were read, each with its page and an exact quote, and compared with the NPI Registry, OpenAlex, CMS Open Payments, and CourtListener. "Not checked" means no connected source covers the claim; it is not a finding against the expert.`,
+      text: `Uploaded CV: ${check.document.name} (${check.document.pageCount} page${check.document.pageCount === 1 ? '' : 's'}). ${check.claims.length} claim(s) were read, each with its page and an exact quote, and compared with the NPI Registry, OpenAlex, Crossref, PubMed, CMS Open Payments, and CourtListener. ${cvCoverageLine(check)} "Not checked" means no connected source covers the claim; it is not a finding against the expert. A missing catalog result is not a confirmed discrepancy.`,
       style: 'note',
     },
     ...check.warnings.map((warning) => ({
@@ -1798,10 +1893,19 @@ function legalMattersSection(
       blocks: [{ text: EMPTY, style: 'note' }],
     };
   }
+  const intro: ReportBlock[] =
+    spec.id === 'lawsuits'
+      ? [
+          {
+            text: 'Published opinions and public filings are listed separately. Finding an opinion is not evidence that a complete case docket or all related motions, orders, pleadings, or transcripts were reviewed.',
+            style: 'note',
+          },
+        ]
+      : [];
   return {
     id: spec.id,
     title: spec.title,
-    blocks: matters.flatMap((matter) => matterBlocks(matter)),
+    blocks: [...intro, ...matters.flatMap((matter) => matterBlocks(matter))],
   };
 }
 
@@ -2028,7 +2132,7 @@ function overallFindingsSection(
     }
   } else {
     blocks.push({
-      text: `${input.evidence.length} evidence item(s) and ${input.discrepancies.length} inconsistency entr${input.discrepancies.length === 1 ? 'y' : 'ies'} were collected.`,
+      text: `${reportableEvidence(input.evidence).length} evidence item(s) and ${input.discrepancies.length} inconsistency entr${input.discrepancies.length === 1 ? 'y' : 'ies'} were collected.`,
     });
   }
   if ((input.webLines ?? []).length > 0) {
@@ -2050,7 +2154,7 @@ function miscellaneousSection(
   tracker: ClaimTracker,
 ): ReportSectionModel {
   const leftovers = tracker.evidence.filter(
-    (_, index) => !tracker.claimed.has(index),
+    (item, index) => !tracker.claimed.has(index) && !isWebCoverageSummary(item),
   );
   for (let index = 0; index < tracker.evidence.length; index++) {
     if (!tracker.claimed.has(index)) tracker.claimed.add(index);
@@ -2116,9 +2220,23 @@ const QUESTION_LABEL_TEXT = {
   unresolved: 'Unresolved',
 } as const;
 
+const QUESTION_BASIS_KIND_TEXT: Record<QuestionBasisKind, string> = {
+  sourced_fact: 'Sourced fact',
+  inconsistency: 'Confirmed inconsistency in collected sources',
+  limitation: 'Research limitation — not a finding that nothing exists',
+  evidence_gap: 'Unresolved evidence gap',
+};
+
+function printedQuestionLabel(
+  label: CrossExamQuestion['label'] | undefined,
+): keyof typeof QUESTION_LABEL_TEXT {
+  return label === 'verified' || label === 'allegation' ? label : 'unresolved';
+}
+
 function questionsSection(
   spec: EwiReportSectionSpec,
   questions: CrossExamQuestion[],
+  questionsNote?: string,
 ): ReportSectionModel {
   if (questions.length === 0) {
     return {
@@ -2126,35 +2244,62 @@ function questionsSection(
       title: spec.title,
       blocks: [
         {
-          text: 'Cross-examination questions were not generated. No collected finding was available, and facts were not invented to create questions.',
+          text:
+            questionsNote ??
+            'Cross-examination questions were not generated. No collected finding was available, and facts were not invented to create questions.',
           style: 'note',
         },
       ],
     };
   }
   const counts = {
-    verified: questions.filter((q) => q.label === 'verified').length,
-    allegation: questions.filter((q) => q.label === 'allegation').length,
-    unresolved: questions.filter((q) => q.label === 'unresolved').length,
+    verified: questions.filter(
+      (q) => printedQuestionLabel(q.label) === 'verified',
+    ).length,
+    allegation: questions.filter(
+      (q) => printedQuestionLabel(q.label) === 'allegation',
+    ).length,
+    unresolved: questions.filter(
+      (q) => printedQuestionLabel(q.label) === 'unresolved',
+    ).length,
   };
   const blocks: ReportBlock[] = [
     {
-      text: `${questions.length} cross-examination question(s), each tied to a specific collected fact and its source. No count was targeted and none were padded. Labels: Verified (${counts.verified}) means a cited source states the fact about this expert; Allegation (${counts.allegation}) means a third party reported it and it has not been adjudicated; Unresolved (${counts.unresolved}) means the identity or the detail is not confirmed, or sources conflict, so the question is conditional.`,
+      text: `${questions.length} cross-examination question(s), each tied to collected evidence or an identified evidence gap. No count was targeted and none were padded. Labels: Verified (${counts.verified}) means a cited source states the fact about this expert; Allegation (${counts.allegation}) means a third party reported it and it has not been adjudicated; Unresolved (${counts.unresolved}) means the identity or the detail is not confirmed, sources conflict, or the research is incomplete, so the question is conditional.`,
       style: 'note',
     },
   ];
+  if (questionsNote) {
+    blocks.push({ text: questionsNote, style: 'note' });
+  }
   let heading = '';
   for (const question of questions) {
     if (question.category !== heading) {
       heading = question.category;
       blocks.push({ text: heading, style: 'subheading' });
     }
-    const label = QUESTION_LABEL_TEXT[question.label ?? 'unresolved'];
+    const label = QUESTION_LABEL_TEXT[printedQuestionLabel(question.label)];
     blocks.push({
       text: `${question.number}. [${label}] ${withoutSingleAccount(question.question)}`,
       style: 'item',
     });
-    const sources = (question.sources ?? []).slice(0, 3);
+    if (question.basisKind) {
+      blocks.push({
+        text: [QUESTION_BASIS_KIND_TEXT[question.basisKind], question.relevance]
+          .filter(Boolean)
+          .join('. '),
+        style: 'note',
+      });
+    } else if (question.relevance) {
+      blocks.push({ text: question.relevance, style: 'note' });
+    }
+    if (question.excerpt) {
+      blocks.push({
+        text: `Factual basis: “${question.excerpt}”`,
+        style: 'citation',
+      });
+    }
+    const sources = question.sources ?? [];
     if (sources.length > 0) {
       for (const source of sources) {
         blocks.push({
@@ -2195,6 +2340,40 @@ function withCvStatements(
     });
   }
   return { ...section, blocks };
+}
+
+function licensesSection(
+  spec: EwiReportSectionSpec,
+  tracker: ClaimTracker,
+): ReportSectionModel {
+  const items = claimEvidence(tracker, {
+    categories: ['license', 'state_license'],
+    providers: ['state_license'],
+    excludeHints: ['disciplin', 'board action', 'sanction'],
+  });
+  const official = items.filter((item) => item.sourceId === 'state_license');
+  const nppes = items.filter((item) => item.sourceId === 'npi_registry');
+  const other = items.filter(
+    (item) =>
+      item.sourceId !== 'state_license' && item.sourceId !== 'npi_registry',
+  );
+  if (items.length === 0) {
+    return {
+      id: spec.id,
+      title: spec.title,
+      blocks: [{ text: EMPTY, style: 'note' }],
+    };
+  }
+  const blocks: ReportBlock[] = [
+    {
+      text: 'License numbers listed by NPPES are self-reported by the clinician. They are not official state-board verification. Official verification appears only when a licensing-board lookup was completed.',
+      style: 'note',
+    },
+  ];
+  for (const item of [...official, ...other, ...nppes]) {
+    blocks.push(...findingBlocks(item));
+  }
+  return { id: spec.id, title: spec.title, blocks };
 }
 
 function evidenceSection(
@@ -2492,6 +2671,16 @@ function matterBlocks(matter: LegalMatter, withHeading = true): ReportBlock[] {
     matter.filingDate ? `Filing date: ${matter.filingDate}` : null,
     matter.documentDate ? `Document date: ${matter.documentDate}` : null,
     `Document type: ${matter.documentType}`,
+    matter.sourceName ? `Source: ${matter.sourceName}` : null,
+    matter.retrievedAt
+      ? `Retrieved: ${formatInvestigationDate(matter.retrievedAt)}`
+      : null,
+    matter.courtLevel ? `Court level: ${matter.courtLevel}` : null,
+    matter.docketCoverage === 'opinion_only' ||
+    matter.docketCoverage === 'recap_document'
+      ? 'Coverage: this filing is not evidence that a complete case docket was reviewed.'
+      : null,
+    matter.identityMatch ? `Identity matching: ${matter.identityMatch}` : null,
     matter.relevance ? `Relevance: ${matter.relevance}` : null,
     matter.findingsRegardingExpert
       ? `Findings regarding expert: ${matter.findingsRegardingExpert}`
@@ -2533,6 +2722,9 @@ function findingBlocks(item: ExpertEvidenceItem): ReportBlock[] {
       style: 'note',
     });
   }
+  for (const line of evidenceDetailLines(item)) {
+    blocks.push({ text: line });
+  }
   if (item.access === 'restricted') {
     blocks.push({
       text: 'This source requires authorized access. The underlying content was not stored. No PDF was saved.',
@@ -2550,6 +2742,56 @@ function findingBlocks(item: ExpertEvidenceItem): ReportBlock[] {
     blocks.push({ text: item.url, link: item.url, style: 'citation' });
   }
   return blocks;
+}
+
+function evidenceDetailLines(item: ExpertEvidenceItem): string[] {
+  const raw = item.raw ?? {};
+  const identity = raw.identity as Record<string, unknown> | undefined;
+  const retrieved =
+    item.retrievedAt ??
+    item.source?.retrievedAt ??
+    (typeof raw.retrievedAt === 'string' ? raw.retrievedAt : null);
+  const lines = [
+    item.source?.name ? `Source: ${item.source.name}` : null,
+    retrieved ? `Retrieved: ${formatInvestigationDate(retrieved)}` : null,
+    stringField(raw, ['caseNumber', 'docketNumber'])
+      ? `Case number: ${stringField(raw, ['caseNumber', 'docketNumber'])}`
+      : null,
+    stringField(raw, ['licenseNumber'])
+      ? `License number: ${stringField(raw, ['licenseNumber'])}`
+      : null,
+    stringField(raw, ['documentType', 'documentClass'])
+      ? `Record type: ${stringField(raw, ['documentType', 'documentClass'])}`
+      : null,
+    stringField(raw, ['verificationStatus'])
+      ? `Verification: ${verificationLabel(String(raw.verificationStatus))}`
+      : null,
+    identity && typeof identity.matchLevel === 'string'
+      ? `Identity matching: ${identity.matchLevel}`
+      : item.identityMatch
+        ? `Identity matching: ${item.identityMatch}`
+        : null,
+    stringField(raw, ['docketCoverage']) === 'opinion_only'
+      ? 'Coverage: published opinion or public filing only — not a complete docket.'
+      : null,
+    stringField(raw, ['cvPage', 'documentPage', 'sourcePage'])
+      ? `Uploaded document page: ${stringField(raw, ['cvPage', 'documentPage', 'sourcePage'])}. This page citation comes from the uploaded document and is not an independent verification.`
+      : null,
+  ];
+  return lines.filter((line): line is string => Boolean(line));
+}
+
+function verificationLabel(status: string): string {
+  switch (status) {
+    case 'official_verified':
+      return 'official regulator record matched';
+    case 'official_partial_match':
+      return 'official regulator record, partial identity match';
+    case 'nppes_self_reported':
+      return 'self-reported to NPPES; not official license verification';
+    default:
+      return status.replace(/_/g, ' ');
+  }
 }
 
 function claimEvidence(

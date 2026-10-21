@@ -15,6 +15,10 @@ import type {
   EwiJobStep,
 } from './ewi-investigation-job.constants';
 import type {
+  ResearchCoverage,
+  ResearchOutcome,
+} from '@integrations/expert-research';
+import type {
   ProviderAttemptStatus,
   ResearchDisposition,
 } from '../workflow/provider-attempt';
@@ -40,10 +44,16 @@ export interface EwiSourceAttemptStatus {
   attemptStatus: ProviderAttemptStatus;
   /** How the research should be interpreted. */
   disposition: ResearchDisposition;
+  /** Normalized provider outcome when recorded. */
+  outcome?: ResearchOutcome;
+  /** Report-facing coverage; inferred on export when older records omit it. */
+  coverage?: ResearchCoverage;
   message?: string;
   itemCount: number;
   /** False when the provider was never consulted. */
   checked: boolean;
+  /** When the attempt finished, if recorded. */
+  retrievedAt?: string;
 }
 
 export interface EwiInvestigationResult {

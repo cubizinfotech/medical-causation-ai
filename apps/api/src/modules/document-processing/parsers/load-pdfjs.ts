@@ -5,11 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 const nodeRequire = createRequire(__filename);
 
-const BUILDS = [
-  'legacy/build/pdf.mjs',
-  'build/pdf.mjs',
-  'legacy/build/pdf.js',
-];
+const BUILDS = ['legacy/build/pdf.mjs', 'build/pdf.mjs', 'legacy/build/pdf.js'];
 
 export type PdfjsModule = typeof import('pdfjs-dist/legacy/build/pdf.mjs');
 

@@ -400,7 +400,7 @@ describe('web catalog sources', () => {
     });
     const providers = createWebSourceProviders(definitions, engine);
     const web = await providers.get('web_search' as never)?.search(query);
-    expect(web?.status).toBe('ok');
+    expect(['ok', 'no_result']).toContain(web?.status);
     const summary = web?.items.find(
       (item) => item.title === 'Web research coverage',
     );
@@ -413,6 +413,24 @@ describe('web catalog sources', () => {
     expect(attributed?.some((item) => item.url === OTHER_URL)).toBe(false);
   });
 
+  it('records a completed search with no pages as no_result, not success', async () => {
+    const engine = new WebResearchEngine({
+      settings,
+      providers: [fakeProvider('empty_search', [])],
+      fetcher: fakeFetcher(),
+    });
+    const web = await createWebSourceProviders(definitions, engine)
+      .get('web_search' as never)
+      ?.search(query);
+    expect(web?.status).toBe('no_result');
+    expect(web?.outcome).toBe('no_result');
+    expect(web?.message).toMatch(/Searched/);
+    expect(web?.message).toMatch(/cannot prove that none exist/);
+    expect(web?.items.some((item) => item.url && item.url.length > 0)).toBe(
+      false,
+    );
+  });
+
   it('reports unavailable, not "none found", when nothing could be searched', async () => {
     const engine = new WebResearchEngine({
       settings,
@@ -423,6 +441,7 @@ describe('web catalog sources', () => {
       .get('news' as never)
       ?.search(query);
     expect(news?.status).toBe('unavailable');
+    expect(news?.outcome).toBe('not_configured');
     expect(news?.message).toMatch(/Not searched/);
     expect(news?.message).toMatch(/not a finding/);
   });

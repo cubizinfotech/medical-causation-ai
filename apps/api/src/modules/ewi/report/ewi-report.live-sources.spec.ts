@@ -50,6 +50,8 @@ const mention: ExpertEvidenceItem = {
     documentType: 'case',
     caseName: 'Poe v. Hospital',
     documentDate: '2018-05-01',
+    caseNumber: '2:18-cv-9',
+    docketCoverage: 'opinion_only',
   },
 };
 
@@ -134,8 +136,99 @@ describe('EWI report CV comparison', () => {
     );
     expect(text).toContain('CV (page 3): “Spine study. Spine 2012.”');
     expect(text).toContain('OpenAlex: Spine study (2012). Authors: Ann Lee.');
+    expect(text).toContain('https://doi.org/2');
+    expect(text).toMatch(
+      /missing catalog result is not a confirmed discrepancy/,
+    );
+    expect(text).toMatch(/readable pages of the uploaded CV were reviewed/);
     // The CV finding is not repeated under miscellaneous findings.
     expect(sectionText(document, 'misc')).not.toContain('Expert CV');
+  });
+
+  it('prints verification statuses, source URLs, and unread CV pages', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Smith',
+      city: 'Phoenix',
+      specialty: 'Neurology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-09T00:00:00.000Z',
+      cvCheck: {
+        document: {
+          id: 'doc-1',
+          name: 'smith-cv.pdf',
+          pageCount: 9,
+          unreadablePages: [],
+          ocrPages: [],
+        },
+        status: 'partial',
+        claims: [],
+        warnings: [
+          'CV page(s) unread or partially extracted: 6, 7, 8, 9. The CV was not fully reviewed.',
+        ],
+        incompletePages: [6, 7, 8, 9],
+        comparisons: [
+          {
+            id: 'cvc-1',
+            topic: 'publication',
+            label: 'verified',
+            severity: 'low',
+            title:
+              'Verified match. Publication found with the expert as an author (first of 2 authors): Migraine outcomes after cervical fusion',
+            cv: {
+              statement: 'Migraine outcomes after cervical fusion',
+              page: 2,
+              quote: 'Smith J, Lee A. Migraine outcomes after cervical fusion.',
+            },
+            source: {
+              name: 'Crossref',
+              statement:
+                'Migraine outcomes after cervical fusion (2015). Authors: Jane A. Smith, Ann Lee. Type: article. DOI 10.1000/xyz',
+              url: 'https://doi.org/10.1000/xyz',
+            },
+            note: 'The CV position matches the catalog.',
+          },
+          {
+            id: 'cvc-2',
+            topic: 'publication',
+            label: 'not_verified',
+            severity: 'low',
+            title:
+              'Not confirmed by available sources. Publication not confirmed in the catalogs searched: A paper nobody indexed',
+            cv: {
+              statement: 'A paper nobody indexed',
+              page: 6,
+              quote: 'A paper nobody indexed',
+            },
+            source: {
+              name: 'OpenAlex, Crossref, PubMed',
+              statement:
+                'No matching work in OpenAlex, Crossref, PubMed. Absence from these catalogs is not proof the citation is false.',
+            },
+            note: 'This is not a finding that the publication is fabricated.',
+          },
+          {
+            id: 'cvc-3',
+            topic: 'publication',
+            label: 'unable_to_verify',
+            severity: 'low',
+            title: 'CV page unread or partially extracted: page 6',
+            cv: { statement: 'CV page 6 was not fully read.', page: 6 },
+            source: null,
+            note: 'The CV was not fully reviewed.',
+          },
+        ],
+      },
+    });
+    const text = sectionText(document, 'cv-comparison');
+    expect(text).toMatch(/The CV was not fully reviewed/);
+    expect(text).toMatch(/Unread or partially extracted pages: 6, 7, 8, 9/);
+    expect(text).toMatch(/Verified match/);
+    expect(text).toMatch(/Not confirmed by available sources/);
+    expect(text).toMatch(/CV page unread or partially extracted: page 6/);
+    expect(text).toContain('https://doi.org/10.1000/xyz');
+    expect(text).not.toMatch(/fabricated publication/);
   });
 });
 
@@ -161,6 +254,7 @@ describe('EWI report with live sources', () => {
           'AZ 12345 (primary). These licenses were reported by the clinician to NPPES, which does not verify them. Confirm each license with the state medical board.',
         identityMatch: 'matched',
         informationStatus: 'unverified',
+        raw: { verificationStatus: 'nppes_self_reported' },
       },
       ruling,
       mention,
@@ -198,8 +292,10 @@ describe('EWI report with live sources', () => {
       /NPI Registry: Jane A\. Smith, MD/,
     );
     const licenses = sectionText(document, 'licenses');
+    expect(licenses).toMatch(/self-reported/);
     expect(licenses).toMatch(/Licenses reported to the NPI Registry/);
     expect(licenses).toMatch(/AZ 12345 \(primary\)/);
+    expect(licenses).toMatch(/not official license verification/i);
   });
 
   it('shows the identity result in the background section', () => {
@@ -219,6 +315,7 @@ describe('EWI report with live sources', () => {
     );
     // The challenge opinion is not repeated under lawsuits.
     const lawsuits = sectionText(document, 'lawsuits');
+    expect(lawsuits).toMatch(/complete case docket/);
     expect(lawsuits).toMatch(/Poe v\. Hospital/);
     expect(lawsuits).not.toMatch(/Doe v\. Roe/);
   });

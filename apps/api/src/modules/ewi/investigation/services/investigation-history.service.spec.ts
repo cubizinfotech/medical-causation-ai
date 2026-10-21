@@ -111,6 +111,62 @@ describe('InvestigationHistoryService reports', () => {
     });
   });
 
+  it('rebuilds an outdated PDF without mutating stored investigation evidence', async () => {
+    writeFileSync(pdfFile, 'older pdf');
+    build.mockResolvedValue(rebuiltPdf('newer pdf'));
+    const result = {
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [
+        {
+          sourceId: 'npi_registry',
+          category: 'license',
+          title: 'NPI record',
+          summary: 'License PSY12345 is active.',
+        },
+      ],
+      discrepancies: [
+        {
+          id: 'd1',
+          title: 'Stored discrepancy',
+          description: 'Keep this row.',
+        },
+      ],
+      questions: [
+        {
+          number: 1,
+          category: 'Background and credentials',
+          question: 'Is license PSY12345 current?',
+          evidenceBasis: 'NPI Registry record for PSY12345',
+          label: 'verified' as const,
+          sources: [],
+        },
+      ],
+      questionCount: 1,
+      sourceStatuses: [],
+      generatedAt: '2026-10-19T12:00:00.000Z',
+    };
+    const before = JSON.stringify(result);
+
+    await service({
+      reportFileName: 'ewi-jane-doe-report.pdf',
+      reportMimeType: 'application/pdf',
+      reportStorageKey: pdfFile,
+      reportTemplateVersion: '3.0.0-old',
+      result: result as unknown as EwiInvestigationResult,
+    }).getReport('inv-1', 'user-1');
+
+    expect(JSON.stringify(result)).toBe(before);
+    expect(updateReportFile).toHaveBeenCalledWith(
+      'inv-1',
+      expect.objectContaining({
+        fileName: 'ewi-jane-doe-report.pdf',
+        templateVersion: EWI_REPORT_TEMPLATE_VERSION,
+      }),
+    );
+  });
+
   it('rewrites a PDF saved with an older template in place', async () => {
     writeFileSync(pdfFile, 'older pdf');
     build.mockResolvedValue(rebuiltPdf('newer pdf'));
@@ -208,6 +264,62 @@ describe('InvestigationHistoryService reports', () => {
     // Nothing is written: the PDF stays the stored copy.
     expect(updateReportFile).not.toHaveBeenCalled();
     expect(build).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds stale stored questions on Word export without writing them back', async () => {
+    buildWord.mockResolvedValue({
+      fileName: 'ewi-jane-doe-report.docx',
+      mimeType: WORD_MIME,
+      format: 'docx',
+      buffer: Buffer.from('word report'),
+    });
+    const staleQuestion = {
+      number: 1,
+      category: 'Background and credentials',
+      question: 'Is every license in finding f1 current?',
+      evidenceBasis: 'collected record',
+      label: 'unresolved' as const,
+      sources: [],
+    };
+
+    await service({
+      status: 'completed',
+      result: {
+        expertName: 'Jane Doe',
+        city: 'Boston',
+        specialty: 'Neurology',
+        evidence: [
+          {
+            sourceId: 'state_license',
+            category: 'license',
+            title: 'CA License',
+            summary:
+              'California psychologist license PSY12345 is active and was issued in 2009.',
+            url: 'https://example.test/license',
+            informationStatus: 'verified',
+            identityMatch: 'matched',
+            source: {
+              providerId: 'state_license',
+              name: 'California DCA',
+              retrievedAt: '2026-10-01T00:00:00.000Z',
+              access: 'public',
+            },
+          },
+        ],
+        discrepancies: [],
+        questions: [staleQuestion],
+        questionCount: 1,
+        sourceStatuses: [],
+        generatedAt: '2026-10-19T12:00:00.000Z',
+      } as unknown as EwiInvestigationResult,
+    }).getWordReport('inv-1', 'user-1');
+
+    expect(buildWord).toHaveBeenCalledWith(
+      expect.objectContaining({ expertName: 'Jane Doe' }),
+    );
+    expect(JSON.stringify(buildWord.mock.calls)).toMatch(/PSY12345/);
+    expect(JSON.stringify(buildWord.mock.calls)).not.toMatch(/finding f1/i);
+    expect(updateReportFile).not.toHaveBeenCalled();
   });
 
   it('does not export an investigation that has not finished', async () => {

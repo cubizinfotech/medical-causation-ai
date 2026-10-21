@@ -4,7 +4,10 @@ import { readFile } from 'fs/promises';
 import type { StorageSettings } from '@config/config.types';
 import type { OcrSettings } from '@config/ocr.config';
 import { KnowledgeBaseService } from '@modules/knowledge-base/services/knowledge-base.service';
-import { computeFileChecksum, getFileExtension } from '@modules/knowledge-base/utils';
+import {
+  computeFileChecksum,
+  getFileExtension,
+} from '@modules/knowledge-base/utils';
 import { validateDocument } from '@modules/knowledge-base/utils';
 import type { KnowledgeDocument } from '@modules/knowledge-base/types';
 import { ParserFactory } from '../parsers/parser.factory';
@@ -110,10 +113,7 @@ export class DocumentProcessingService implements IDocumentProcessingService {
     const pdfCeilingBytes = 2048 * 1024 * 1024;
     const sizeLimit =
       extension === 'pdf'
-        ? Math.max(
-            this.storage.knowledgeBaseMaxFileSizeBytes,
-            pdfCeilingBytes,
-          )
+        ? Math.max(this.storage.knowledgeBaseMaxFileSizeBytes, pdfCeilingBytes)
         : this.storage.knowledgeBaseMaxFileSizeBytes;
     if (fileMeta.fileSize > sizeLimit) {
       throw new DocumentTooLargeException(
@@ -152,7 +152,8 @@ export class DocumentProcessingService implements IDocumentProcessingService {
       }
     }
 
-    const streamPdf = extension === 'pdf' && fileMeta.fileSize > 8 * 1024 * 1024;
+    const streamPdf =
+      extension === 'pdf' && fileMeta.fileSize > 8 * 1024 * 1024;
     const buffer = streamPdf ? Buffer.alloc(0) : await readFile(input.filePath);
     const checksum = await computeFileChecksum(input.filePath);
     const parser = this.parserFactory.getParser(extension);

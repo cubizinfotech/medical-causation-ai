@@ -111,6 +111,14 @@ describe('planQueries', () => {
     );
   });
 
+  it('adds public directory site queries without treating them as every directory', () => {
+    const queries = planQueries(subject()).map((plan) => plan.request.query);
+    expect(queries.some((q) => q.includes('site:seakexperts.com'))).toBe(true);
+    expect(queries.some((q) => q.includes('site:jurispro.com'))).toBe(true);
+    expect(queries.some((q) => q.includes('site:expertpages.com'))).toBe(true);
+    expect(queries.some((q) => q.includes('site:dri.org'))).toBe(false);
+  });
+
   it('gives every query a unique id', () => {
     const ids = planQueries(subject({ context: 'Shands Hospital' })).map(
       (plan) => plan.id,

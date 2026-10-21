@@ -7,7 +7,7 @@ import type { ProviderDefinition } from '../expert-research.types';
 /**
  * Independent research providers.
  * Live mode calls the connected public sources (NPI Registry, Open Payments,
- * OpenAlex, CourtListener, Justia, PubMed, and NIH RePORTER). Mock mode uses fixtures only where a fixture
+ * OpenAlex, CourtListener, Justia, PubMed, NIH RePORTER, and ORCID). Mock mode uses fixtures only where a fixture
  * exists. Other providers return unavailable and do not invent credentials,
  * publications, cases, or records. Restricted providers are never scraped.
  * LexisNexis is authorized access only.
@@ -28,6 +28,9 @@ export const LIVE_SOURCE_IDS = [
   'justia',
   'pubmed',
   'grants',
+  'orcid',
+  'state_license',
+  'state_discipline',
   // Answered by the global web research layer.
   ...WEB_RESEARCH_SOURCE_IDS,
 ] as const;
@@ -77,7 +80,7 @@ const BASE_CATALOG: readonly ProviderDefinition[] = [
     requirement: 'paid_api',
     credentialEnv: 'WEB_SEARCH_API_KEY',
     summary:
-      'Paid search API. Not called locally. A same-name hit is not merged unless city or specialty also agrees.',
+      'Catalog label only; WEB_SEARCH_API_KEY is not read. Public-web search uses GEMINI_API_KEY, SERPER_API_KEY, BRAVE_SEARCH_API_KEY, TAVILY_API_KEY, Google News RSS, and GDELT. A same-name hit is not merged unless city or specialty also agrees.',
   }),
   source({
     id: 'cv_profile',
@@ -106,25 +109,30 @@ const BASE_CATALOG: readonly ProviderDefinition[] = [
     summary:
       'Public accreditation listings supplied for the investigation. No crawl.',
   }),
-  source({
-    id: 'state_license',
-    name: 'State medical licenses',
-    category: 'license',
-    accessClass: 'public',
-    requirement: 'manual',
-    credentialEnv: 'STATE_LICENSE_API_KEY',
-    summary:
-      'Official license API or a user-supplied record. Do not scrape boards whose terms forbid it.',
-  }),
-  source({
-    id: 'state_discipline',
-    name: 'State disciplinary and board actions',
-    category: 'license',
-    accessClass: 'public',
-    requirement: 'manual',
-    summary:
-      'Official board action records. Do not scrape boards whose terms forbid it. No action is invented.',
-  }),
+  source(
+    {
+      id: 'state_license',
+      name: 'State medical licenses',
+      category: 'license',
+      accessClass: 'public',
+      requirement: 'free_api',
+      summary:
+        'Official Florida Department of Health license lookup when the expert is tied to Florida by city or a Florida license number listed on NPPES. NPPES numbers are a search hint only. A blocked page is reported as inaccessible, not as an invalid license. Other states are not searched by this adapter.',
+    },
+    true,
+  ),
+  source(
+    {
+      id: 'state_discipline',
+      name: 'State disciplinary and board actions',
+      category: 'license',
+      accessClass: 'public',
+      requirement: 'free_api',
+      summary:
+        'Public discipline flag from the same official Florida Department of Health lookup. An empty or missing flag is not proof that no discipline exists. Other states are not searched by this adapter.',
+    },
+    true,
+  ),
   source({
     id: 'board_certification',
     name: 'Board certification verification',
@@ -182,7 +190,7 @@ const BASE_CATALOG: readonly ProviderDefinition[] = [
     requirement: 'free_api',
     credentialEnv: 'CROSSREF_MAILTO',
     summary:
-      'Free Crossref REST API. A mailto address is recommended. Not called locally.',
+      'Free Crossref REST API used in live mode for publication DOI/authorship checks. CROSSREF_MAILTO is an optional polite contact; OPENALEX_MAILTO or PUBMED_EMAIL is used when it is empty. This is not a paid key.',
   }),
   source(
     {
@@ -197,16 +205,19 @@ const BASE_CATALOG: readonly ProviderDefinition[] = [
     },
     true,
   ),
-  source({
-    id: 'orcid',
-    name: 'ORCID',
-    category: 'identity',
-    accessClass: 'public',
-    requirement: 'free_api',
-    credentialEnv: 'ORCID_CLIENT_ID',
-    summary:
-      'Free public ORCID API. A member client id is optional. Not called locally.',
-  }),
+  source(
+    {
+      id: 'orcid',
+      name: 'ORCID',
+      category: 'identity',
+      accessClass: 'public',
+      requirement: 'free_api',
+      credentialEnv: 'ORCID_CLIENT_ID',
+      summary:
+        'Free ORCID Public API v3.0. Search and public record reads use a client-credentials token (ORCID_CLIENT_ID and ORCID_CLIENT_SECRET from orcid.org/developer-tools). A name match is not enough; affiliation, specialty, a supplied ORCID iD, or a named publication identifier must also agree. Works on an unconfirmed profile are not attributed. A missing ORCID record is not proof that a publication does not exist.',
+    },
+    true,
+  ),
   source(
     {
       id: 'grants',
@@ -292,7 +303,7 @@ const BASE_CATALOG: readonly ProviderDefinition[] = [
       requirement: 'free_api',
       credentialEnv: 'COURTLISTENER_API_TOKEN',
       summary:
-        'Free Law Project case law. Keeps opinions with the expert’s full name and a specialty term, and flags Daubert, Frye, Rule 702, and motion-to-exclude language. A free token adds opinion excerpts.',
+        'Free Law Project case law and public RECAP filings. Keeps opinions and public motions, orders, pleadings, or transcripts that contain the expert’s full name and a specialty term. One opinion is not a complete docket. A free token adds document excerpts. PACER logins and paywalled files are not used.',
     },
     true,
   ),

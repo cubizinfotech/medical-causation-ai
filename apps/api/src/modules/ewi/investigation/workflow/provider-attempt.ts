@@ -1,8 +1,11 @@
 import {
   EXPERT_RESEARCH_CATALOG,
+  coverageWasAttempted,
+  researchCoverageFor,
   type ExpertResearchProviderId,
   type ExpertResearchSourceResult,
   type ProviderRequirement,
+  type ResearchCoverage,
   type ResearchOutcome,
   type SourceAccessClass,
 } from '@integrations/expert-research';
@@ -37,6 +40,7 @@ export interface ProviderAttemptRecord {
   attemptStatus: ProviderAttemptStatus;
   disposition: ResearchDisposition;
   outcome?: ResearchOutcome;
+  coverage: ResearchCoverage;
   access?: SourceAccessClass;
   message?: string;
   itemCount: number;
@@ -62,12 +66,23 @@ export function mapProviderAttempt(
   result: ExpertResearchSourceResult,
   options?: { skipped?: boolean; checked?: boolean },
 ): ProviderAttemptRecord {
-  if (options?.skipped) {
+  const coverage = researchCoverageFor({
+    status: result.status,
+    outcome: result.outcome,
+    message: result.message,
+    itemCount: result.items.length,
+    access: result.access,
+    skipped: options?.skipped,
+  });
+  const requirement = requirementFor(result.sourceId);
+
+  if (options?.skipped || coverage === 'skipped') {
     return {
       sourceId: result.sourceId,
       attemptStatus: 'skipped',
       disposition: 'not_applicable',
       outcome: result.outcome,
+      coverage: 'skipped',
       access: result.access,
       message:
         result.message ?? 'Skipped. Already collected in this investigation.',
@@ -76,19 +91,16 @@ export function mapProviderAttempt(
     };
   }
 
-  const checked = options?.checked ?? true;
-  const requirement = requirementFor(result.sourceId);
-  const restricted =
-    result.access === 'restricted' ||
-    result.outcome === 'restricted' ||
-    result.outcome === 'authentication_required';
-
-  if (!checked) {
+  if (options?.checked === false || coverage === 'pending') {
     return {
       sourceId: result.sourceId,
       attemptStatus: 'queued',
-      disposition: dispositionForUnchecked(requirement, restricted),
+      disposition: dispositionForUnchecked(
+        requirement,
+        coverage === 'blocked_or_access_denied',
+      ),
       outcome: result.outcome,
+      coverage: coverage === 'pending' ? 'pending' : coverage,
       access: result.access,
       message: result.message ?? 'Not checked yet.',
       itemCount: 0,
@@ -96,7 +108,24 @@ export function mapProviderAttempt(
     };
   }
 
-  if (restricted) {
+  if (coverage === 'not_implemented' || coverage === 'not_configured') {
+    return {
+      sourceId: result.sourceId,
+      attemptStatus: 'unavailable',
+      disposition:
+        coverage === 'not_configured'
+          ? dispositionForUnavailable(requirement)
+          : dispositionForUnchecked(requirement, false),
+      outcome: result.outcome,
+      coverage,
+      access: result.access,
+      message: result.message,
+      itemCount: 0,
+      checked: false,
+    };
+  }
+
+  if (coverage === 'blocked_or_access_denied') {
     return {
       sourceId: result.sourceId,
       attemptStatus: 'restricted',
@@ -105,6 +134,7 @@ export function mapProviderAttempt(
           ? 'manual_action'
           : 'paid_access',
       outcome: result.outcome,
+      coverage,
       access: result.access,
       message: result.message,
       itemCount: result.items.length,
@@ -112,25 +142,13 @@ export function mapProviderAttempt(
     };
   }
 
-  if (result.status === 'unavailable' || result.outcome === 'unavailable') {
-    return {
-      sourceId: result.sourceId,
-      attemptStatus: 'unavailable',
-      disposition: dispositionForUnavailable(requirement),
-      outcome: result.outcome,
-      access: result.access,
-      message: result.message,
-      itemCount: 0,
-      checked: true,
-    };
-  }
-
-  if (result.status === 'error') {
+  if (coverage === 'failed') {
     return {
       sourceId: result.sourceId,
       attemptStatus: 'failed',
       disposition: 'unavailable',
       outcome: result.outcome,
+      coverage,
       access: result.access,
       message: result.message,
       itemCount: 0,
@@ -138,16 +156,16 @@ export function mapProviderAttempt(
     };
   }
 
-  // ok or no_result — source was consulted
   return {
     sourceId: result.sourceId,
     attemptStatus: 'completed',
     disposition: 'completed',
     outcome: result.outcome,
+    coverage,
     access: result.access,
     message: result.message,
     itemCount: result.items.length,
-    checked: true,
+    checked: coverageWasAttempted(coverage),
   };
 }
 

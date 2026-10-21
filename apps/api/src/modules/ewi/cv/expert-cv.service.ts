@@ -100,11 +100,10 @@ export class ExpertCvService {
     const system = await this.ai.loadPrompt('ewi/cv-claims-system');
     const drafts: Array<Omit<CvClaim, 'id'>> = [...listed];
     let failed = 0;
+    const incomplete = new Set<number>();
     for (const [index, batch] of batches.entries()) {
-      try {
-        // A free-tier provider often asks to wait; the job waits rather
-        // than dropping this part of the CV.
-        const response = await retryOnRateLimit(
+      const runBatch = () =>
+        retryOnRateLimit(
           () =>
             this.ai.complete({
               temperature: 0,
@@ -124,20 +123,39 @@ export class ExpertCvService {
             }),
           BACKGROUND_RATE_LIMIT_RETRY,
         );
+      try {
+        // A free-tier provider often asks to wait; the job waits rather
+        // than dropping this part of the CV.
+        const response = await runBatch();
         drafts.push(...validateCvClaims(parseCvReply(response.content), batch));
       } catch (error) {
-        failed += 1;
-        const first = batch.pages[0].pageNumber;
-        const last = batch.pages[batch.pages.length - 1].pageNumber;
-        this.logger.warn(
-          `CV section p.${first}-${last} failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        warnings.push(
-          sectionFailure(
-            first === last ? `page ${first}` : `pages ${first}–${last}`,
-            error,
-          ),
-        );
+        let recovered = false;
+        if (!(error instanceof RateLimitExceededException)) {
+          try {
+            const retry = await runBatch();
+            drafts.push(
+              ...validateCvClaims(parseCvReply(retry.content), batch),
+            );
+            recovered = true;
+          } catch {
+            recovered = false;
+          }
+        }
+        if (!recovered) {
+          failed += 1;
+          for (const page of batch.pages) incomplete.add(page.pageNumber);
+          const first = batch.pages[0].pageNumber;
+          const last = batch.pages[batch.pages.length - 1].pageNumber;
+          this.logger.warn(
+            `CV section p.${first}-${last} failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          warnings.push(
+            sectionFailure(
+              first === last ? `page ${first}` : `pages ${first}–${last}`,
+              error,
+            ),
+          );
+        }
       }
       await onProgress?.(
         `Reading the CV (${index + 1} of ${batches.length} sections)…`,
@@ -145,19 +163,28 @@ export class ExpertCvService {
     }
 
     const claims = finalizeCvClaims(drafts);
+    const incompletePages = [...incomplete].sort((a, b) => a - b);
+    if (incompletePages.length > 0) {
+      warnings.push(
+        `CV page(s) unread or partially extracted: ${pageList(incompletePages)}. Numbered publications on those pages are still kept when they could be parsed. The CV was not fully reviewed.`,
+      );
+    }
+    const unread =
+      incompletePages.length > 0 || document.unreadablePages.length > 0;
     this.logger.log(
       `CV ${document.id}: ${claims.length} claim(s) from ${batches.length} section(s)`,
     );
     return {
       document: info,
       status:
-        failed === batches.length
+        failed === batches.length && claims.length === 0
           ? 'failed'
-          : failed > 0
+          : failed > 0 || unread
             ? 'partial'
             : 'completed',
       claims,
       warnings,
+      ...(incompletePages.length > 0 ? { incompletePages } : {}),
     };
   }
 

@@ -5,6 +5,8 @@ import type {
 } from '../expert-research.types';
 import { CourtListenerClient } from './courtlistener.client';
 import { CourtListenerResearchProvider } from './courtlistener.provider';
+import { FloridaLicenseResearchProvider } from './florida-license.provider';
+import { FloridaMqaClient } from './florida-mqa.client';
 import { ExpertIdentityResolver } from './identity-resolver';
 import { JustiaResearchProvider } from './justia.provider';
 import { NihReporterResearchProvider } from './nih-reporter.provider';
@@ -17,6 +19,8 @@ import { OpenPaymentsClient } from './open-payments.client';
 import { OpenPaymentsResearchProvider } from './open-payments.provider';
 import { createWebSourceProviders } from '../../web-research/web-source-providers';
 import type { WebResearchEngine } from '../../web-research/web-research-engine';
+import { OrcidClient } from './orcid.client';
+import { OrcidResearchProvider } from './orcid.provider';
 
 export interface LiveSourceSettings {
   timeoutMs: number;
@@ -24,9 +28,12 @@ export interface LiveSourceSettings {
   courtListenerTimeoutMs?: number;
   openAlexApiKey?: string;
   openAlexMailto?: string;
+  crossrefMailto?: string;
   openPaymentsYears?: number;
   pubmedApiKey?: string;
   pubmedEmail?: string;
+  orcidClientId?: string;
+  orcidClientSecret?: string;
   fetchImpl?: typeof fetch;
   /** Shared web research run. When set, web-backed catalog sources are live. */
   webEngine?: WebResearchEngine;
@@ -110,6 +117,21 @@ export function createLiveSourceProviders(
       new NihReporterResearchProvider(grants, fetchImpl, settings.timeoutMs),
     );
   }
+  const orcid = definition('orcid');
+  if (orcid) {
+    providers.set(
+      orcid.id,
+      new OrcidResearchProvider(
+        orcid,
+        new OrcidClient({
+          timeoutMs: settings.timeoutMs,
+          fetchImpl,
+          clientId: settings.orcidClientId,
+          clientSecret: settings.orcidClientSecret,
+        }),
+      ),
+    );
+  }
   const courts = definition('courtlistener');
   if (courts) {
     providers.set(
@@ -125,14 +147,34 @@ export function createLiveSourceProviders(
       ),
     );
   }
-  // Web-backed sources. Justia's own search page needs a browser, so the
-  // web layer (search + page reading) answers for it when available.
+  const mqa = new FloridaMqaClient(fetchImpl ?? fetch, settings.timeoutMs);
+  const license = definition('state_license');
+  if (license) {
+    providers.set(
+      license.id,
+      new FloridaLicenseResearchProvider(license, resolver, mqa, 'license'),
+    );
+  }
+  const discipline = definition('state_discipline');
+  if (discipline) {
+    providers.set(
+      discipline.id,
+      new FloridaLicenseResearchProvider(
+        discipline,
+        resolver,
+        mqa,
+        'discipline',
+      ),
+    );
+  }
+  // Web-backed sources fill catalog ids that do not already have a dedicated
+  // adapter. Justia and CourtListener keep their own searches.
   if (settings.webEngine) {
     for (const [id, provider] of createWebSourceProviders(
       definitions,
       settings.webEngine,
     )) {
-      providers.set(id, provider);
+      if (!providers.has(id)) providers.set(id, provider);
     }
   }
   return providers;

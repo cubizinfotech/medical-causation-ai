@@ -10,6 +10,7 @@ import {
   finalizeCvClaims,
   formatCvBatch,
   parseCvReply,
+  splitPageText,
   validateCvClaims,
 } from './cv-claims';
 import { compareCv, cvDiscrepancies } from './cv-comparison';
@@ -264,8 +265,8 @@ describe('CV comparison', () => {
       label: 'conflicting',
       severity: 'high',
     });
-    expect(byTitle('not found in the catalogs checked')?.label).toBe(
-      'not_found',
+    expect(byTitle('not confirmed in the catalogs searched')?.label).toBe(
+      'not_verified',
     );
   });
 
@@ -305,9 +306,18 @@ describe('CV comparison', () => {
       'conflicting',
       'not_found',
       'not_found',
-      'not_found',
     ]);
+    expect(
+      discrepancies.some((row) =>
+        /not confirmed in the catalogs/i.test(row.title),
+      ),
+    ).toBe(false);
     expect(discrepancies[0].cvSource).toBe('Uploaded CV: smith-cv.pdf');
+    expect(discrepancies.every((row) => row.evidenceIds.length > 0)).toBe(true);
+    expect(discrepancies.every((row) => row.sources.length > 0)).toBe(true);
+    expect(discrepancies[0].sources[0]?.sourceName).toBe(
+      'Uploaded CV: smith-cv.pdf',
+    );
   });
 
   it('does not compare licenses or payments without a confirmed identity', () => {
@@ -326,24 +336,228 @@ describe('CV comparison', () => {
         .every((row) => row.label === 'unable_to_verify'),
     ).toBe(true);
   });
+
+  it('keeps a CV publication that catalogs did not search, without calling it disproven', () => {
+    const unsearched = compareCv({
+      extraction: {
+        ...extraction,
+        claims: [
+          claim('cv-p', 'publication', 'Unsearched paper', {
+            title: 'A title that was never looked up',
+          }),
+        ],
+      },
+      evidence,
+      sourceResults,
+      identity,
+      publications: [
+        { title: 'A title that was never looked up', status: 'unavailable' },
+      ],
+    });
+    const row = unsearched.comparisons.find((item) =>
+      item.title.includes('A title that was never looked up'),
+    );
+    expect(row?.label).toBe('unable_to_verify');
+    expect(
+      cvDiscrepancies(unsearched).filter(
+        (item) => item.field === 'publication',
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports unread CV pages without treating them as publication discrepancies', () => {
+    const unread = compareCv({
+      extraction: {
+        ...extraction,
+        status: 'partial',
+        incompletePages: [6, 7, 8, 9],
+        document: { ...extraction.document, pageCount: 9, unreadablePages: [] },
+        claims: [
+          claim('cv-p', 'publication', 'Kept paper', {
+            title: 'A paper nobody indexed',
+          }),
+        ],
+      },
+      evidence,
+      sourceResults,
+      identity,
+      publications: [{ title: 'A paper nobody indexed', status: 'not_found' }],
+    });
+    const pages = unread.comparisons.filter((row) =>
+      row.title.startsWith('CV page unread or partially extracted'),
+    );
+    expect(pages.map((row) => row.title)).toEqual([
+      'CV page unread or partially extracted: page 6',
+      'CV page unread or partially extracted: page 7',
+      'CV page unread or partially extracted: page 8',
+      'CV page unread or partially extracted: page 9',
+    ]);
+    expect(pages.every((row) => row.label === 'unable_to_verify')).toBe(true);
+    expect(
+      cvDiscrepancies(unread).filter((item) => item.field === 'publication'),
+    ).toEqual([]);
+  });
+
+  it('records a truncated author list as verified authorship with position not verifiable', () => {
+    const check = compareCv({
+      extraction: {
+        ...extraction,
+        claims: [
+          claim('cv-p', 'publication', 'Axial movements', {
+            title: 'Axial movements are relatively preserved',
+            publicationType: 'article',
+          }),
+        ],
+      },
+      evidence,
+      sourceResults,
+      identity,
+      publications: [
+        {
+          title: 'Axial movements are relatively preserved',
+          status: 'authored',
+          catalog: 'OpenAlex',
+          doi: '10.1000/axial',
+          publicationType: 'article',
+          work: {
+            title: 'Axial movements are relatively preserved',
+            url: 'https://doi.org/10.1000/axial',
+            year: 1998,
+            authors: ['Robert E. Hanlon', 'Jason A. Demery'],
+          },
+          authorPosition: 'middle',
+          authorIndex: 1,
+          authorCount: 2,
+          positionCheck: 'not_verifiable',
+          authorListIncomplete: true,
+        },
+      ],
+    });
+    const row = check.comparisons.find((item) =>
+      item.title.includes('Axial movements'),
+    );
+    expect(row?.label).toBe('verified');
+    expect(row?.title).toMatch(/author position not verifiable/i);
+    expect(row?.source?.url).toBe('https://doi.org/10.1000/axial');
+    expect(row?.note).toMatch(/Author position not verifiable/);
+    expect(
+      cvDiscrepancies(check).filter((item) => item.field === 'publication'),
+    ).toEqual([]);
+  });
+
+  it('does not treat a chapter catalog miss as a journal-article discrepancy', () => {
+    const check = compareCv({
+      extraction: {
+        ...extraction,
+        claims: [
+          claim('cv-p', 'publication', 'A book chapter', {
+            title: 'Neuropsychology of traumatic brain injury in adults',
+            publicationType: 'chapter',
+          }),
+        ],
+      },
+      evidence,
+      sourceResults,
+      identity,
+      publications: [
+        {
+          title: 'Neuropsychology of traumatic brain injury in adults',
+          status: 'not_found',
+          publicationType: 'chapter',
+        },
+      ],
+    });
+    const row = check.comparisons.find((item) =>
+      item.title.includes('Neuropsychology of traumatic brain injury'),
+    );
+    expect(row?.label).toBe('not_verified');
+    expect(row?.title).toMatch(/Not confirmed by available sources/);
+    expect(row?.note).toMatch(
+      /often not indexed as a peer-reviewed journal article/,
+    );
+    expect(
+      cvDiscrepancies(check).filter((item) => item.field === 'publication'),
+    ).toEqual([]);
+  });
+
+  it('does not duplicate a publication comparison for the same title', () => {
+    const duplicated = compareCv({
+      extraction: {
+        ...extraction,
+        claims: [
+          claim('cv-a', 'publication', 'GFAP first', {
+            title:
+              'Serum GFAP and UCH-L1 for prediction of neurological outcomes',
+          }),
+          claim('cv-b', 'publication', 'GFAP again', {
+            title:
+              'Serum GFAP and UCH-L1 for prediction of neurological outcomes',
+          }),
+        ],
+      },
+      evidence,
+      sourceResults,
+      identity,
+      publications: [
+        {
+          title:
+            'Serum GFAP and UCH-L1 for prediction of neurological outcomes',
+          status: 'not_found',
+        },
+      ],
+    });
+    expect(
+      duplicated.comparisons.filter((row) => row.topic === 'publication'),
+    ).toHaveLength(1);
+    expect(
+      cvDiscrepancies(duplicated).filter(
+        (item) => item.field === 'publication',
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe('extractBibliographyClaims', () => {
-  it('keeps numbered publications and stops before abstracts', () => {
+  it('keeps numbered publications and labels abstracts instead of dropping them', () => {
     const page =
-      'PUBLICATIONS 1. Hanlon RE, Demery JA (1998). Axial movements are relatively preserved. Cortex, 34, 731-741. 2. Demery JA (2001). Profound amnesia and confabulation following traumatic brain injury. Neurocase, 7, 295-302. PUBLISHED ABSTRACTS 1. Demery JA (1999). A poster that is not a journal article. Journal of the International Neuropsychological Society, 5, 139.';
+      'PUBLICATIONS 1. Hanlon RE, Demery JA (1998). Axial movements are relatively preserved. Cortex, 34, 731-741. doi:10.1000/axial. 2. Demery JA (2001). Profound amnesia and confabulation following traumatic brain injury. Neurocase, 7, 295-302. PUBLISHED ABSTRACTS 1. Demery JA (1999). A poster that is not a journal article. Journal of the International Neuropsychological Society, 5, 139.';
     const claims = extractBibliographyClaims([{ pageNumber: 7, text: page }]);
-    expect(claims).toHaveLength(2);
-    expect(claims[0].category).toBe('publication');
-    expect(claims[0].page).toBe(7);
-    expect(claims[0].details.title).toBe(
-      'Axial movements are relatively preserved',
-    );
+    expect(claims).toHaveLength(3);
+    expect(claims[0].details).toMatchObject({
+      title: 'Axial movements are relatively preserved',
+      publicationType: 'article',
+      doi: '10.1000/axial',
+      year: '1998',
+    });
     expect(claims[1].details.title).toBe(
       'Profound amnesia and confabulation following traumatic brain injury',
     );
-    expect(claims.map((claim) => claim.statement).join(' ')).not.toMatch(
-      /poster/i,
+    expect(claims[2].details).toMatchObject({
+      publicationType: 'abstract',
+      title: 'A poster that is not a journal article',
+    });
+  });
+
+  it('splits a long CV page so later publications are not dropped', () => {
+    const page = `${'Publication line. '.repeat(400)}End of page six.`;
+    expect(page.length).toBeGreaterThan(5000);
+    const chunks = splitPageText(page, 5000);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.join(' ')).toContain('End of page six.');
+    const batches = buildCvBatches(
+      {
+        ...document,
+        pageCount: 1,
+        unreadablePages: [],
+        pages: [{ pageNumber: 6, text: page, ocrConfidence: null }],
+      },
+      5000,
     );
+    expect(batches.flatMap((batch) => batch.pages).length).toBe(chunks.length);
+    expect(
+      batches
+        .flatMap((batch) => batch.pages)
+        .every((item) => item.pageNumber === 6),
+    ).toBe(true);
   });
 });

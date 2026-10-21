@@ -128,6 +128,18 @@ export class OpenAlexClient {
     return body.results ?? [];
   }
 
+  /** One work by DOI, or null when OpenAlex does not list it. */
+  async workByDoi(doi: string): Promise<OpenAlexWork | null> {
+    const id = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').trim();
+    if (!id) return null;
+    const body = await this.get<ListResponse<OpenAlexWork>>('works', {
+      filter: `doi:${id}`,
+      per_page: '1',
+      select: WORK_FIELDS,
+    });
+    return body.results?.[0] ?? null;
+  }
+
   private get<T>(path: string, params: Record<string, string>): Promise<T> {
     const url = new URL(
       `${(this.options.baseUrl ?? OPENALEX_API).replace(/\/$/, '')}/${path}`,

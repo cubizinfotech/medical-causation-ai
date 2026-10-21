@@ -14,7 +14,7 @@ Return a JSON object {"claims": [...]} where each claim has:
   - training (residency, fellowship, internship): {"title", "institution", "year"}
   - appointment (positions, hospital privileges, academic titles): {"title", "institution", "year"}
   - publications_count (only when the CV states a total, such as "over 120 publications"): {"count"}
-  - publication (one listed publication): {"title", "journal", "year"}
+  - publication (one listed publication): {"title", "journal", "year", "doi", "pmid", "publicationType"} where publicationType is article, chapter, abstract, presentation, poster, or other
   - membership: {"name"}
   - award: {"name", "year"}
   - expert_witness (expert witness, forensic, or IME work): {"count", "plaintiffPercent", "defensePercent"} with numbers only when the CV states them
@@ -24,7 +24,7 @@ Return a JSON object {"claims": [...]} where each claim has:
 
 Rules:
 - List each license, board certification, degree, training program, appointment, membership, award, and industry relationship separately.
-- List at most 40 publications, the first ones on these pages.
+- List numbered publications on these pages, including journal articles, book chapters, abstracts, posters, and presentations, up to 40. Do not skip later entries on a page. Set publicationType from the heading or citation; do not treat an abstract or chapter as a journal article.
 - A page marked "[Scanned page: ...]" was read by OCR and may contain reading errors. Copy quotes exactly as they appear.
 - If these pages contain no claims, return {"claims": []}.
 

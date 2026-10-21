@@ -12,40 +12,15 @@ import {
 import { ExpertDocumentsService } from '../../documents/expert-documents.service';
 import type { CreateExpertInvestigationDto } from '../dto/create-expert-investigation.dto';
 import type { EwiInvestigationResult } from '../jobs/ewi-investigation-job.types';
-import {
-  EwiPdfReportService,
-  type EwiReportInput,
-} from '../../report/ewi-pdf-report.service';
+import { EwiPdfReportService } from '../../report/ewi-pdf-report.service';
 import { EwiWordReportService } from '../../report/ewi-word-report.service';
+import { prepareEwiReportInput } from '../../report/ewi-report-input';
 import { EWI_REPORT_TEMPLATE_VERSION } from '../../report/ewi-report.version';
 
 interface ReportFile {
   fileName: string;
   mimeType: string;
   buffer: Buffer;
-}
-
-/** The report template's input, from a saved investigation result. */
-function reportInput(result: EwiInvestigationResult): EwiReportInput {
-  return {
-    expertName: result.expertName,
-    city: result.city,
-    specialty: result.specialty,
-    evidence: result.evidence,
-    discrepancies: result.discrepancies,
-    questions: result.questions,
-    generatedAt: result.generatedAt,
-    summary: result.summary,
-    analysis: result.analysis?.document,
-    legalResearch: result.legalResearch,
-    onlinePresence: result.onlinePresence,
-    professionalBackground: result.professionalBackground,
-    identity: result.identity ?? null,
-    cvCheck: result.cvCheck ?? null,
-    additionalContext: result.additionalContext ?? null,
-    webResearch: result.webResearch ?? null,
-    sourceStatuses: result.sourceStatuses ?? [],
-  };
 }
 
 @Injectable()
@@ -165,7 +140,9 @@ export class InvestigationHistoryService {
         `Investigation "${id}" has no finished report to export`,
       );
     }
-    const report = await this.wordReport.build(reportInput(row.result));
+    const report = await this.wordReport.build(
+      prepareEwiReportInput(row.result),
+    );
     return {
       fileName: report.fileName,
       mimeType: report.mimeType,
@@ -178,6 +155,10 @@ export class InvestigationHistoryService {
    * investigation, so wording changes reach reports made before them. A
    * Word report saved before the PDF template is replaced by the PDF. If
    * the rebuild fails, the saved file is returned unchanged.
+   *
+   * Only the report file and InvestigationReport metadata are updated.
+   * Findings, discrepancies, questions, documents, and source rows are
+   * not written. prepareEwiReportInput does not mutate the stored result.
    */
   private async rebuildOutdatedReport(
     row: InvestigationView,
@@ -189,7 +170,7 @@ export class InvestigationHistoryService {
       return null;
     }
     try {
-      const report = await this.pdfReport.build(reportInput(result));
+      const report = await this.pdfReport.build(prepareEwiReportInput(result));
       const newKey =
         storageKey.slice(0, storageKey.length - extname(storageKey).length) +
         reportExtension(report.fileName);

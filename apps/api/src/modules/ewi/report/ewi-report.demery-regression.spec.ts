@@ -288,8 +288,9 @@ describe('Demery report regression', () => {
     expect(everything).not.toMatch(/A search cannot prove that nothing exists/);
     for (const id of ['grants', 'patents', 'criminal', 'board-actions']) {
       expect(sectionText(document, id)).toMatch(
-        /did not establish|was not searched/,
+        /included this topic|was not searched|not implemented|returned no matching record/,
       );
+      expect(sectionText(document, id)).not.toMatch(/did not establish/);
     }
   });
 

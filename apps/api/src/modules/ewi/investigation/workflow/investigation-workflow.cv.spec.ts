@@ -136,7 +136,10 @@ describe('investigation workflow with an uploaded CV', () => {
     ).toBeNull();
 
     expect(lookupPublications).toHaveBeenCalledWith('Jane Smith', [
-      'Spine study title',
+      expect.objectContaining({
+        title: 'Spine study title',
+        citation: 'Spine study',
+      }),
     ]);
     const check = outcome.result.cvCheck;
     expect(check?.claims).toHaveLength(2);

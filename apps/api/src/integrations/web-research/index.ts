@@ -9,6 +9,8 @@ export {
 export { SafeFetcher } from './safe-fetcher';
 export {
   createWebSourceProviders,
+  dedicatedSearchRan,
+  isWebCoverageSummary,
   WebSourceProvider,
 } from './web-source-providers';
 export { assessIdentity, subjectFromQuery } from './identity-assess';

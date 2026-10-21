@@ -319,7 +319,6 @@ export const WEB_RESEARCH_SOURCE_IDS = [
   'patient_reviews',
   'google_maps',
   'corporate_affiliations',
-  'justia',
   'university',
   'state_court_records',
 ] as const;

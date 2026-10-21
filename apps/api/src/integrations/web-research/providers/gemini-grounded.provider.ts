@@ -43,6 +43,12 @@ export class GeminiGroundedSearchProvider implements SearchProvider {
     request: SearchRequest,
     timeoutMs: number,
   ): Promise<SearchHit[]> {
+    if (!this.isConfigured()) {
+      throw new SearchProviderError(
+        'Gemini grounding is not configured (no API key).',
+        'auth',
+      );
+    }
     const ai = createGeminiClient(this.apiKey);
     const prompt =
       request.prompt ??

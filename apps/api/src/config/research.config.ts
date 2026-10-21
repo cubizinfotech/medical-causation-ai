@@ -15,6 +15,9 @@ export const researchConfig = (): ResearchProviderSettings => {
     ),
     openAlexApiKey: process.env.OPENALEX_API_KEY?.trim() || undefined,
     openAlexMailto: process.env.OPENALEX_MAILTO?.trim() || undefined,
+    crossrefMailto: process.env.CROSSREF_MAILTO?.trim() || undefined,
+    orcidClientId: process.env.ORCID_CLIENT_ID?.trim() || undefined,
+    orcidClientSecret: process.env.ORCID_CLIENT_SECRET?.trim() || undefined,
     openPaymentsYears: Number(process.env.OPEN_PAYMENTS_YEARS ?? 7),
     web: {
       providers: (

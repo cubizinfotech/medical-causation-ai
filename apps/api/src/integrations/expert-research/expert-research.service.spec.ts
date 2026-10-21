@@ -262,6 +262,94 @@ describe('ExpertResearchService', () => {
     expect(results[1]?.status).toBe('ok');
     expect(results[1]?.items.length).toBeGreaterThan(0);
   });
+
+  it('records an unimplemented live adapter as not_implemented, not an empty search', async () => {
+    const patents = EXPERT_RESEARCH_CATALOG.find(
+      (item) => item.id === 'patents',
+    );
+    if (!patents) throw new Error('patents catalog entry missing');
+    const provider = new CatalogExpertResearchProvider(
+      patents,
+      {
+        mode: 'live',
+        timeoutMs: 1000,
+        minIntervalMs: 0,
+      },
+      new ProviderRateLimiter(),
+    );
+    const result = await provider.search({
+      expertName: 'Jane Smith',
+      city: 'Boston',
+      specialty: 'Orthopedics',
+    });
+    expect(result.status).toBe('unavailable');
+    expect(result.outcome).toBe('not_implemented');
+    expect(result.items).toEqual([]);
+    expect(result.message).toMatch(/not connected/i);
+  });
+
+  it('records a missing adapter as not_implemented', async () => {
+    const service = new ExpertResearchService([]);
+    const [result] = await service.collectProviders(
+      {
+        expertName: 'Jane Smith',
+        city: 'Boston',
+        specialty: 'Orthopedics',
+      },
+      ['patents'],
+    );
+    expect(result?.outcome).toBe('not_implemented');
+    expect(result?.status).toBe('unavailable');
+    expect(result?.items).toEqual([]);
+  });
+
+  it('invokes the shared web engine for web_search in live mode', async () => {
+    const research = jest.fn().mockResolvedValue({
+      ranAt: '2026-10-21T00:00:00.000Z',
+      durationMs: 1,
+      partial: false,
+      partialNote: null,
+      queriesPlanned: 1,
+      queriesRun: 1,
+      providers: [
+        {
+          providerId: 'fake',
+          name: 'Fake',
+          configured: true,
+          requests: 1,
+          failedRequests: 0,
+          hits: 0,
+          failures: [],
+        },
+      ],
+      pagesRead: 0,
+      pagesBlocked: [],
+      candidates: [],
+      records: [],
+      registries: [],
+      limitations: [],
+    });
+    const providers = createCatalogProviders({
+      mode: 'live',
+      timeoutMs: 1000,
+      minIntervalMs: 0,
+      live: {
+        timeoutMs: 1000,
+        fetchImpl: jest.fn() as unknown as typeof fetch,
+        webEngine: { research } as never,
+      },
+    });
+    const web = providers.find((provider) => provider.id === 'web_search');
+    const result = await web?.search({
+      expertName: 'Jane Smith',
+      city: 'Boston',
+      specialty: 'Orthopedics',
+    });
+    expect(research).toHaveBeenCalled();
+    expect(
+      result?.items.some((item) => item.title === 'Web research coverage'),
+    ).toBe(true);
+  });
 });
 
 function serviceWith(runtime: ProviderRuntimeOptions): ExpertResearchService {

@@ -513,6 +513,16 @@ describe('EWI report template', () => {
     const all = pages.join('\n');
 
     expect(questions.length).toBe(60);
+    expect(document.highlights).toEqual([
+      '60 collected items',
+      '0 inconsistencies',
+      '60 cross-examination questions',
+    ]);
+    expect(
+      document.sections
+        .find((section) => section.id === 'questions')
+        ?.blocks.filter((block) => block.style === 'item'),
+    ).toHaveLength(60);
     expect(rendered.buffer.subarray(0, 5).toString()).toBe('%PDF-');
     expect(rendered.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(rendered.mimeType).toBe('application/pdf');
@@ -633,12 +643,58 @@ describe('EwiWordReportService', () => {
       '31. Social Media',
       'Public LinkedIn listing',
       '42. Cross-Examination Questions',
-      `1. [Unresolved] ${questions[0].question}`,
+      questions.length > 0
+        ? `1. [Unresolved] ${questions[0].question}`
+        : 'Cross-examination questions were not generated',
       'Disclaimer',
     ]) {
       expect(text).toContain(expected);
     }
     expect(html).toContain('<a href="https://linkedin.example/jane">');
+  });
+
+  it('prints the same grounded question count in Word as in the report input', async () => {
+    const service = new EwiWordReportService(new DocxReportRenderer());
+    const evidence = [
+      {
+        sourceId: 'state_license' as const,
+        category: 'license',
+        title: 'CA License',
+        summary:
+          'California psychologist license PSY12345 is active and was issued in 2009.',
+        url: 'https://example.test/license',
+        access: 'public' as const,
+        informationStatus: 'verified' as const,
+        identityMatch: 'matched' as const,
+        source: {
+          providerId: 'state_license' as const,
+          name: 'California DCA',
+          retrievedAt: '2026-10-01T00:00:00.000Z',
+          access: 'public' as const,
+        },
+      },
+    ];
+    const questions = buildGroundedCrossExamQuestions({
+      expertName: 'Jane Doe',
+      evidence,
+    });
+    const artifact = await service.build({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence,
+      discrepancies: [],
+      questions,
+      generatedAt: '2026-10-21T12:00:00.000Z',
+    });
+    const { value: text } = await mammoth.extractRawText({
+      buffer: artifact.buffer,
+    });
+    expect(questions).toHaveLength(1);
+    expect(text).toContain('1 cross-examination question');
+    expect(text).toContain(questions[0].question);
+    expect(text).toContain('https://example.test/license');
+    expect(text).not.toMatch(/finding f1|collected record/i);
   });
 });
 
@@ -859,5 +915,364 @@ describe('EWI report web research section', () => {
         .join('\n') ?? '';
     expect(text).toMatch(/did not run/);
     expect(text).not.toMatch(/not a finding that none exist/);
+  });
+});
+
+describe('EWI report source coverage', () => {
+  it('distinguishes searched, unimplemented, failed, and blocked sources', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-21T00:00:00.000Z',
+      sourceStatuses: [
+        {
+          sourceId: 'pubmed',
+          status: 'no_result',
+          coverage: 'searched_no_results',
+          itemCount: 0,
+          checked: true,
+        },
+        {
+          sourceId: 'patents',
+          status: 'unavailable',
+          coverage: 'not_implemented',
+          itemCount: 0,
+          checked: false,
+        },
+        {
+          sourceId: 'google_maps',
+          status: 'unavailable',
+          coverage: 'not_configured',
+          itemCount: 0,
+          checked: false,
+        },
+        {
+          sourceId: 'criminal_records',
+          status: 'error',
+          coverage: 'failed',
+          itemCount: 0,
+          checked: true,
+        },
+        {
+          sourceId: 'depositions',
+          status: 'unavailable',
+          coverage: 'not_implemented',
+          itemCount: 0,
+          checked: false,
+        },
+      ],
+    });
+    const patents =
+      document.sections
+        .find((section) => section.id === 'patents')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(patents).toMatch(/not implemented/i);
+    expect(patents).not.toMatch(/returned no matching record/i);
+    const publications =
+      document.sections
+        .find((section) => section.id === 'publications')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(publications).toMatch(/returned no matching record/i);
+    const maps =
+      document.sections
+        .find((section) => section.id === 'office-location')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(maps).toMatch(/not configured/i);
+    const criminal =
+      document.sections
+        .find((section) => section.id === 'criminal')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(criminal).toMatch(/failed technically/i);
+    expect(criminal).not.toMatch(/no criminal record/i);
+    const depositions =
+      document.sections
+        .find((section) => section.id === 'depositions')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(depositions).toMatch(/not implemented/i);
+    expect(depositions).not.toMatch(/CourtListener/i);
+  });
+
+  it('does not treat a global web run as a review of every category', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-21T00:00:00.000Z',
+      webResearch: {
+        ranAt: '2026-10-21T00:00:00.000Z',
+        durationMs: 1,
+        partial: false,
+        partialNote: null,
+        queriesPlanned: 8,
+        queriesRun: 8,
+        providers: [
+          {
+            providerId: 'gemini_grounding',
+            name: 'Google Search via Gemini grounding',
+            configured: true,
+            requests: 8,
+            failedRequests: 0,
+            hits: 0,
+            failures: [],
+          },
+        ],
+        pagesRead: 0,
+        pagesBlocked: [],
+        candidates: [],
+        records: [],
+        registries: [],
+        limitations: [],
+        topics: [{ topic: 'identity', queries: 1, hits: 0 }],
+      },
+    });
+    const education =
+      document.sections
+        .find((section) => section.id === 'education')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(education).toMatch(/was not searched/i);
+    expect(education).not.toMatch(/did not establish/i);
+    const criminal =
+      document.sections
+        .find((section) => section.id === 'criminal')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(criminal).toMatch(/was not searched/i);
+    expect(criminal).not.toMatch(/did not establish/i);
+    expect(criminal).not.toMatch(/no criminal/i);
+  });
+
+  it('does not count a web coverage summary as evidence found', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [
+        {
+          sourceId: 'web_search',
+          category: 'web',
+          title: 'Web research coverage',
+          summary:
+            '8 searches across Google Search via Gemini grounding; 0 pages read; 0 pages matched to the subject.',
+          informationStatus: 'unverified',
+          source: {
+            providerId: 'web_search',
+            name: 'Web search',
+            retrievedAt: '2026-10-21T00:00:00.000Z',
+            access: 'public',
+          },
+          raw: {
+            webSummary: { queriesRun: 8, pagesRead: 0, partial: false },
+          },
+        },
+      ],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-21T00:00:00.000Z',
+      summary: '1 item(s) were collected from the sources searched.',
+      sourceStatuses: [
+        {
+          sourceId: 'web_search',
+          status: 'no_result',
+          coverage: 'searched_no_results',
+          itemCount: 1,
+          checked: true,
+        },
+      ],
+    });
+    expect(document.highlights?.[0]).toBe('0 collected items');
+    const summary =
+      document.sections
+        .find((section) => section.id === 'summary')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(summary).not.toMatch(/1 item\(s\) were collected/);
+    const misc =
+      document.sections
+        .find((section) => section.id === 'misc')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(misc).not.toMatch(/Additional relevant findings/);
+    const publications =
+      document.sections
+        .find((section) => section.id === 'publications')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(publications).not.toMatch(/did not establish/i);
+  });
+
+  it('separates official Florida license verification from NPPES and does not treat a blocked Justia page as an empty search', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jason Demery',
+      city: 'Gainesville, FL',
+      specialty: 'Neuropsychology',
+      evidence: [
+        {
+          sourceId: 'npi_registry',
+          category: 'license',
+          title: 'Licenses reported to the NPI Registry',
+          summary: 'FL PY7500. Self-reported to NPPES.',
+          informationStatus: 'unverified',
+          raw: {
+            verificationStatus: 'nppes_self_reported',
+            nppesLicenses: [{ state: 'FL', number: 'PY7500' }],
+          },
+        },
+        {
+          sourceId: 'state_license',
+          category: 'license',
+          title: 'Florida DOH license PY7500: Clear/Active',
+          summary:
+            'Official Florida Department of Health license lookup listed DEMERY, JASON A.',
+          url: 'https://mqa-internet.doh.state.fl.us/MQASearchServices/HealthCareProviders',
+          informationStatus: 'verified',
+          retrievedAt: '2026-10-21T00:00:00.000Z',
+          source: {
+            providerId: 'state_license',
+            name: 'State medical licenses',
+            url: 'https://mqa-internet.doh.state.fl.us/MQASearchServices/HealthCareProviders',
+            retrievedAt: '2026-10-21T00:00:00.000Z',
+            access: 'public',
+          },
+          raw: {
+            verificationStatus: 'official_verified',
+            licenseNumber: 'PY7500',
+            documentType: 'license',
+          },
+        },
+      ],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-21T00:00:00.000Z',
+      sourceStatuses: [
+        {
+          sourceId: 'state_license',
+          status: 'ok',
+          coverage: 'searched_with_results',
+          itemCount: 1,
+          checked: true,
+        },
+        {
+          sourceId: 'justia',
+          status: 'error',
+          coverage: 'blocked_or_access_denied',
+          message: 'Justia presented a bot-protection or access wall.',
+          itemCount: 0,
+          checked: true,
+        },
+        {
+          sourceId: 'depositions',
+          status: 'unavailable',
+          coverage: 'not_implemented',
+          itemCount: 0,
+          checked: false,
+        },
+      ],
+    });
+    const licenses =
+      document.sections
+        .find((section) => section.id === 'licenses')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(licenses).toMatch(/official regulator record matched/i);
+    expect(licenses).toMatch(/License number: PY7500/);
+    expect(licenses).toMatch(/self-reported to NPPES/i);
+    const lawsuits =
+      document.sections
+        .find((section) => section.id === 'lawsuits')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(lawsuits).toMatch(/could not be accessed/i);
+    expect(lawsuits).not.toMatch(
+      /Justia was searched and returned no matching record/i,
+    );
+    const depositions =
+      document.sections
+        .find((section) => section.id === 'depositions')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(depositions).toMatch(/not implemented/i);
+  });
+
+  it('prints uploaded-document page citations and question evidence links', () => {
+    const questions = buildGroundedCrossExamQuestions({
+      expertName: 'Jane Doe',
+      evidence: [
+        {
+          sourceId: 'state_license',
+          category: 'license',
+          title: 'CA License',
+          summary:
+            'California psychologist license PSY12345 is active and was issued in 2009.',
+          url: 'https://example.test/license',
+          informationStatus: 'verified',
+          identityMatch: 'matched',
+          source: {
+            providerId: 'state_license',
+            name: 'California DCA',
+            retrievedAt: '2026-10-01T00:00:00.000Z',
+            access: 'public',
+          },
+          raw: { licenseNumber: 'PSY12345', cvPage: 2 },
+        },
+      ],
+    });
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [
+        {
+          sourceId: 'state_license',
+          category: 'license',
+          title: 'CA License',
+          summary:
+            'California psychologist license PSY12345 is active and was issued in 2009.',
+          url: 'https://example.test/license',
+          informationStatus: 'verified',
+          identityMatch: 'matched',
+          source: {
+            providerId: 'state_license',
+            name: 'California DCA',
+            retrievedAt: '2026-10-01T00:00:00.000Z',
+            access: 'public',
+          },
+          raw: { licenseNumber: 'PSY12345', cvPage: 2 },
+        },
+      ],
+      discrepancies: [],
+      questions,
+      generatedAt: '2026-10-21T00:00:00.000Z',
+    });
+    const licenses =
+      document.sections
+        .find((section) => section.id === 'licenses')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(licenses).toMatch(/Uploaded document page: 2/);
+    expect(licenses).toMatch(/not an independent verification/);
+    const questionsText =
+      document.sections
+        .find((section) => section.id === 'questions')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(questions).toHaveLength(1);
+    expect(questionsText).toMatch(/^1 cross-examination question/);
+    expect(questionsText).toContain(questions[0].question);
+    expect(questionsText).toMatch(/Sourced fact/);
+    expect(questionsText).toContain('https://example.test/license');
+    expect(document.highlights?.[2]).toBe('1 cross-examination question');
   });
 });

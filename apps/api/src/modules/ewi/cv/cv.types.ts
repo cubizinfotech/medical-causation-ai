@@ -30,6 +30,10 @@ export interface CvClaimDetails {
   title?: string;
   degree?: string;
   journal?: string;
+  doi?: string;
+  pmid?: string;
+  /** article, chapter, abstract, presentation, poster, or other. */
+  publicationType?: string;
   company?: string;
   role?: string;
   name?: string;
@@ -62,6 +66,8 @@ export interface CvExtraction {
   status: 'completed' | 'partial' | 'failed';
   claims: CvClaim[];
   warnings: string[];
+  /** Pages that had text but the model did not finish reading. */
+  incompletePages?: number[];
 }
 
 export type CvComparisonTopic =
@@ -98,4 +104,6 @@ export interface CvCheck {
   claims: CvClaim[];
   comparisons: CvComparison[];
   warnings: string[];
+  /** Pages that had text but the model did not finish reading. */
+  incompletePages?: number[];
 }

@@ -1,5 +1,7 @@
 import {
+  articleTitle,
   describePosition,
+  sameTitle,
   stateName,
   taxonomyMatches,
   type ExpertEvidenceItem,
@@ -49,6 +51,7 @@ export function compareCv(input: CvComparisonInput): CvCheck {
     ...boardRows(claims),
     ...publicationCountRows(claims, input.evidence),
     ...publicationTitleRows(claims, input.publications),
+    ...unreadPageRows(extraction),
     ...industryRows(claims, input),
     ...appointmentRows(claims, input.evidence),
     ...expertWitnessRows(claims, input.evidence),
@@ -60,6 +63,9 @@ export function compareCv(input: CvComparisonInput): CvCheck {
     claims,
     comparisons: rows.map((row, index) => ({ id: `cvc-${index + 1}`, ...row })),
     warnings: extraction.warnings,
+    ...(extraction.incompletePages?.length
+      ? { incompletePages: extraction.incompletePages }
+      : {}),
   };
 }
 
@@ -80,38 +86,89 @@ const TOPIC_FIELD: Record<CvComparisonTopic, VerificationField> = {
  * source should have shown but did not.
  */
 export function cvDiscrepancies(check: CvCheck): ExpertDiscrepancy[] {
+  const seen = new Set<string>();
   return check.comparisons
     .filter(
       (row) =>
         row.label === 'conflicting' ||
-        (row.label === 'not_found' && row.severity !== 'low'),
+        (row.label === 'not_found' &&
+          row.severity !== 'low' &&
+          row.topic !== 'publication'),
     )
-    .map((row) => ({
-      id: `cv-check-${row.id}`,
-      severity: row.severity,
-      title: row.title,
-      description: [
-        row.cv
-          ? `CV: "${row.cv.quote ?? row.cv.statement}"${row.cv.page ? ` (page ${row.cv.page})` : ''}.`
-          : '',
-        row.source ? `${row.source.name}: ${row.source.statement}` : '',
-        row.note,
-      ]
-        .filter(Boolean)
-        .join(' '),
-      evidenceIds: [],
-      relatedUrls: row.source?.url ? [row.source.url] : [],
-      label: row.label,
-      field: TOPIC_FIELD[row.topic],
-      previousValue: row.cv?.statement ?? null,
-      currentValue: row.source?.statement ?? null,
-      change: null,
-      cvDate: null,
-      cvSource: `Uploaded CV: ${check.document.name}`,
-      supportingSource: row.source?.name ?? null,
-      priority: priorityFor(row.severity, row.label),
-      sources: [],
-    }));
+    .flatMap((row) => {
+      const key = `${row.topic}:${normalizeTitle(row.cv?.statement ?? row.title)}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [
+        {
+          id: `cv-check-${row.id}`,
+          severity: row.severity,
+          title: row.title,
+          description: [
+            row.cv
+              ? `CV: "${row.cv.quote ?? row.cv.statement}"${row.cv.page ? ` (page ${row.cv.page})` : ''}.`
+              : '',
+            row.source ? `${row.source.name}: ${row.source.statement}` : '',
+            row.note,
+          ]
+            .filter(Boolean)
+            .join(' '),
+          evidenceIds: [
+            row.cv?.claimId,
+            row.cv?.page != null ? `cv-page-${row.cv.page}` : undefined,
+            `cv-check-${row.id}`,
+            row.source?.url,
+            row.source?.name,
+          ].filter((value): value is string => Boolean(value)),
+          relatedUrls: row.source?.url ? [row.source.url] : [],
+          label: row.label,
+          field: TOPIC_FIELD[row.topic],
+          previousValue: row.cv?.statement ?? null,
+          currentValue: row.source?.statement ?? null,
+          change: null,
+          cvDate: null,
+          cvSource: `Uploaded CV: ${check.document.name}`,
+          supportingSource: row.source?.name ?? null,
+          priority: priorityFor(row.severity, row.label),
+          sources: [
+            {
+              sourceId: 'cv',
+              sourceName: `Uploaded CV: ${check.document.name}`,
+              title: row.cv?.statement ?? row.title,
+              value: row.cv?.quote ?? row.cv?.statement ?? '',
+            },
+            ...(row.source
+              ? [
+                  {
+                    sourceId: 'source',
+                    sourceName: row.source.name,
+                    title: row.source.statement,
+                    url: row.source.url,
+                    value: row.source.statement,
+                  },
+                ]
+              : []),
+          ],
+        },
+      ];
+    });
+}
+
+/** Absence from a publication catalog is not a proven inconsistency. */
+export function isCatalogAbsenceFinding(input: {
+  field?: string | null;
+  label?: string | null;
+  title?: string | null;
+}): boolean {
+  if (input.field !== 'publication') return false;
+  if (input.label === 'conflicting') return false;
+  return /not found in (the catalogs|OpenAlex)|not confirmed in the catalogs|not confirmed by available sources|not searched in catalogs/i.test(
+    input.title ?? '',
+  );
+}
+
+function normalizeTitle(value: string): string {
+  return articleTitle(value).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 function cvSide(claim: CvClaim): NonNullable<CvComparison['cv']> {
@@ -325,17 +382,47 @@ function publicationTitleRows(
   claims: CvClaim[],
   lookups: PublicationLookupResult[],
 ): Row[] {
-  const byTitle = new Map(
-    lookups.map((lookup) => [lookup.title.trim(), lookup]),
-  );
   const rows: Row[] = [];
+  const seen: string[] = [];
   for (const claim of byCategory(claims, 'publication')) {
     const title = claim.details.title;
     if (!title) continue;
-    const lookup = byTitle.get(title.trim());
-    if (!lookup || lookup.status === 'unavailable') continue;
+    const identityKey =
+      claim.details.doi?.toLowerCase() ?? claim.details.pmid ?? title;
+    if (
+      seen.some(
+        (existing) => existing === identityKey || sameTitle(existing, title),
+      )
+    ) {
+      continue;
+    }
+    seen.push(identityKey);
+    const lookup = lookups.find((entry) => matchesLookup(entry, claim));
+    const catalogs = lookup ? checkedCatalogs(lookup) : '';
+    const failed = (lookup?.checks ?? []).filter(
+      (check) => check.outcome === 'error',
+    );
+    const pubType =
+      lookup?.publicationType ?? claim.details.publicationType ?? 'unverified';
+    if (!lookup || lookup.status === 'unavailable') {
+      rows.push({
+        topic: 'publication',
+        label: 'unable_to_verify',
+        severity: 'low',
+        title: `Publication not searched in catalogs: ${title}`,
+        cv: cvSide(claim),
+        source: null,
+        note: [
+          'The CV citation is retained. No catalog search completed for this title, so it is not disproven.',
+          `Publication type: ${pubType}.`,
+          failed.length > 0
+            ? `Catalogs that could not be reached: ${failed.map((check) => check.catalog).join(', ')}.`
+            : 'Publication catalogs were not searched.',
+        ].join(' '),
+      });
+      continue;
+    }
     const work = lookup.work;
-    const catalogs = checkedCatalogs(lookup);
     const place =
       lookup.authorPosition &&
       lookup.authorIndex !== undefined &&
@@ -346,16 +433,34 @@ function publicationTitleRows(
             lookup.authorCount,
           )
         : null;
-    const statement = `${work?.title}${work?.year ? ` (${work.year})` : ''}. Authors: ${work?.authors.join(', ') || 'not listed'}.`;
+    const identifiers = [
+      lookup.doi ? `DOI ${lookup.doi}` : '',
+      lookup.pmid ? `PMID ${lookup.pmid}` : '',
+    ]
+      .filter(Boolean)
+      .join('; ');
+    const statement = [
+      `${work?.title ?? title}${work?.year ? ` (${work.year})` : ''}.`,
+      `Authors: ${work?.authors.join(', ') || 'not listed'}.`,
+      `Type: ${pubType}.`,
+      identifiers,
+    ]
+      .filter(Boolean)
+      .join(' ');
     if (lookup.status === 'authored') {
       const differs = lookup.positionCheck === 'differs';
+      const positionOpen =
+        lookup.positionCheck === 'not_verifiable' ||
+        lookup.authorListIncomplete === true;
       rows.push({
         topic: 'publication',
         label: differs ? 'conflicting' : 'verified',
         severity: differs ? 'medium' : 'low',
         title: differs
           ? `Publication found; the expert's author position differs from the CV: ${title}`
-          : `Publication found with the expert as an author (${place}): ${title}`,
+          : positionOpen
+            ? `Verified match (author position not verifiable). Publication found with the expert as an author${place ? ` (${place})` : ''}: ${title}`
+            : `Verified match. Publication found with the expert as an author${place ? ` (${place})` : ''}: ${title}`,
         cv: cvSide(claim),
         source: {
           name: lookup.catalog ?? 'OpenAlex',
@@ -370,9 +475,8 @@ function publicationTitleRows(
           lookup.positionCheck === 'confirmed'
             ? 'The CV position matches the catalog.'
             : '',
-          lookup.positionCheck === 'not_verifiable' ||
-          lookup.authorListIncomplete
-            ? 'At least one catalog returned a shorter author list than the CV citation, so the exact position was not confirmed.'
+          positionOpen
+            ? 'Author position not verifiable: the catalog author list is truncated or shorter than the CV citation. First, corresponding, or senior authorship was not inferred.'
             : '',
           `Catalogs checked: ${catalogs}.`,
         ]
@@ -398,7 +502,7 @@ function publicationTitleRows(
         topic: 'publication',
         label: 'unable_to_verify',
         severity: 'medium',
-        title: `Publication found; the expert's authorship could not be confirmed from the catalogs: ${title}`,
+        title: `Partial match; manual review required. Publication found; the expert's authorship could not be confirmed from the catalogs: ${title}`,
         cv: cvSide(claim),
         source: {
           name: lookup.catalog ?? 'OpenAlex',
@@ -408,18 +512,87 @@ function publicationTitleRows(
         note: `The author list we could read is ${lookup.authorListIncomplete ? 'incomplete or from a single catalog' : 'missing the expert'}${lookup.cvAuthorCount ? ` (the CV lists ${lookup.cvAuthorCount} authors; the catalog lists ${lookup.authorCount ?? 0})` : ''}. This is not a finding that the expert did not write it. Catalogs checked: ${catalogs}. Ask for the article or check the publisher page.`,
       });
     } else {
+      const typedGap =
+        pubType === 'chapter' ||
+        pubType === 'abstract' ||
+        pubType === 'presentation' ||
+        pubType === 'poster';
       rows.push({
         topic: 'publication',
-        label: 'not_found',
-        severity: 'medium',
-        title: `Publication not found in the catalogs checked: ${title}`,
+        label: 'not_verified',
+        severity: 'low',
+        title: `Not confirmed by available sources. Publication not confirmed in the catalogs searched: ${title}`,
         cv: cvSide(claim),
-        source: { name: catalogs, statement: 'No work with this title.' },
-        note: 'It may be in a source these catalogs do not index (some journals, abstracts, chapters). Ask the expert for a copy.',
+        source: {
+          name: catalogs,
+          statement: `No matching work in ${catalogs}. Absence from these catalogs is not proof the citation is false.`,
+        },
+        note: [
+          `Catalogs searched: ${catalogs}.`,
+          `Publication type: ${pubType}.`,
+          typedGap
+            ? 'This type is often not indexed as a peer-reviewed journal article.'
+            : '',
+          failed.length > 0
+            ? `Not reached: ${failed.map((check) => check.catalog).join(', ')}.`
+            : '',
+          'OpenAlex, Crossref, PubMed, and ORCID do not index every journal, chapter, or abstract. Ask the expert for a copy. This is not a finding that the publication is fabricated.',
+        ]
+          .filter(Boolean)
+          .join(' '),
       });
     }
   }
   return rows;
+}
+
+function matchesLookup(
+  entry: PublicationLookupResult,
+  claim: CvClaim,
+): boolean {
+  const title = claim.details.title ?? '';
+  if (
+    sameTitle(entry.title, title) ||
+    sameTitle(articleTitle(entry.title), articleTitle(title))
+  ) {
+    return true;
+  }
+  if (
+    claim.details.doi &&
+    entry.doi &&
+    claim.details.doi.toLowerCase() === entry.doi.toLowerCase()
+  ) {
+    return true;
+  }
+  return Boolean(
+    claim.details.pmid && entry.pmid && claim.details.pmid === entry.pmid,
+  );
+}
+
+function unreadPageRows(extraction: CvExtraction): Row[] {
+  const pages = new Set<number>([
+    ...extraction.document.unreadablePages,
+    ...(extraction.incompletePages ?? []),
+  ]);
+  return [...pages]
+    .sort((a, b) => a - b)
+    .map((page) => {
+      const noText = extraction.document.unreadablePages.includes(page);
+      return {
+        topic: 'publication' as const,
+        label: 'unable_to_verify' as const,
+        severity: 'low' as const,
+        title: `CV page unread or partially extracted: page ${page}`,
+        cv: {
+          statement: `CV page ${page} was not fully read.`,
+          page,
+        },
+        source: null,
+        note: noText
+          ? 'This page had no readable text. The original uploaded CV was not overwritten. The CV was not fully reviewed.'
+          : 'The extraction model did not finish this page. Numbered publications parsed from it are retained. The CV was not fully reviewed.',
+      };
+    });
 }
 
 function checkedCatalogs(lookup: PublicationLookupResult): string {

@@ -48,6 +48,17 @@ describe('CrossExamQuestionGenerator', () => {
     expect(questions.every((item) => (item.sources ?? []).length > 0)).toBe(
       true,
     );
+    expect(questions.every((item) => (item.evidenceIds ?? []).length > 0)).toBe(
+      true,
+    );
+    expect(
+      questions.find((item) => item.question.includes('2005'))?.basisKind,
+    ).toBe('inconsistency');
+    expect(
+      questions
+        .find((item) => item.question.includes('2005'))
+        ?.sources?.map((source) => source.name),
+    ).toEqual(expect.arrayContaining(['California DCA', 'CV page 2']));
     expect(questions.map((item) => item.question).join(' ')).not.toMatch(
       /board-certified/i,
     );

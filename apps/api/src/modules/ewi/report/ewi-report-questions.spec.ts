@@ -90,6 +90,10 @@ describe('evidence-based cross-examination questions', () => {
       url: 'https://example.test/license',
       date: '2026-10-01',
     });
+    expect(questions[0].evidenceIds).toEqual(['https://example.test/license']);
+    expect(questions[0].basisKind).toBe('sourced_fact');
+    expect(questions[0].excerpt).toContain('PSY12345');
+    expect(questions[0].relevance).toMatch(/official regulator/i);
   });
 
   it('turns the Court TV article into a dated, quoted, sourced question', () => {
@@ -195,9 +199,18 @@ describe('evidence-based cross-examination questions', () => {
       sources: [{ name: 'example.test', url: 'https://example.test' }],
       evidenceBasis: 'Verified. example.test: “neuropsychologist”',
       anchors: ['neuropsychologist'],
+      evidenceIds: ['https://example.test'],
+      basisKind: 'sourced_fact',
+      relevance: 'A collected page states this fact.',
     };
     expect(isValidDraft(base)).toBe(true);
     expect(isValidDraft({ ...base, sources: [] })).toBe(false);
+    expect(
+      isValidDraft({
+        ...base,
+        question: 'Is every license in finding f1 current?',
+      }),
+    ).toBe(false);
     expect(
       isValidDraft({
         ...base,
@@ -212,6 +225,7 @@ describe('evidence-based cross-examination questions', () => {
           'The Gainesville clinic page lists you as a neuropsychologist.',
       }),
     ).toBe(false);
+    expect(isValidDraft({ ...base, evidenceIds: [] })).toBe(false);
     expect(finalizeQuestions([base, { ...base }])).toHaveLength(1);
   });
 
@@ -264,8 +278,269 @@ describe('evidence-based cross-examination questions', () => {
     expect(drafts[0]).toMatchObject({
       label: 'unresolved',
       theme: 'Inconsistencies to resolve',
+      basisKind: 'inconsistency',
     });
-    expect(drafts[0].sources[0].name).toBe('NPI Registry');
+    expect(drafts[0].sources.map((source) => source.name)).toEqual(
+      expect.arrayContaining(['NPI Registry', 'CV page 1']),
+    );
+    expect(drafts[0].evidenceIds).toEqual(
+      expect.arrayContaining([
+        'i1',
+        'https://npiregistry.cms.hhs.gov/provider-view/1',
+      ]),
+    );
+    expect(drafts[0].relevance).toMatch(/source conflict/i);
+  });
+
+  it('does not invent questions from an unconfirmed catalog miss', () => {
+    expect(
+      buildGroundedCrossExamQuestions({
+        expertName: 'Jane Doe',
+        evidence: [],
+        discrepancies: [
+          {
+            id: 'cv-check-cvc-2',
+            severity: 'low',
+            title:
+              'Not confirmed by available sources. Publication not confirmed in the catalogs searched: Axial movements',
+            description:
+              'CV: "Axial movements are relatively preserved." Absence from these catalogs is not proof the citation is false.',
+            evidenceIds: [],
+            relatedUrls: [],
+            label: 'not_verified',
+            field: 'publication',
+            previousValue: 'Axial movements are relatively preserved.',
+            currentValue: null,
+            change: null,
+            cvDate: null,
+            cvSource: 'Uploaded CV: cv.pdf',
+            supportingSource: 'OpenAlex',
+            priority: 5,
+            sources: [],
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it('does not invent questions from a catalog title miss', () => {
+    expect(
+      buildGroundedCrossExamQuestions({
+        expertName: 'Jane Doe',
+        evidence: [],
+        discrepancies: [
+          {
+            id: 'cv-check-cvc-1',
+            severity: 'medium',
+            title:
+              'Publication not found in the catalogs checked: Axial movements',
+            description:
+              'CV: "Axial movements are relatively preserved." OpenAlex: No work with this title.',
+            evidenceIds: [],
+            relatedUrls: [],
+            label: 'not_found',
+            field: 'publication',
+            previousValue: 'Axial movements are relatively preserved.',
+            currentValue: 'No work with this title.',
+            change: null,
+            cvDate: null,
+            cvSource: 'Uploaded CV: cv.pdf',
+            supportingSource: 'OpenAlex',
+            priority: 3,
+            sources: [],
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it('does not generate questions from coverage summaries, empty searches, or unimplemented sources', () => {
+    expect(
+      buildGroundedCrossExamQuestions({
+        expertName: 'Jane Doe',
+        evidence: [
+          {
+            sourceId: 'news',
+            category: 'web',
+            title: 'Web research coverage',
+            summary: 'News and blogs were searched.',
+            raw: { webSummary: true },
+          },
+          {
+            sourceId: 'pubmed',
+            category: 'publication',
+            title: 'PubMed search',
+            summary: 'PubMed returned no record.',
+            url: 'https://pubmed.ncbi.nlm.nih.gov/',
+          },
+          {
+            sourceId: 'justia',
+            category: 'legal',
+            title: 'Justia profile could not be read',
+            summary: 'The page could not be read.',
+            url: 'https://justia.example/blocked',
+          },
+          {
+            sourceId: 'cv_profile',
+            category: 'cv',
+            title: 'Expert CV: cv.pdf',
+            summary: '2 claim(s) read from the uploaded CV.',
+            url: 'https://files.example/cv.pdf',
+          },
+        ],
+        sourceStatuses: [
+          {
+            sourceId: 'patents',
+            coverage: 'not_implemented',
+            status: 'unavailable',
+            itemCount: 0,
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it('keeps every source on a multi-record inconsistency', () => {
+    const questions = buildGroundedCrossExamQuestions({
+      expertName: 'Jane Doe',
+      evidence: [],
+      discrepancies: [
+        {
+          id: 'multi',
+          severity: 'high',
+          title: 'License year conflict',
+          description:
+            'The uploaded CV, page 2, states the license was issued in 2005, and the California DCA record states 2009.',
+          evidenceIds: ['cv-page-2', 'https://example.test/license'],
+          relatedUrls: [
+            'https://files.example/cv.pdf',
+            'https://example.test/license',
+          ],
+          label: 'conflicting',
+          field: 'license',
+          previousValue: '2005',
+          currentValue: '2009',
+          change: null,
+          cvDate: null,
+          cvSource: 'Uploaded CV: cv.pdf',
+          supportingSource: 'California DCA',
+          priority: 1,
+          sources: [
+            {
+              sourceId: 'cv',
+              sourceName: 'Uploaded CV: cv.pdf',
+              title: 'License issued 2005',
+              url: 'https://files.example/cv.pdf',
+              value: '2005',
+            },
+            {
+              sourceId: 'state_license',
+              sourceName: 'California DCA',
+              title: 'License issued 2009',
+              url: 'https://example.test/license',
+              value: '2009',
+            },
+          ],
+        },
+      ],
+    });
+    expect(questions).toHaveLength(1);
+    expect(questions[0].basisKind).toBe('inconsistency');
+    expect(questions[0].sources?.map((source) => source.url)).toEqual(
+      expect.arrayContaining([
+        'https://files.example/cv.pdf',
+        'https://example.test/license',
+      ]),
+    );
+    expect(questions[0].evidenceIds).toEqual(
+      expect.arrayContaining([
+        'multi',
+        'cv-page-2',
+        'https://example.test/license',
+        'https://files.example/cv.pdf',
+      ]),
+    );
+  });
+
+  it('treats a blocked official license lookup as a limitation, not misconduct', () => {
+    const questions = buildGroundedCrossExamQuestions({
+      expertName: 'Jane Doe',
+      evidence: [
+        {
+          sourceId: 'npi_registry',
+          category: 'license',
+          title: 'NPPES license listing',
+          summary: 'Self-reported Florida license ME12345.',
+          url: 'https://npiregistry.cms.hhs.gov/provider-view/1',
+          informationStatus: 'unverified',
+          identityMatch: 'matched',
+          raw: {
+            verificationStatus: 'nppes_self_reported',
+            licenseNumber: 'ME12345',
+            nppesLicenses: [{ number: 'ME12345' }],
+          },
+          source: {
+            providerId: 'npi_registry',
+            name: 'NPI Registry (NPPES)',
+            retrievedAt: '2026-10-01T00:00:00.000Z',
+            access: 'public',
+          },
+        },
+      ],
+      sourceStatuses: [
+        {
+          sourceId: 'state_license',
+          coverage: 'blocked_or_access_denied',
+          outcome: 'restricted',
+          itemCount: 0,
+        },
+      ],
+    });
+    const text = questions.map((question) => question.question).join(' ');
+    expect(text).toContain('ME12345');
+    expect(text).toMatch(/self-reported/i);
+    expect(text).not.toMatch(/unlicensed|invalid license|false claim/i);
+    expect(
+      questions.some((question) => question.basisKind === 'limitation'),
+    ).toBe(true);
+    expect(
+      questions.some((question) => question.basisKind === 'inconsistency'),
+    ).toBe(false);
+  });
+
+  it('asks about an unverified CV credential by page without treating it as a conflict', () => {
+    const questions = buildGroundedCrossExamQuestions({
+      expertName: 'Jane Doe',
+      evidence: [],
+      cvCheck: {
+        document: {
+          id: 'cv-1',
+          name: 'cv.pdf',
+          pageCount: 3,
+          unreadablePages: [],
+          ocrPages: [],
+        },
+        status: 'completed',
+        warnings: [],
+        claims: [
+          {
+            id: 'c-license',
+            category: 'license',
+            statement: 'Florida license PY7500',
+            details: { licenseNumber: 'PY7500', state: 'FL' },
+            page: 2,
+            quote: 'Florida psychologist license PY7500, issued 2009.',
+          },
+        ],
+        comparisons: [],
+      },
+    });
+    expect(questions).toHaveLength(1);
+    expect(questions[0].question).toMatch(/page 2/);
+    expect(questions[0].question).toContain('PY7500');
+    expect(questions[0].basisKind).toBe('evidence_gap');
+    expect(questions[0].evidenceIds?.[0]).toContain('page-2');
+    expect(questions[0].sources?.[0].name).toMatch(/Uploaded CV/);
   });
 });
 
@@ -285,6 +560,10 @@ describe('question polisher', () => {
     evidenceBasis:
       'Verified. courttv.com (2026-09-02): “state expert, Dr. Jason Demery, testified”',
     anchors: ['state expert, Dr. Jason Demery, testified', '2026'],
+    evidenceIds: ['https://www.courttv.com/x'],
+    basisKind: 'sourced_fact',
+    relevance: 'A collected page states this fact.',
+    excerpt: 'state expert, Dr. Jason Demery, testified',
   };
 
   it('accepts a rewrite that keeps the quote and adds no new number', () => {

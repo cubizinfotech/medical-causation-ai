@@ -20,6 +20,13 @@ export interface CourtListenerSearchHit {
   citation?: string[];
   status?: string;
   opinions?: CourtListenerOpinionHit[];
+  /** RECAP document fields when type=rd. */
+  id?: number;
+  description?: string;
+  document_number?: string | number | null;
+  is_available?: boolean;
+  snippet?: string;
+  docket_id?: number;
 }
 
 interface SearchResponse {
@@ -55,9 +62,26 @@ export class CourtListenerClient {
   async searchOpinions(
     query: string,
   ): Promise<{ hits: CourtListenerSearchHit[]; count: number }> {
+    return this.search(query, 'o');
+  }
+
+  /**
+   * RECAP PACER filings that are already public (motions, orders, pleadings).
+   * This is not a complete docket pull.
+   */
+  async searchRecapDocuments(
+    query: string,
+  ): Promise<{ hits: CourtListenerSearchHit[]; count: number }> {
+    return this.search(query, 'rd');
+  }
+
+  private async search(
+    query: string,
+    type: 'o' | 'rd',
+  ): Promise<{ hits: CourtListenerSearchHit[]; count: number }> {
     const url = new URL(`${this.baseUrl}/search/`);
     url.searchParams.set('q', query);
-    url.searchParams.set('type', 'o');
+    url.searchParams.set('type', type);
     url.searchParams.set('highlight', 'on');
     url.searchParams.set('order_by', 'score desc');
     const body = await fetchJson<SearchResponse>(url, {
@@ -66,6 +90,25 @@ export class CourtListenerClient {
       headers: this.headers,
     });
     return { hits: body.results ?? [], count: body.count ?? 0 };
+  }
+
+  /**
+   * Plain text of a RECAP filing that is already public. Unavailable
+   * documents are not fetched from PACER.
+   */
+  async recapDocumentText(documentId: number): Promise<string> {
+    const url = new URL(`${this.baseUrl}/recap-documents/${documentId}/`);
+    url.searchParams.set('fields', 'plain_text,is_available,description');
+    const body = await fetchJson<{
+      plain_text?: string;
+      is_available?: boolean;
+    }>(url, {
+      timeoutMs: this.options.timeoutMs,
+      fetchImpl: this.options.fetchImpl,
+      headers: this.headers,
+    });
+    if (body.is_available === false) return '';
+    return body.plain_text?.trim() ?? '';
   }
 
   /** Opinion text as plain text. Requires a token. */

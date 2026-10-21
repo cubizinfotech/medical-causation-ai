@@ -79,6 +79,8 @@ function isCacheable(result: ExpertResearchSourceResult): boolean {
   if (result.outcome === 'rate_limited') return false;
   if (result.outcome === 'timeout') return false;
   if (result.outcome === 'api_failure') return false;
+  if (result.outcome === 'not_implemented') return false;
+  if (result.outcome === 'not_configured') return false;
   return result.status === 'ok' || result.status === 'no_result';
 }
 

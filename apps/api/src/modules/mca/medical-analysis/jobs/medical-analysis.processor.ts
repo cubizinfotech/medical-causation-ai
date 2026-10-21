@@ -9,7 +9,7 @@ import { Worker } from 'bullmq';
 import { RedisService } from '@redis/redis.service';
 import { describeAiFailure, describeError } from '@ai/utils';
 import { QUEUE_PREFIXES } from '@platform/jobs/job.types';
-import { workerOptions } from '@platform/jobs/worker-options';
+import { workerConnection, workerOptions } from '@platform/jobs/worker-options';
 import { MEDICAL_ANALYSIS_QUEUE_NAME } from './medical-analysis-job.constants';
 import { MedicalAnalysisJobService } from './medical-analysis-job.service';
 import type { MedicalAnalysisJobPayload } from './medical-analysis-job.types';
@@ -58,7 +58,7 @@ export class MedicalAnalysisProcessor implements OnModuleInit, OnModuleDestroy {
       MEDICAL_ANALYSIS_QUEUE_NAME,
       async (job) => this.process(job.data),
       {
-        connection: this.redisService.getConnectionOptions(),
+        connection: workerConnection(this.redisService.getConnectionOptions()),
         prefix: QUEUE_PREFIXES.MCA,
         ...workerOptions(this.config),
       },

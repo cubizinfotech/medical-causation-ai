@@ -95,7 +95,9 @@ describe('investigation workflow', () => {
     expect(
       outcome.result.sourceStatuses.every(
         (status) =>
-          status.attemptStatus === 'unavailable' && status.checked === true,
+          status.attemptStatus === 'unavailable' &&
+          status.checked === false &&
+          status.coverage === 'not_implemented',
       ),
     ).toBe(true);
   });
@@ -425,7 +427,111 @@ describe('investigation workflow', () => {
     });
     expect(attempt.attemptStatus).toBe('restricted');
     expect(attempt.disposition).toBe('paid_access');
+    expect(attempt.coverage).toBe('blocked_or_access_denied');
     expect(attempt.checked).toBe(true);
+  });
+
+  it('records implemented empty searches separately from unimplemented and failed sources', () => {
+    const empty = mapProviderAttempt(
+      emptyResult('pubmed', 'no_result', 'PubMed returned no record.'),
+    );
+    expect(empty).toMatchObject({
+      coverage: 'searched_no_results',
+      checked: true,
+      attemptStatus: 'completed',
+    });
+    const unimplemented = mapProviderAttempt(
+      emptyResult(
+        'patents',
+        'unavailable',
+        'Not searched. Patents live adapter is not connected.',
+      ),
+    );
+    expect(unimplemented).toMatchObject({
+      coverage: 'not_implemented',
+      checked: false,
+      attemptStatus: 'unavailable',
+    });
+    const missingKey = mapProviderAttempt(
+      emptyResult(
+        'web_search',
+        'unavailable',
+        'Not searched: no web search provider is configured.',
+      ),
+    );
+    expect(missingKey).toMatchObject({
+      coverage: 'not_configured',
+      checked: false,
+    });
+    const failed = mapProviderAttempt(
+      emptyResult('openalex', 'error', 'The source timed out.'),
+    );
+    expect(failed).toMatchObject({
+      coverage: 'failed',
+      checked: true,
+      attemptStatus: 'failed',
+    });
+    const blocked = mapProviderAttempt(
+      emptyResult(
+        'justia',
+        'error',
+        'Justia presented a bot-protection or access wall.',
+      ),
+    );
+    expect(blocked).toMatchObject({
+      coverage: 'blocked_or_access_denied',
+      checked: true,
+    });
+  });
+
+  it('persists the global web research dossier when the engine runs', async () => {
+    const dossier = {
+      ranAt: '2026-10-21T00:00:00.000Z',
+      durationMs: 12,
+      partial: false,
+      partialNote: null,
+      queriesPlanned: 2,
+      queriesRun: 2,
+      providers: [
+        {
+          providerId: 'gemini_grounding',
+          name: 'Google Search via Gemini grounding',
+          configured: true,
+          requests: 2,
+          failedRequests: 0,
+          hits: 1,
+          failures: [],
+        },
+      ],
+      pagesRead: 1,
+      pagesBlocked: [],
+      candidates: [],
+      records: [],
+      registries: [],
+      limitations: [],
+    };
+    const webDossier = jest.fn().mockResolvedValue(dossier);
+    const stages = EWI_WORKFLOW_STAGES.filter((stage) =>
+      ['identify-expert', 'questions', 'report'].includes(stage.id),
+    );
+    const outcome = await executeInvestigationWorkflow(
+      { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
+      {
+        stages,
+        report,
+        research: {
+          collectProviders: () => Promise.resolve([]),
+          webDossier,
+        },
+      },
+    );
+    expect(webDossier).toHaveBeenCalledWith(
+      expect.objectContaining({ expertName: 'Jane Smith' }),
+    );
+    expect(outcome.result.webResearch).toEqual(dossier);
+    expect(report.build).toHaveBeenCalledWith(
+      expect.objectContaining({ webResearch: dossier }),
+    );
   });
 
   it('caches safe public results and avoids a second provider call', async () => {

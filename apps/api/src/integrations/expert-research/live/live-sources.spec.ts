@@ -4,7 +4,9 @@ import type {
   ExpertResearchQuery,
 } from '../expert-research.types';
 import { excerptsAround, detectStandard } from './courtlistener.provider';
+import { JustiaResearchProvider } from './justia.provider';
 import { createLiveSourceProviders } from './live-sources';
+import { OrcidResearchProvider } from './orcid.provider';
 import {
   fakeFetch,
   nppesRoute,
@@ -175,6 +177,7 @@ describe('NPI Registry live source', () => {
     expect(result.items[1].summary).toMatch(/does not verify them/);
     // Licenses are not stored under keys the CV comparison reads as records.
     expect(result.items[1].raw).not.toHaveProperty('state');
+    expect(result.items[1].raw?.verificationStatus).toBe('nppes_self_reported');
     expect(result.items[1].raw?.nppesLicenses).toEqual([
       {
         state: 'AZ',
@@ -387,8 +390,11 @@ describe('CourtListener live source', () => {
       nppesRoute([doctor]),
       {
         match: (url) => url.pathname === '/api/rest/v4/search/',
-        respond: (url) =>
-          (url.searchParams.get('q') ?? '').includes('Daubert')
+        respond: (url) => {
+          if (url.searchParams.get('type') === 'rd') {
+            return { count: 0, results: [] };
+          }
+          return (url.searchParams.get('q') ?? '').includes('Daubert')
             ? {
                 count: 1,
                 results: [
@@ -407,7 +413,8 @@ describe('CourtListener live source', () => {
                   ),
                   hit(2, 'Dr. Jane Smith, a neurologist, testified'),
                 ],
-              },
+              };
+        },
       },
       {
         match: (url) => url.pathname === '/api/rest/v4/opinions/10/',
@@ -445,6 +452,88 @@ describe('CourtListener live source', () => {
     expect(mention.raw?.documentType).toBe('case');
     expect(mention.raw).not.toHaveProperty('challenge');
     expect(result.message).toMatch(/no CourtListener API token/);
+    expect(result.message).toMatch(/not a complete case docket/i);
+    const types = calls
+      .filter((call) => call.url.pathname === '/api/rest/v4/search/')
+      .map((call) => call.url.searchParams.get('type'));
+    expect(types).toContain('o');
+    expect(types).toContain('rd');
+  });
+
+  it('classifies public RECAP filings separately from opinions and drops duplicates', async () => {
+    const recap = {
+      id: 99,
+      absolute_url: '/recap-dump/99/',
+      caseName: 'State v. Doe',
+      court: 'District Court, M.D. Florida',
+      dateFiled: '2020-06-01',
+      docketNumber: '5:19-cv-10',
+      description: 'Motion to Exclude Expert Testimony of Jane Smith',
+      snippet: 'Dr. Jane Smith, a neurologist',
+      is_available: true,
+      document_number: '42',
+    };
+    const { get, calls } = providers([
+      nppesRoute([doctor]),
+      {
+        match: (url) =>
+          url.pathname === '/api/rest/v4/search/' &&
+          url.searchParams.get('type') === 'rd',
+        respond: () => ({ count: 2, results: [recap, recap] }),
+      },
+      {
+        match: (url) => url.pathname === '/api/rest/v4/search/',
+        respond: () => ({ count: 0, results: [] }),
+      },
+    ]);
+    const result = await get('courtlistener').search(query);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].raw).toMatchObject({
+      documentType: 'motion',
+      documentClass: 'motion',
+      searchKind: 'recap_document',
+      caseNumber: '5:19-cv-10',
+      docketCoverage: 'recap_document',
+    });
+    expect(result.items[0].category).toBe('motion');
+    expect(result.items[0].summary).toMatch(
+      /not evidence that a complete case docket/i,
+    );
+    expect(
+      calls.some((call) => call.url.pathname === '/api/rest/v4/search/'),
+    ).toBe(true);
+  });
+
+  it('marks a filing as a possible namesake when the specialty is not in the text', async () => {
+    const { get } = providers([
+      nppesRoute([doctor]),
+      {
+        match: (url) =>
+          url.pathname === '/api/rest/v4/search/' &&
+          url.searchParams.get('type') === 'rd',
+        respond: () => ({
+          count: 1,
+          results: [
+            {
+              id: 7,
+              caseName: 'People v. Smith',
+              description: 'Minute Order',
+              snippet: 'Jane Smith appeared as counsel',
+              docketNumber: '1:18-cv-2',
+              court: 'District Court, D. Arizona',
+              dateFiled: '2018-01-02',
+            },
+          ],
+        }),
+      },
+      {
+        match: (url) => url.pathname === '/api/rest/v4/search/',
+        respond: () => ({ count: 0, results: [] }),
+      },
+    ]);
+    const result = await get('courtlistener').search(query);
+    expect(result.items[0].raw?.documentClass).toBe('order');
+    expect(result.items[0].raw?.identity).toMatchObject({ ambiguous: true });
   });
 
   it('reads opinion text around the surname when a token is set', async () => {
@@ -464,6 +553,54 @@ describe('CourtListener live source', () => {
       call.url.pathname.includes('/opinions/'),
     );
     expect(opinionCall).toBeDefined();
+  });
+});
+
+describe('live source wiring', () => {
+  it('keeps the dedicated Justia adapter when a web engine is present', () => {
+    const map = createLiveSourceProviders(EXPERT_RESEARCH_CATALOG, {
+      timeoutMs: 1000,
+      fetchImpl: fakeFetch([]).fetch,
+      webEngine: {
+        research: () =>
+          Promise.resolve({
+            ranAt: '2026-10-21T00:00:00.000Z',
+            durationMs: 1,
+            partial: false,
+            partialNote: null,
+            queriesPlanned: 0,
+            queriesRun: 0,
+            providers: [],
+            pagesRead: 0,
+            pagesBlocked: [],
+            candidates: [],
+            records: [],
+            registries: [],
+            limitations: [],
+          }),
+      } as never,
+    });
+    expect(map.get('justia')).toBeInstanceOf(JustiaResearchProvider);
+    expect(map.get('orcid')).toBeInstanceOf(OrcidResearchProvider);
+    expect(map.get('state_license')).toBeDefined();
+    expect(map.get('state_discipline')).toBeDefined();
+  });
+
+  it('registers ORCID as callable and reports not_configured without credentials', async () => {
+    const map = createLiveSourceProviders(EXPERT_RESEARCH_CATALOG, {
+      timeoutMs: 1000,
+      fetchImpl: fakeFetch([]).fetch,
+    });
+    const orcid = map.get('orcid');
+    expect(orcid).toBeInstanceOf(OrcidResearchProvider);
+    expect(
+      EXPERT_RESEARCH_CATALOG.find((entry) => entry.id === 'orcid')
+        ?.liveImplemented,
+    ).toBe(true);
+    const result = await orcid!.search(query);
+    expect(result.status).toBe('unavailable');
+    expect(result.message).toMatch(/not configured \(no API key\)/i);
+    expect(result.items).toEqual([]);
   });
 });
 

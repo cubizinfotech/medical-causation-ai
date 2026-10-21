@@ -37,6 +37,8 @@ export interface EwiReportInput {
   webResearch?: WebResearchDossier | null;
   /** What each catalog source did, for the "not checked" lines of empty sections. */
   sourceStatuses?: ReportSourceStatus[];
+  /** Shown when stored questions were rebuilt from current evidence. */
+  questionsNote?: string;
 }
 
 export interface EwiReportOutput extends ReportArtifact {

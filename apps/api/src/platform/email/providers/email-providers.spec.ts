@@ -113,7 +113,7 @@ describe('email providers', () => {
     );
     const provider = new ResendEmailProvider(
       { resendApiKey: 're_test' },
-      fetchImpl as unknown as typeof fetch,
+      fetchImpl,
     );
     await expect(provider.send(message)).resolves.toEqual({
       provider: 'resend',
@@ -129,9 +129,7 @@ describe('email providers', () => {
 
     const limited = new ResendEmailProvider(
       { resendApiKey: 're_test' },
-      jest.fn(() =>
-        Promise.resolve(new Response('busy', { status: 429 })),
-      ) as unknown as typeof fetch,
+      jest.fn(() => Promise.resolve(new Response('busy', { status: 429 }))),
     );
     await expect(limited.send(message)).rejects.toMatchObject({
       retryable: true,

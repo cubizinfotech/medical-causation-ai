@@ -12,11 +12,19 @@ export * from './live/live-sources';
 export type {
   PublicationLookupResult,
   PublicationLookupStatus,
+  PublicationQuery,
   CatalogCheck,
+  ScholarlyType,
 } from './live/publication-lookup';
 export { describePosition } from './live/author-position';
 export type { AuthorPosition } from './live/author-position';
 export { articleTitle, sameTitle } from './live/publication-lookup';
+export {
+  classifyPublicationType,
+  normalizeDoi,
+  parsePmid,
+  parseYear,
+} from './live/publication-citation';
 export { specialtyMatches, taxonomyMatches } from './live/specialty-match';
 export { stateCode, stateName } from './live/location';
 export { namesCompatible, parsePersonName } from './live/person-name';

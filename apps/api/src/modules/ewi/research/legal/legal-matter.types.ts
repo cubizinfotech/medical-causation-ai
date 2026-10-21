@@ -83,6 +83,9 @@ export interface LegalMatter {
   citation: string | null;
   /** Set when the opinion mentions an admissibility challenge. */
   challenge: ExpertChallenge | null;
+  retrievedAt?: string | null;
+  courtLevel?: string | null;
+  docketCoverage?: string | null;
 }
 
 /** An opinion that mentions the expert with Daubert/Frye/Rule 702 language. */

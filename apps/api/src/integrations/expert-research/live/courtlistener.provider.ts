@@ -9,6 +9,13 @@ import {
   type CourtListenerClient,
   type CourtListenerSearchHit,
 } from './courtlistener.client';
+import {
+  classifyCourtDocument,
+  courtLevelOf,
+  DOCKET_COVERAGE_NOTE,
+  legalDocumentTypeFor,
+  type CourtSearchKind,
+} from './court-document-type';
 import type {
   ExpertIdentityResolver,
   ResolvedExpertIdentity,
@@ -62,6 +69,7 @@ export interface RawExpertChallenge {
 interface Hit {
   hit: CourtListenerSearchHit;
   challenge: boolean;
+  searchKind: CourtSearchKind;
   /** Highlighted snippets from each search that returned the opinion. */
   snippets: string[];
 }
@@ -107,18 +115,19 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
     const identity = await this.identity(query);
     const names = nameClause(name, identity);
     const base = `(${names}) AND (${specialtyTerms.join(' OR ')})`;
-    const [challenges, mentions] = await Promise.all([
+    const [challenges, mentions, recap] = await Promise.all([
       this.client.searchOpinions(
         `${base} AND (${CHALLENGE_TERMS.join(' OR ')})`,
       ),
       this.client.searchOpinions(base),
+      this.searchRecap(base),
     ]);
 
-    const hits = mergeHits(challenges.hits, mentions.hits);
+    const hits = mergeHits(challenges.hits, mentions.hits, recap.hits);
     if (hits.length === 0) {
       return {
         items: [],
-        message: `No CourtListener opinion contains ${displayName(name)} together with ${query.specialty} terms. Federal and state opinions only; trial-court rulings and transcripts are often not published.`,
+        message: `No CourtListener opinion or public RECAP filing contains ${displayName(name)} together with ${query.specialty} terms. Federal and state opinions and public PACER filings only; a complete case docket was not reviewed. Trial-court rulings and transcripts are often not published.`,
       };
     }
 
@@ -127,10 +136,42 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
       this.toItem(entry, query, name, excerpts.get(entry.hit), retrievedAt),
     );
     const challengeCount = hits.filter((entry) => entry.challenge).length;
+    const opinions = hits.filter(
+      (entry) => entry.searchKind === 'opinion',
+    ).length;
+    const filings = hits.length - opinions;
     return {
       items,
-      message: `${hits.length} opinion(s) contain ${displayName(name)} with ${query.specialty} terms${challengeCount > 0 ? `; ${challengeCount} also mention an admissibility challenge (Daubert, Frye, Rule 702, or a motion to exclude)` : ''}.${this.client.canReadOpinions ? '' : ' Opinion text was not read (no CourtListener API token), so rulings are judged from search excerpts only.'}`,
+      message: [
+        `${opinions} opinion(s) contain ${displayName(name)} with ${query.specialty} terms`,
+        filings > 0
+          ? `; ${filings} public RECAP filing(s) (motions, orders, pleadings, or transcripts)`
+          : '',
+        challengeCount > 0
+          ? `; ${challengeCount} also mention an admissibility challenge (Daubert, Frye, Rule 702, or a motion to exclude)`
+          : '',
+        '. Published opinions are not a complete case docket.',
+        this.client.canReadOpinions
+          ? ''
+          : ' Opinion and filing text was not read (no CourtListener API token), so rulings are judged from search excerpts only.',
+        recap.limited ? ` ${recap.limited}` : '',
+      ].join(''),
     };
+  }
+
+  private async searchRecap(
+    base: string,
+  ): Promise<{ hits: CourtListenerSearchHit[]; limited?: string }> {
+    try {
+      const found = await this.client.searchRecapDocuments(base);
+      return { hits: found.hits };
+    } catch {
+      return {
+        hits: [],
+        limited:
+          'Public RECAP filings could not be searched; that is not a finding that none exist.',
+      };
+    }
   }
 
   private async identity(
@@ -150,23 +191,39 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
   ): Promise<Map<CourtListenerSearchHit, string[]>> {
     const found = new Map<CourtListenerSearchHit, string[]>();
     if (!this.client.canReadOpinions) return found;
-    const targets = hits
+    const opinionTargets = hits
       .filter((entry) => entry.challenge && entry.hit.opinions?.[0]?.id)
       .slice(0, MAX_TEXT_FETCHES);
-    await mapWithLimit(targets, 2, async ({ hit }) => {
-      try {
-        const text = await this.client.opinionText(hit.opinions![0].id!);
-        const windows = excerptsAround(text, name.last);
-        if (windows.length > 0) found.set(hit, windows);
-      } catch {
-        // The search excerpt is used instead.
-      }
-    });
+    const recapTargets = hits
+      .filter(
+        (entry) =>
+          entry.searchKind === 'recap_document' &&
+          entry.hit.is_available !== false &&
+          typeof entry.hit.id === 'number',
+      )
+      .slice(0, MAX_TEXT_FETCHES);
+    await mapWithLimit(
+      [...opinionTargets, ...recapTargets].slice(0, MAX_TEXT_FETCHES),
+      2,
+      async (entry) => {
+        try {
+          const text =
+            entry.searchKind === 'recap_document' &&
+            typeof entry.hit.id === 'number'
+              ? await this.client.recapDocumentText(entry.hit.id)
+              : await this.client.opinionText(entry.hit.opinions![0].id!);
+          const windows = excerptsAround(text, name.last);
+          if (windows.length > 0) found.set(entry.hit, windows);
+        } catch {
+          // The search excerpt is used instead.
+        }
+      },
+    );
     return found;
   }
 
   private toItem(
-    { hit, challenge, snippets }: Hit,
+    { hit, challenge, snippets, searchKind }: Hit,
     query: ExpertResearchQuery,
     name: PersonName,
     opinionExcerpts: string[] | undefined,
@@ -175,13 +232,25 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
     const caseName =
       hit.caseName?.trim() || hit.caseNameFull?.trim() || 'Unnamed case';
     const date = hit.dateFiled?.trim() || null;
-    const snippet = snippets.join(' … ') || null;
+    const snippet = snippets.join(' … ') || hit.snippet || null;
     const citation = (hit.citation ?? []).filter(Boolean);
     const url = hit.absolute_url
       ? `${COURTLISTENER_SITE}${hit.absolute_url}`
       : undefined;
     const excerpts = opinionExcerpts ?? snippets;
     const who = displayName(name);
+    const docClass = classifyCourtDocument({
+      searchKind,
+      title: caseName,
+      description: hit.description ?? snippet ?? undefined,
+      court: hit.court,
+    });
+    const documentType = legalDocumentTypeFor(docClass, challenge);
+    const courtLevel = courtLevelOf(hit.court);
+    const specialtyInText = specialtyMentioned(
+      `${snippet ?? ''} ${hit.description ?? ''} ${caseName}`,
+      query.specialty,
+    );
     const rawChallenge: RawExpertChallenge | undefined = challenge
       ? {
           standard: detectStandard([snippet ?? '', ...excerpts].join(' ')),
@@ -193,17 +262,35 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
           excerptSource: opinionExcerpts ? 'opinion_text' : 'search_snippet',
         }
       : undefined;
+    const kindLabel =
+      searchKind === 'opinion'
+        ? 'published opinion'
+        : docClass === 'other'
+          ? 'public RECAP filing'
+          : `public ${docClass}`;
     const summary = [
       challenge
-        ? `The opinion contains ${who}, a ${query.specialty} term, and admissibility-challenge language (Daubert, Frye, Rule 702, or a motion to exclude). Whether the challenge was about this expert, and how the court ruled, is reported only when the court’s words say so.`
-        : `The opinion contains ${who} and a ${query.specialty} term. The expert’s role in the case (witness, treating physician, or party) was not determined.`,
-      snippet ? `Search excerpt: “${snippet}”` : null,
+        ? `This ${kindLabel} contains ${who}, a ${query.specialty} term, and admissibility-challenge language (Daubert, Frye, Rule 702, or a motion to exclude). Whether the challenge was about this expert, and how the court ruled, is reported only when the court’s words say so.`
+        : `This ${kindLabel} contains ${who}${specialtyInText ? ` and a ${query.specialty} term` : ''}. The expert’s role in the case (witness, treating physician, or party) was not determined.`,
+      snippet ? `Search excerpt: “${htmlToText(snippet)}”` : null,
+      hit.description ? `Filing description: ${hit.description}.` : null,
+      DOCKET_COVERAGE_NOTE,
     ]
       .filter(Boolean)
       .join(' ');
+    const category =
+      documentType === 'order'
+        ? 'court_order'
+        : documentType === 'motion' || documentType === 'pleading'
+          ? 'motion'
+          : documentType === 'deposition'
+            ? 'deposition'
+            : documentType === 'testimony'
+              ? 'testimony'
+              : 'legal';
     return this.item({
-      category: 'legal',
-      title: `${caseName}${date ? ` (${date.slice(0, 4)})` : ''}`,
+      category,
+      title: `${hit.description ? `${hit.description} — ` : ''}${caseName}${date ? ` (${date.slice(0, 4)})` : ''}`,
       summary,
       url,
       retrievedAt,
@@ -212,28 +299,49 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
         identity: {
           name: query.expertName,
           specialty: query.specialty,
-          verifiedBy: 'source_match',
-          basis: ['full name in opinion', 'specialty term in opinion'],
+          verifiedBy: specialtyInText ? 'source_match' : undefined,
+          ambiguous: !specialtyInText,
+          basis: specialtyInText
+            ? ['full name in filing', 'specialty term in filing']
+            : ['full name in filing'],
         },
-        documentType: challenge ? 'expert_witness_case' : 'case',
+        documentType,
+        documentClass: docClass,
+        searchKind,
+        courtLevel,
+        docketCoverage:
+          searchKind === 'opinion' ? 'opinion_only' : 'recap_document',
         caseName,
         caseNumber: hit.docketNumber?.trim() || null,
         court: hit.court?.trim() || null,
         filingDate: date,
         documentDate: date,
         citation: citation.join('; ') || null,
+        documentNumber:
+          hit.document_number != null ? String(hit.document_number) : null,
+        availablePublicly: hit.is_available !== false,
         relevance: challenge
-          ? 'Opinion mentions the expert together with an admissibility challenge.'
-          : 'Opinion mentions the expert by full name with the specialty.',
+          ? 'Filing mentions the expert together with an admissibility challenge.'
+          : 'Filing mentions the expert by full name.',
         findingsRegardingExpert:
-          'Not determined from the search result. Read the opinion.',
+          'Not determined from the search result. Read the document.',
         evidenceReference: `${caseName}, ${citation[0] ?? hit.court_citation_string ?? hit.court ?? 'CourtListener'}${date ? ` (${date})` : ''}`,
         courtListenerClusterId: hit.cluster_id ?? null,
+        courtListenerDocumentId: hit.id ?? null,
         searchSnippet: snippet,
         ...(rawChallenge ? { challenge: rawChallenge } : {}),
       },
     });
   }
+}
+
+function specialtyMentioned(text: string, specialty: string): boolean {
+  const stem = specialty
+    .split(/[\s,/]+/)[0]
+    ?.slice(0, 6)
+    .toLowerCase();
+  if (!stem || stem.length < 4) return false;
+  return text.toLowerCase().includes(stem);
 }
 
 /**
@@ -272,23 +380,47 @@ function nameClause(
 function mergeHits(
   challenges: CourtListenerSearchHit[],
   mentions: CourtListenerSearchHit[],
+  recap: CourtListenerSearchHit[],
 ): Hit[] {
   const byKey = new Map<string, Hit>();
-  const add = (hit: CourtListenerSearchHit, challenge: boolean) => {
-    const key = String(hit.cluster_id ?? hit.absolute_url ?? hit.caseName);
-    const snippet = cleanSnippet(hit.opinions?.[0]?.snippet);
+  const add = (
+    hit: CourtListenerSearchHit,
+    challenge: boolean,
+    searchKind: CourtSearchKind,
+  ) => {
+    const key =
+      searchKind === 'recap_document'
+        ? `rd:${hit.id ?? hit.absolute_url ?? hit.description ?? hit.caseName}`
+        : `o:${hit.cluster_id ?? hit.absolute_url ?? hit.caseName}`;
+    const snippet = cleanSnippet(hit.opinions?.[0]?.snippet ?? hit.snippet);
     const existing = byKey.get(key);
     if (existing) {
       if (snippet && !existing.snippets.includes(snippet)) {
         existing.snippets.push(snippet);
       }
+      if (challenge) existing.challenge = true;
       return;
     }
-    byKey.set(key, { hit, challenge, snippets: snippet ? [snippet] : [] });
+    byKey.set(key, {
+      hit,
+      challenge,
+      searchKind,
+      snippets: snippet ? [snippet] : [],
+    });
   };
-  for (const hit of challenges) add(hit, true);
-  for (const hit of mentions) add(hit, false);
+  for (const hit of challenges) add(hit, true, 'opinion');
+  for (const hit of mentions) add(hit, false, 'opinion');
+  for (const hit of recap)
+    add(hit, recapLooksLikeChallenge(hit), 'recap_document');
   return [...byKey.values()].slice(0, MAX_HITS);
+}
+
+function recapLooksLikeChallenge(hit: CourtListenerSearchHit): boolean {
+  return CHALLENGE_TERMS.some((term) =>
+    new RegExp(term.replace(/"/g, ''), 'i').test(
+      `${hit.description ?? ''} ${hit.snippet ?? ''}`,
+    ),
+  );
 }
 
 function cleanSnippet(snippet: string | undefined): string | null {

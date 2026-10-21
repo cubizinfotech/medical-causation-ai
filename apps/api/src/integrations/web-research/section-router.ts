@@ -584,12 +584,12 @@ const SECTION_SEARCH: Record<
   education: { what: 'a degree or training', topics: ['education'] },
   'university-accreditation': {
     what: 'a degree-granting institution',
-    topics: ['education'],
+    topics: [],
   },
   licenses: { what: 'a professional license', topics: ['license'] },
   'board-actions': {
     what: 'a licensing board action or complaint',
-    topics: ['discipline', 'license'],
+    topics: ['discipline'],
   },
   'board-certifications': {
     what: 'a board certification',
@@ -643,7 +643,7 @@ const SECTION_SEARCH: Record<
   },
   'office-location': {
     what: 'an office address',
-    topics: ['places', 'identity'],
+    topics: ['places'],
   },
   'admissibility-challenges': {
     what: 'a Daubert, Frye or Rule 702 challenge',
@@ -651,7 +651,7 @@ const SECTION_SEARCH: Record<
   },
   'university-rules': {
     what: 'a university rule or policy that applies to the expert',
-    topics: ['university_rules', 'education'],
+    topics: ['university_rules'],
   },
   websites: { what: 'an expert or practice website', topics: ['identity'] },
   directories: {
@@ -677,39 +677,11 @@ export function sectionVerification(
     : null;
 }
 
-const EMPTY_NOUN: Record<RoutedSectionId, string> = {
-  background: 'employment or practice history attributable to',
-  education: 'a degree or training program attributable to',
-  'university-accreditation':
-    'accreditation status for an institution connected to',
-  licenses: 'a professional license attributable to',
-  'board-actions': 'a licensing board action attributable to',
-  'board-certifications': 'a board certification attributable to',
-  'certification-orgs': 'a certifying organization listing attributable to',
-  memberships: 'a professional membership attributable to',
-  publications: 'a publication attributable to',
-  grants: 'a research grant award directly attributable to',
-  patents: 'a patent attributable to',
-  'awards-military': 'an award or military-service claim attributable to',
-  ime: 'IME or expert-services advertising attributable to',
-  orders: 'a court order naming',
-  pleadings: 'a motion or pleading naming',
-  depositions: 'a deposition transcript attributable to',
-  'testimony-inconsistencies': 'inconsistent testimony attributable to',
-  'income-bias': 'fee or retention figures attributable to',
-  lawsuits: 'a lawsuit or malpractice claim against',
-  criminal: 'a criminal record attributable to',
-  corporate: 'a business affiliation attributable to',
-  'patient-reviews': 'a patient or client review of',
-  'office-location': 'an office address for',
-  'admissibility-challenges': 'an admissibility challenge naming',
-  'university-rules': 'a university rule or policy that applies to the role of',
-  websites: 'an expert or practice website for',
-  directories: 'an expert directory listing for',
-  social: 'a public social media profile that could be reliably attributed to',
-  videos: 'a video or transcript featuring',
-  news: 'a news article about',
-};
+const NOT_SEARCHED = 'This was not searched in this investigation.';
+const SEARCH_INCOMPLETE =
+  'The search for this topic did not complete, so no finding is reported.';
+const TOPIC_UNVERIFIED =
+  'A web search included this topic. No dedicated source for this category was searched, so it remains unverified.';
 
 function blockedNote(
   dossier: WebResearchDossier,
@@ -728,9 +700,31 @@ function blockedNote(
   return 'A source that may hold information for this section could not be read (login, bot protection or robots.txt).';
 }
 
+function webRunAttempted(dossier: WebResearchDossier): boolean {
+  return dossier.providers.some((provider) => provider.requests > 0);
+}
+
+function webRunWorked(dossier: WebResearchDossier): boolean {
+  return dossier.providers.some(
+    (provider) =>
+      provider.requests > 0 && provider.failedRequests < provider.requests,
+  );
+}
+
+function topicQueriesForSection(
+  dossier: WebResearchDossier,
+  sectionId: RoutedSectionId,
+): number {
+  if (!dossier.topics) return 0;
+  const wanted = SECTION_SEARCH[sectionId].topics;
+  return dossier.topics
+    .filter((entry) => wanted.includes(entry.topic))
+    .reduce((sum, entry) => sum + entry.queries, 0);
+}
+
 /**
- * Short professional empty copy. Distinguishes "searched, nothing found"
- * from "was not searched", without describing search mechanics.
+ * Empty-section copy. A global web run is not treated as a search of every
+ * category. Dedicated source lines (structured) speak for themselves.
  */
 export function coverageLine(
   dossier: WebResearchDossier | null | undefined,
@@ -738,36 +732,21 @@ export function coverageLine(
   structured: string[] = [],
   expertName?: string,
 ): string {
-  const who = expertName?.trim() || 'this expert';
+  void expertName;
   if (!isRoutedSection(sectionId)) {
-    return `The public records reviewed did not establish a finding attributable to ${who}.`;
+    return structured.length > 0 ? structured.join(' ') : NOT_SEARCHED;
   }
-  const noun = EMPTY_NOUN[sectionId];
   const parts: string[] = [];
-  if (!dossier) {
-    parts.push('This was not searched in this investigation.');
-  } else {
-    const worked = dossier.providers.some(
-      (p) => p.requests > 0 && p.failedRequests < p.requests,
-    );
-    if (!worked) {
-      parts.push(
-        'The search for this topic did not complete, so no finding is reported.',
-      );
-    } else if (dossier.topics) {
-      const { topics } = SECTION_SEARCH[sectionId];
-      const stats = dossier.topics.filter((t) => topics.includes(t.topic));
-      const queries = stats.reduce((sum, t) => sum + t.queries, 0);
-      parts.push(
-        queries > 0
-          ? `The public records reviewed did not establish ${noun} ${who}.`
-          : 'This was not searched in this investigation.',
-      );
-    } else {
-      parts.push(
-        `The public records reviewed did not establish ${noun} ${who}.`,
-      );
-    }
+  const attempted = Boolean(dossier && webRunAttempted(dossier));
+  const worked = Boolean(dossier && webRunWorked(dossier));
+  const queried =
+    !!dossier && worked && topicQueriesForSection(dossier, sectionId) > 0;
+  if (attempted && !worked) {
+    parts.push(SEARCH_INCOMPLETE);
+  } else if (structured.length === 0) {
+    parts.push(queried ? TOPIC_UNVERIFIED : NOT_SEARCHED);
+  }
+  if (dossier) {
     const blocked = blockedNote(dossier, sectionId);
     if (blocked) parts.push(blocked);
   }

@@ -6,6 +6,11 @@ import type {
 import { LiveHttpError } from './live-http';
 import { LiveResearchProvider, type LiveRunResult } from './live-provider.base';
 import { displayName, parsePersonName } from './person-name';
+import {
+  classifyCourtDocument,
+  DOCKET_COVERAGE_NOTE,
+  legalDocumentTypeFor,
+} from './court-document-type';
 
 const SEARCH_HOST = 'https://law.justia.com';
 const MAX_LINKS = 8;
@@ -86,10 +91,13 @@ export class JustiaResearchProvider extends LiveResearchProvider {
     const url = `${SEARCH_HOST}/search?q=${encodeURIComponent(quoted)}`;
     const html = await this.readPage(url);
     if (!justiaPageIsReadable(html)) {
-      throw new LiveHttpError(
-        'Justia did not return a readable results page. This is not a finding that no case exists.',
-        'http',
-      );
+      return {
+        items: [],
+        status: 'error',
+        outcome: 'restricted',
+        message:
+          'Justia presented a bot-protection or access wall. The results page was not read. This is not a finding that no case exists.',
+      };
     }
     const hits = parseJustiaHits(html, name.last);
     if (hits.length === 0) {
@@ -100,7 +108,9 @@ export class JustiaResearchProvider extends LiveResearchProvider {
       };
     }
     return {
-      items: hits.map((hit) => this.caseItem(hit, quoted, retrievedAt)),
+      items: hits.map((hit) =>
+        this.caseItem(hit, quoted, name.last, retrievedAt),
+      ),
       message: `Justia results page listed ${hits.length} case link(s) for ${quoted}. Open each link before treating it as the same person.`,
     };
   }
@@ -122,6 +132,13 @@ export class JustiaResearchProvider extends LiveResearchProvider {
         throw new LiveHttpError(
           'Justia redirected the search. The page was not followed. This is not a finding that no case exists.',
           'http',
+          response.status,
+        );
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new LiveHttpError(
+          'Justia blocked the request. The page was not read. This is not a finding that no case exists.',
+          'auth',
           response.status,
         );
       }
@@ -147,20 +164,41 @@ export class JustiaResearchProvider extends LiveResearchProvider {
   private caseItem(
     hit: JustiaHit,
     quoted: string,
+    lastName: string,
     retrievedAt: string,
   ): ExpertEvidenceItem {
-    return this.item({
-      category: 'legal',
+    const docClass = classifyCourtDocument({
+      searchKind: hit.url.includes('/cases/') ? 'opinion' : 'recap_document',
       title: hit.title,
-      summary: `Public Justia case link returned for ${quoted}. Confirm the person before relying on it.`,
+    });
+    const documentType = legalDocumentTypeFor(docClass, false);
+    const docket = hit.title.match(
+      /\b(\d{1,2}:\d{2}-[a-z]{2}-\d+|\d{2,4}-[A-Z]{2,}-\d+|\d{4,}\s*[A-Z]{2,}\s*\d+)\b/i,
+    );
+    return this.item({
+      category: documentType === 'order' ? 'court_order' : 'legal',
+      title: hit.title,
+      summary: [
+        `Public Justia link returned for ${quoted}. The last name “${lastName}” appears in the link text; confirm it is the same person before relying on it.`,
+        DOCKET_COVERAGE_NOTE,
+      ].join(' '),
       url: hit.url,
       retrievedAt,
       informationStatus: 'unverified',
       raw: {
-        documentType: 'case',
+        identity: {
+          name: lastName,
+          verifiedBy: undefined,
+          ambiguous: true,
+          basis: ['last name in Justia link text'],
+        },
+        documentType,
+        documentClass: docClass,
         caseName: hit.title,
+        caseNumber: docket?.[1] ?? null,
         source: 'Justia',
         resultUrl: hit.url,
+        docketCoverage: 'opinion_only',
       },
     });
   }

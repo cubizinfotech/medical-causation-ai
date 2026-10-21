@@ -95,6 +95,9 @@ function matterFromItem(item: ExpertEvidenceItem, index: number): LegalMatter {
     importantStatements: readStringList(raw.importantStatements),
     citation: readString(raw.citation),
     challenge: readExpertChallenge(raw.challenge),
+    retrievedAt: item.retrievedAt ?? item.source?.retrievedAt ?? null,
+    courtLevel: readString(raw.courtLevel),
+    docketCoverage: readString(raw.docketCoverage),
   };
 }
 

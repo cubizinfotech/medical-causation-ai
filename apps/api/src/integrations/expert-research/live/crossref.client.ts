@@ -1,4 +1,4 @@
-import { fetchJson } from './live-http';
+import { fetchJson, LiveHttpError } from './live-http';
 
 export interface CrossrefWork {
   DOI?: string;
@@ -7,6 +7,7 @@ export interface CrossrefWork {
   author?: Array<{ given?: string; family?: string; name?: string }>;
   issued?: { 'date-parts'?: number[][] };
   'container-title'?: string[];
+  type?: string;
 }
 
 /** Crossref REST API: authoritative publisher-supplied author lists, in order. */
@@ -28,7 +29,7 @@ export class CrossrefClient {
     url.searchParams.set('rows', String(rows));
     url.searchParams.set(
       'select',
-      'DOI,URL,title,author,issued,container-title',
+      'DOI,URL,title,author,issued,container-title,type',
     );
     if (this.options.mailto)
       url.searchParams.set('mailto', this.options.mailto);
@@ -40,6 +41,27 @@ export class CrossrefClient {
       },
     );
     return body.message?.items ?? [];
+  }
+
+  /** Publisher record for one DOI, or null when Crossref has no such work. */
+  async workByDoi(doi: string): Promise<CrossrefWork | null> {
+    const id = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').trim();
+    if (!id) return null;
+    const url = new URL(
+      `${this.options.baseUrl ?? 'https://api.crossref.org'}/works/${encodeURIComponent(id)}`,
+    );
+    if (this.options.mailto)
+      url.searchParams.set('mailto', this.options.mailto);
+    try {
+      const body = await fetchJson<{ message?: CrossrefWork }>(url, {
+        timeoutMs: this.options.timeoutMs,
+        fetchImpl: this.options.fetchImpl,
+      });
+      return body.message ?? null;
+    } catch (error) {
+      if (error instanceof LiveHttpError && error.status === 404) return null;
+      throw error;
+    }
   }
 }
 

@@ -1,4 +1,11 @@
-import { articleTitle, stateCode } from '@integrations/expert-research';
+import {
+  articleTitle,
+  classifyPublicationType,
+  normalizeDoi,
+  parsePmid,
+  parseYear,
+  stateCode,
+} from '@integrations/expert-research';
 import type { LoadedExpertDocument } from '../documents/expert-documents.types';
 import {
   CV_CLAIM_CATEGORIES,
@@ -28,21 +35,44 @@ export function buildCvBatches(
   for (const page of document.pages) {
     const text = page.text.trim();
     if (text.length < MIN_PAGE_CHARS) continue;
-    const pageText = text.length > maxChars ? text.slice(0, maxChars) : text;
-    if (current.length > 0 && size + pageText.length > maxChars) {
-      batches.push({ pages: current });
-      current = [];
-      size = 0;
+    for (const pageText of splitPageText(text, maxChars)) {
+      if (current.length > 0 && size + pageText.length > maxChars) {
+        batches.push({ pages: current });
+        current = [];
+        size = 0;
+      }
+      current.push({
+        pageNumber: page.pageNumber,
+        text: pageText,
+        ocr: page.ocrConfidence != null,
+      });
+      size += pageText.length;
     }
-    current.push({
-      pageNumber: page.pageNumber,
-      text: pageText,
-      ocr: page.ocrConfidence != null,
-    });
-    size += pageText.length;
   }
   if (current.length > 0) batches.push({ pages: current });
   return batches;
+}
+
+/** Splits a long page so the remainder is still read, not silently dropped. */
+export function splitPageText(text: string, maxChars: number): string[] {
+  if (text.length <= maxChars) return [text];
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = Math.min(start + maxChars, text.length);
+    if (end < text.length) {
+      const window = text.slice(start, end);
+      const breakAt = Math.max(
+        window.lastIndexOf('\n'),
+        window.lastIndexOf('. '),
+      );
+      if (breakAt > maxChars * 0.4) end = start + breakAt + 1;
+    }
+    const chunk = text.slice(start, end).trim();
+    if (chunk) chunks.push(chunk);
+    start = end;
+  }
+  return chunks;
 }
 
 export function formatCvBatch(batch: CvBatch): string {
@@ -129,6 +159,9 @@ function cleanDetails(raw: unknown): CvClaimDetails {
     'title',
     'degree',
     'journal',
+    'doi',
+    'pmid',
+    'publicationType',
     'company',
     'role',
     'name',
@@ -182,57 +215,88 @@ export function validateCvClaims(
   return kept;
 }
 
-const PUBLICATION_HEADING = /\bPUBLICATIONS\b/i;
+const PUBLICATION_HEADING =
+  /\b(PUBLICATIONS|PEER-REVIEWED PUBLICATIONS|JOURNAL ARTICLES|BOOK CHAPTERS|PUBLISHED ABSTRACTS|OTHER PRESENTATIONS|POSTERS|PRESENTATIONS)\b/i;
 const PUBLICATION_STOP =
-  /\b(PUBLISHED ABSTRACTS|OTHER PRESENTATIONS|PROFESSION-RELATED|CLASSROOM TEACHING|OTHER WORK EXPERIENCE)\b/i;
+  /\b(PROFESSION-RELATED|CLASSROOM TEACHING|OTHER WORK EXPERIENCE|LICENSURE|BOARD CERTIFICATION|MEMBERSHIPS|HONORS|AWARDS)\b/i;
 
 /**
- * Numbered entries under a PUBLICATIONS heading. These stay even when the
- * AI pass misses them. Conference abstracts under a later heading are not
- * treated as journal publications.
+ * Numbered bibliography entries. These stay even when the AI pass misses
+ * them. Type comes from the nearest heading; abstracts and chapters are
+ * kept and labelled, not treated as journal articles.
  */
 export function extractBibliographyClaims(
   pages: Array<{ pageNumber: number; text: string }>,
 ): Array<Omit<CvClaim, 'id'>> {
   const claims: Array<Omit<CvClaim, 'id'>> = [];
-  let inSection = false;
+  let heading: string | undefined;
   for (const page of pages) {
     const text = page.text.replace(/\s+/g, ' ').trim();
     if (!text) continue;
-    let body = text;
-    if (!inSection) {
-      const start = body.search(PUBLICATION_HEADING);
-      if (start === -1) continue;
-      body = body.slice(start);
-      inSection = true;
+    const stop = text.search(PUBLICATION_STOP);
+    const limited = stop > 0 ? text.slice(0, stop) : text;
+    const sections = splitBibliographySections(limited, heading);
+    heading = sections.at(-1)?.heading ?? heading;
+    if (stop > 0) heading = undefined;
+    for (const section of sections) {
+      const entries = section.body.split(/(?:^|\s)(?=\d{1,3}\.\s)/);
+      for (const entry of entries) {
+        const cleaned = entry.replace(/^\d{1,3}\.\s*/, '').trim();
+        if (cleaned.length < 40) continue;
+        if (!/\b(?:19|20)\d{2}\b/.test(cleaned)) continue;
+        const quote = cleaned.slice(0, 180);
+        if (!quoteOnPage(quote, page.text)) continue;
+        const type = classifyPublicationType(cleaned, section.heading);
+        const journal = cleaned.match(/\b([A-Z][A-Za-z& ]{2,60}),\s+\d/)?.[1];
+        const year = parseYear(cleaned);
+        const doi = normalizeDoi(cleaned);
+        const pmid = parsePmid(cleaned);
+        claims.push({
+          category: 'publication',
+          statement: cleaned.slice(0, 300),
+          details: {
+            title: articleTitle(cleaned).slice(0, 240),
+            ...(journal ? { journal: journal.trim() } : {}),
+            ...(year ? { year: String(year) } : {}),
+            ...(doi ? { doi } : {}),
+            ...(pmid ? { pmid } : {}),
+            publicationType: type,
+          },
+          page: page.pageNumber,
+          quote,
+        });
+      }
     }
-    const stop = body.search(PUBLICATION_STOP);
-    if (stop > 0) {
-      body = body.slice(0, stop);
-      inSection = false;
-    }
-    const entries = body.split(/\s(?=\d{1,3}\.\s)/);
-    for (const entry of entries) {
-      const cleaned = entry.replace(/^\d{1,3}\.\s*/, '').trim();
-      if (cleaned.length < 40) continue;
-      if (!/\b(?:19|20)\d{2}\b/.test(cleaned)) continue;
-      const quote = cleaned.slice(0, 180);
-      if (!quoteOnPage(quote, page.text)) continue;
-      const journal = cleaned.match(/\b([A-Z][A-Za-z& ]{2,60}),\s+\d/)?.[1];
-      claims.push({
-        category: 'publication',
-        statement: cleaned.slice(0, 300),
-        details: {
-          title: articleTitle(cleaned).slice(0, 240),
-          ...(journal ? { journal: journal.trim() } : {}),
-        },
-        page: page.pageNumber,
-        quote,
-      });
-    }
-    if (!inSection) break;
   }
   return claims;
+}
+
+function splitBibliographySections(
+  text: string,
+  previousHeading?: string,
+): Array<{ heading?: string; body: string }> {
+  const matches = [...text.matchAll(new RegExp(PUBLICATION_HEADING, 'gi'))];
+  if (matches.length === 0) {
+    return previousHeading ? [{ heading: previousHeading, body: text }] : [];
+  }
+  const sections: Array<{ heading?: string; body: string }> = [];
+  const firstStart = matches[0].index ?? 0;
+  if (firstStart > 0 && previousHeading) {
+    sections.push({
+      heading: previousHeading,
+      body: text.slice(0, firstStart),
+    });
+  }
+  for (let index = 0; index < matches.length; index++) {
+    const match = matches[index];
+    const start = match.index ?? 0;
+    const end = matches[index + 1]?.index ?? text.length;
+    sections.push({
+      heading: match[1],
+      body: text.slice(start, end),
+    });
+  }
+  return sections;
 }
 
 /** Removes repeats, caps long publication lists, and assigns ids. */

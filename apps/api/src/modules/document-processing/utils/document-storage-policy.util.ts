@@ -50,8 +50,7 @@ export function evaluateDocumentStorage(
   const extension = input.extension.toLowerCase().replace(/^\./, '');
 
   if (RESTRICTED_PROVIDERS.has(provider)) {
-    const lexis =
-      provider === 'lexisnexis' || provider === 'lexis';
+    const lexis = provider === 'lexisnexis' || provider === 'lexis';
     if (lexis && input.lexisStorageEnabled === true) {
       return {
         decision: 'store_allowed',

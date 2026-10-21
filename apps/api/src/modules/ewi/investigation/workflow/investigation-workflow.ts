@@ -2,12 +2,14 @@ import { Logger } from '@nestjs/common';
 import {
   markConflicts,
   parsePersonName,
+  parseYear,
   type ExpertEvidenceItem,
   type ExpertIdentityResolution,
   type ExpertResearchProviderId,
   type ExpertResearchQuery,
   type ExpertResearchSourceResult,
   type PublicationLookupResult,
+  type PublicationQuery,
 } from '@integrations/expert-research';
 import type { WebResearchDossier } from '@integrations/web-research';
 import { compareCv, cvDiscrepancies } from '../../cv/cv-comparison';
@@ -95,10 +97,10 @@ export interface InvestigationResearchPort {
     query: ExpertResearchQuery,
     providerIds: readonly ExpertResearchProviderId[],
   ): Promise<ExpertResearchSourceResult[]>;
-  /** Checks CV publication titles against a publication index. Optional. */
+  /** Checks CV publication citations against publication catalogs. Optional. */
   lookupPublications?(
     expertName: string,
-    titles: string[],
+    citations: Array<string | PublicationQuery>,
   ): Promise<PublicationLookupResult[]>;
 }
 
@@ -191,7 +193,10 @@ export function describeResearchStage(
   }
 
   const unavailable = attempts.filter(
-    (attempt) => attempt.attemptStatus === 'unavailable',
+    (attempt) =>
+      attempt.attemptStatus === 'unavailable' &&
+      attempt.coverage !== 'not_implemented' &&
+      attempt.coverage !== 'not_configured',
   );
   const skipped = attempts.filter(
     (attempt) => attempt.attemptStatus === 'skipped',
@@ -199,15 +204,30 @@ export function describeResearchStage(
   const completed = attempts.filter(
     (attempt) => attempt.attemptStatus === 'completed',
   );
-  const none = results.filter(
-    (result) => result.status === 'no_result' || result.outcome === 'no_result',
+  const none = attempts.filter(
+    (attempt) => attempt.coverage === 'searched_no_results',
   );
   if (none.length > 0) {
     parts.push(
       `${none.length} source(s) were searched and returned no matching record. That is not evidence of absence.`,
     );
   }
-  if (unavailable.length > 0) {
+  const unimplemented = attempts.filter(
+    (attempt) =>
+      attempt.coverage === 'not_implemented' ||
+      attempt.coverage === 'not_configured',
+  );
+  if (unimplemented.length > 0) {
+    parts.push(
+      `${unimplemented.length} source(s) were not searched (${unimplemented
+        .map((attempt) =>
+          attempt.coverage === 'not_configured'
+            ? `${attempt.sourceId} not configured`
+            : `${attempt.sourceId} not implemented`,
+        )
+        .join(', ')}). No missing record was treated as a negative finding.`,
+    );
+  } else if (unavailable.length > 0) {
     parts.push(
       `${unavailable.length} source(s) unavailable. No missing record was treated as a negative finding.`,
     );
@@ -560,10 +580,30 @@ export async function executeInvestigationWorkflow(
       sourceResults,
       professionalProviderIds: PROFESSIONAL_BACKGROUND_PROVIDER_IDS,
     });
+  const sourceStatuses: EwiSourceAttemptStatus[] = sourceResults.map(
+    (resultItem) => {
+      const skipped = /already collected/i.test(resultItem.message ?? '');
+      const attempt = mapProviderAttempt(resultItem, { skipped });
+      return {
+        sourceId: resultItem.sourceId,
+        status: resultItem.status,
+        attemptStatus: attempt.attemptStatus,
+        disposition: attempt.disposition,
+        outcome: resultItem.outcome,
+        coverage: attempt.coverage,
+        message: resultItem.message,
+        itemCount: resultItem.items.length,
+        checked: attempt.checked,
+        retrievedAt: resultItem.retrievedAt,
+      };
+    },
+  );
   const drafts = buildQuestionDrafts({
     expertName: request.expertName,
     evidence,
     discrepancies,
+    cvCheck,
+    sourceStatuses,
   });
   let worded = drafts;
   if (dependencies.polishQuestions && drafts.length > 0) {
@@ -590,21 +630,6 @@ export async function executeInvestigationWorkflow(
       );
     }
   }
-  const sourceStatuses: EwiSourceAttemptStatus[] = sourceResults.map(
-    (resultItem) => {
-      const skipped = /already collected/i.test(resultItem.message ?? '');
-      const attempt = mapProviderAttempt(resultItem, { skipped });
-      return {
-        sourceId: resultItem.sourceId,
-        status: resultItem.status,
-        attemptStatus: attempt.attemptStatus,
-        disposition: attempt.disposition,
-        message: resultItem.message,
-        itemCount: resultItem.items.length,
-        checked: attempt.checked,
-      };
-    },
-  );
   const reportArtifact = await dependencies.report.build({
     expertName: request.expertName,
     city: request.city,
@@ -955,15 +980,23 @@ async function buildCvCheck(
   );
   if (!item) return null;
   const extraction = item.raw!.cvExtraction as CvExtraction;
-  const titles = extraction.claims
+  const citations: PublicationQuery[] = extraction.claims
     .filter((claim) => claim.category === 'publication' && claim.details.title)
-    .map((claim) => claim.details.title!);
+    .map((claim) => ({
+      title: claim.details.title!,
+      citation: claim.statement,
+      journal: claim.details.journal,
+      year: parseYear(claim.details.year) ?? parseYear(claim.statement),
+      doi: claim.details.doi,
+      pmid: claim.details.pmid,
+      type: claim.details.publicationType as PublicationQuery['type'],
+    }));
   let publications: PublicationLookupResult[] = [];
-  if (titles.length > 0 && dependencies.research.lookupPublications) {
+  if (citations.length > 0 && dependencies.research.lookupPublications) {
     try {
       publications = await dependencies.research.lookupPublications(
         request.expertName,
-        titles,
+        citations,
       );
     } catch (error) {
       dependencies.logger?.warn(

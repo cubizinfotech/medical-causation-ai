@@ -17,9 +17,11 @@ import { EXPERT_RESEARCH_CATALOG } from './providers/provider-catalog';
 import { createLiveSourceProviders } from './live/live-sources';
 import { CrossrefClient } from './live/crossref.client';
 import { OpenAlexClient } from './live/openalex.client';
+import { OrcidClient } from './live/orcid.client';
 import {
   PublicationTitleLookup,
   type PublicationLookupResult,
+  type PublicationQuery,
 } from './live/publication-lookup';
 import { applyIdentityMatch } from './providers/identity-match';
 import { applyPublicEvidenceGate } from './providers/public-affiliation';
@@ -47,9 +49,12 @@ export function createExpertResearchRuntime(
       courtListenerTimeoutMs: settings?.courtListenerTimeoutMs,
       openAlexApiKey: settings?.openAlexApiKey,
       openAlexMailto: settings?.openAlexMailto,
+      crossrefMailto: settings?.crossrefMailto,
       openPaymentsYears: settings?.openPaymentsYears,
       pubmedApiKey: process.env.PUBMED_API_KEY?.trim() || undefined,
       pubmedEmail: process.env.PUBMED_EMAIL?.trim() || undefined,
+      orcidClientId: settings?.orcidClientId,
+      orcidClientSecret: settings?.orcidClientSecret,
       fetchImpl: options.fetchImpl,
       webEngine:
         live && settings?.web
@@ -107,8 +112,16 @@ export function createPublicationLookup(
     new CrossrefClient({
       timeoutMs: live.timeoutMs,
       fetchImpl: live.fetchImpl,
-      mailto: live.openAlexMailto ?? live.pubmedEmail,
+      mailto: live.crossrefMailto ?? live.openAlexMailto ?? live.pubmedEmail,
     }),
+    live.orcidClientId && live.orcidClientSecret
+      ? new OrcidClient({
+          timeoutMs: live.timeoutMs,
+          fetchImpl: live.fetchImpl,
+          clientId: live.orcidClientId,
+          clientSecret: live.orcidClientSecret,
+        })
+      : undefined,
   );
 }
 
@@ -142,17 +155,20 @@ export class ExpertResearchService {
   }
 
   /**
-   * Checks publication titles (from an uploaded CV) against OpenAlex.
-   * Outside live mode every title comes back unavailable; nothing is guessed.
+   * Checks CV citations against OpenAlex, Crossref, PubMed, and ORCID.
+   * Outside live mode every citation comes back unavailable; nothing is guessed.
    */
   async lookupPublications(
     expertName: string,
-    titles: string[],
+    citations: Array<string | PublicationQuery>,
   ): Promise<PublicationLookupResult[]> {
     if (!this.publicationLookup) {
-      return titles.map((title) => ({ title, status: 'unavailable' as const }));
+      return citations.map((item) => ({
+        title: typeof item === 'string' ? item : item.title,
+        status: 'unavailable' as const,
+      }));
     }
-    return this.publicationLookup.lookup(expertName, titles);
+    return this.publicationLookup.lookup(expertName, citations);
   }
 
   listProviders(): ProviderDefinition[] {
@@ -204,7 +220,7 @@ export class ExpertResearchService {
           return {
             sourceId: providerId,
             status: 'unavailable' as const,
-            outcome: 'unavailable' as const,
+            outcome: 'not_implemented' as const,
             access: 'unavailable' as const,
             message:
               'No adapter is registered for this source. Nothing was inferred.',

@@ -10,6 +10,10 @@ import type { ExpertDiscrepancy } from './discrepancy-analyzer';
  */
 export type QuestionLabel = 'verified' | 'allegation' | 'unresolved';
 
+/** Why the question is in the report. Absence of a search hit is not misconduct. */
+export type QuestionBasisKind =
+  'sourced_fact' | 'inconsistency' | 'limitation' | 'evidence_gap';
+
 export interface QuestionSource {
   name: string;
   url?: string;
@@ -25,6 +29,11 @@ export interface CrossExamQuestion {
   evidenceBasis: string;
   label?: QuestionLabel;
   sources?: QuestionSource[];
+  /** Evidence or discrepancy identifiers that motivated the question. */
+  evidenceIds?: string[];
+  basisKind?: QuestionBasisKind;
+  relevance?: string;
+  excerpt?: string;
 }
 
 /**
@@ -39,6 +48,10 @@ export class CrossExamQuestionGenerator {
     specialty: string;
     evidence: ExpertEvidenceItem[];
     discrepancies: ExpertDiscrepancy[];
+    cvCheck?: Parameters<typeof buildGroundedCrossExamQuestions>[0]['cvCheck'];
+    sourceStatuses?: Parameters<
+      typeof buildGroundedCrossExamQuestions
+    >[0]['sourceStatuses'];
   }): CrossExamQuestion[] {
     return buildGroundedCrossExamQuestions(params);
   }
