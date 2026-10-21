@@ -21,11 +21,24 @@ describe("expert investigation form", () => {
   });
 
   it("accepts any profession, not only medical specialties", () => {
-    const parsed = expertInvestigationSchema.parse({
-      ...base,
-      specialty: "Licensed electrician",
-    });
-    expect(parsed.specialty).toBe("Licensed electrician");
+    expect(
+      expertInvestigationSchema.parse({
+        ...base,
+        specialty: "Licensed electrician",
+      }).specialty,
+    ).toBe("Licensed electrician");
+    expect(
+      expertInvestigationSchema.parse({
+        ...base,
+        specialty: "Attorney",
+      }).specialty,
+    ).toBe("Attorney");
+    expect(
+      expertInvestigationSchema.parse({
+        ...base,
+        specialty: "Marine surveyor extraordinaire",
+      }).specialty,
+    ).toBe("Marine surveyor extraordinaire");
   });
 
   it("treats the city as optional", () => {

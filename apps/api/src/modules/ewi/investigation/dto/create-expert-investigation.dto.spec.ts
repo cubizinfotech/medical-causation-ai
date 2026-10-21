@@ -43,6 +43,16 @@ describe('CreateExpertInvestigationDto', () => {
     expect(blank.npi).toBeUndefined();
   });
 
+  it('accepts a profession that is not on any suggestion list', async () => {
+    const dto = plainToInstance(CreateExpertInvestigationDto, {
+      expertName: 'Pat Lee',
+      city: 'Dallas, TX',
+      specialty: 'Marine surveyor extraordinaire',
+    });
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.specialty).toBe('Marine surveyor extraordinaire');
+  });
+
   it('rejects a blank specialty', async () => {
     const dto = plainToInstance(CreateExpertInvestigationDto, {
       expertName: 'Jane A. Smith, MD',

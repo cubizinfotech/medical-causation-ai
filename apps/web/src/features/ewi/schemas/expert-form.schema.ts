@@ -38,7 +38,7 @@ export const expertInvestigationSchema = z.object({
       "City contains invalid characters",
     ),
   /** Any profession is accepted: a physician specialty, a trade, a licence. */
-  specialty: requiredTrimmed("Specialty or profession", 2, 100).refine(
+  specialty: requiredTrimmed("Specialty or profession", 2, 200).refine(
     (value) => !/^[0-9]+$/.test(value),
     "Enter a specialty or profession, not a number",
   ),

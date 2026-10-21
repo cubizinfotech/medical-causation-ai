@@ -31,7 +31,7 @@ import {
   saveExpertForm,
 } from "@/features/ewi/storage/ewi-storage";
 import { toUserFacingError } from "@/features/ewi/utils/user-facing-error";
-import { EWI_SPECIALTY_EXAMPLES } from "@/features/ewi/constants";
+import { PROFESSION_SPECIALTIES } from "@/features/ewi/profession-specialties";
 import { NPI_REGISTRY_SEARCH_URL } from "@/features/ewi/utils/npi";
 import { startRouteProgress } from "@/components/layout/route-progress";
 
@@ -75,7 +75,6 @@ export function ExpertIntakeForm() {
     control,
     handleSubmit,
     reset,
-    watch,
     formState: { errors },
   } = useForm<ExpertInvestigationFormValues>({
     resolver: zodResolver(expertInvestigationSchema),
@@ -167,7 +166,7 @@ export function ExpertIntakeForm() {
                     id="specialty"
                     name={field.name}
                     placeholder="e.g. Neuropsychology, Engineer, Attorney"
-                    options={EWI_SPECIALTY_EXAMPLES}
+                    options={PROFESSION_SPECIALTIES}
                     value={field.value}
                     onValueChange={field.onChange}
                     onBlur={field.onBlur}
@@ -188,8 +187,9 @@ export function ExpertIntakeForm() {
                   id="specialty-help"
                   className="text-xs text-muted-foreground"
                 >
-                  Pick a suggestion or type any profession. It is used to tell
-                  people with the same name apart.
+                  Type any profession or specialty. Suggestions appear as you
+                  type; you do not have to pick one. It is used to tell people
+                  with the same name apart.
                 </p>
               )}
             </div>
