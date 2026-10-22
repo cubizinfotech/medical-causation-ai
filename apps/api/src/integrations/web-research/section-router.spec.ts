@@ -127,9 +127,7 @@ describe('routeWebFindings', () => {
       ]),
     );
     expect(routed.get('education')).toHaveLength(1);
-    expect(routed.get('university-accreditation')?.[0].title).toContain(
-      'University of Florida',
-    );
+    expect(routed.get('university-accreditation')).toBeUndefined();
     expect(routed.get('memberships')).toHaveLength(1);
     expect(routed.get('grants')).toHaveLength(1);
     const action = routed.get('board-actions')?.[0];
@@ -168,6 +166,61 @@ describe('routeWebFindings', () => {
     expect(
       social.some((item) => /not a personal profile/i.test(item.statement)),
     ).toBe(true);
+  });
+
+  it('does not file a homicide research paper as a criminal record', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'paper',
+          'https://www.researchgate.net/publication/281170036_Domestic_Homicide',
+          'publication',
+          [
+            claim(
+              'criminal',
+              'Murderers who kill family members had more extensive criminal history',
+            ),
+          ],
+        ),
+      ]),
+    );
+    expect(routed.get('criminal')).toBeUndefined();
+  });
+
+  it('does not treat WebMD or a journal affiliation line as official license verification', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'webmd',
+          'https://doctor.webmd.com/doctor/jason-demery',
+          'profile',
+          [claim('license', 'Dr. Jason A Demery holds an active medical license')],
+        ),
+        record(
+          'pmc',
+          'https://pmc.ncbi.nlm.nih.gov/articles/PMC3830977/',
+          'publication',
+          [
+            claim(
+              'license',
+              'Jason Demery, Email: jasondemery@gmail.com, Licensed Psychologist',
+            ),
+          ],
+        ),
+      ]),
+    );
+    expect(routed.get('licenses')).toBeUndefined();
+  });
+
+  it('does not treat a news article as official license verification', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record('news-license', 'https://news.example/demery-license', 'news', [
+          claim('license', 'Dr. Demery holds Florida license PY7500'),
+        ]),
+      ]),
+    );
+    expect(routed.get('licenses')).toBeUndefined();
   });
 
   it('never routes a page that is not tied to the expert', () => {
@@ -284,8 +337,8 @@ describe('coverageLine', () => {
       [],
       'Jason A. Demery',
     );
-    expect(line).toMatch(/included this topic/);
-    expect(line).toMatch(/remains unverified/);
+    expect(line).toMatch(/dedicated search for this topic ran/i);
+    expect(line).toMatch(/not proof that none exist/i);
     expect(line).not.toMatch(/did not establish/);
     expect(line).not.toMatch(/targeted web search/);
     expect(line).not.toMatch(/cannot prove/);
@@ -336,6 +389,27 @@ describe('coverageLine', () => {
       ],
     });
     expect(coverageLine(failed, 'grants')).toMatch(/did not complete/);
+  });
+
+  it('labels an empty video topic as searched with no results, not unimplemented, and does not reuse other jobs', () => {
+    const line = coverageLine(
+      dossier([], { topics: [{ topic: 'video', queries: 1, hits: 0 }] }),
+      'videos',
+    );
+    expect(line).toMatch(/dedicated search for this topic ran/i);
+    expect(line).toMatch(/not reused or revalidated/i);
+    expect(line).not.toMatch(/not implemented/i);
+    expect(line).not.toMatch(/was not searched in this investigation/i);
+  });
+
+  it('does not say social media was never searched when the social topic ran empty', () => {
+    const line = coverageLine(
+      dossier([], { topics: [{ topic: 'social', queries: 1, hits: 0 }] }),
+      'social',
+    );
+    expect(line).toMatch(/dedicated search for this topic ran/i);
+    expect(line).not.toMatch(/no dedicated source/i);
+    expect(line).not.toMatch(/was not searched in this investigation/i);
   });
 
   it('mentions a blocked source only when it is material to the section', () => {

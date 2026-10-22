@@ -91,21 +91,16 @@ export class PubMedResearchProvider extends LiveResearchProvider {
         `“${article.title ?? 'Untitled'}”${article.pubdate ? ` (${article.pubdate.slice(0, 4)})` : ''}`,
       );
       const grants = grantsByPmid.get(article.uid ?? '') ?? [];
-      const publication = this.articleItem(
-        article,
-        name,
-        retrievedAt,
-        listed,
-        agreement,
-        query,
-        grants,
-      );
-      if (!agreement || grants.length === 0) return [publication];
       return [
-        publication,
-        ...grants
-          .slice(0, 3)
-          .map((grant) => this.fundingItem(article, grant, retrievedAt, query)),
+        this.articleItem(
+          article,
+          name,
+          retrievedAt,
+          listed,
+          agreement,
+          query,
+          grants,
+        ),
       ];
     });
     const checked = affiliations.size > 0;
@@ -180,34 +175,6 @@ export class PubMedResearchProvider extends LiveResearchProvider {
       url.searchParams.set(key, value);
     }
     return url;
-  }
-
-  private fundingItem(
-    article: PubMedSummary,
-    grant: ArticleGrant,
-    retrievedAt: string,
-    query: ExpertResearchQuery,
-  ): ExpertEvidenceItem {
-    const pmid = article.uid ?? '';
-    const label = [grant.id, grant.agency].filter(Boolean).join(' — ');
-    return this.item({
-      category: 'grant',
-      title: label || 'Grant listed on a PubMed article',
-      summary: [
-        `PubMed lists ${label || 'grant support'} on “${article.title ?? 'Untitled'}”.`,
-        'The expert is named as an author on that paper.',
-        'This is not a finding that the expert was the principal investigator or personally received the award.',
-      ].join(' '),
-      url: pmid ? `https://pubmed.ncbi.nlm.nih.gov/${pmid}/` : undefined,
-      retrievedAt,
-      informationStatus: 'unverified',
-      raw: {
-        pmid,
-        grantId: grant.id,
-        agency: grant.agency,
-        identity: { name: query.expertName, verifiedBy: 'source_match' },
-      },
-    });
   }
 
   private articleItem(

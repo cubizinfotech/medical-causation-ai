@@ -258,8 +258,9 @@ describe('Demery report regression', () => {
     expect(education).toMatch(/University of Florida/);
     expect(education).not.toContain(GENERIC);
     const accreditation = sectionText(document, 'university-accreditation');
-    expect(accreditation).toMatch(/University of Florida/);
-    expect(accreditation).toMatch(/not checked against an accreditor/);
+    expect(accreditation).not.toMatch(/University of Florida/);
+    expect(accreditation).not.toMatch(/not checked against an accreditor/);
+    expect(accreditation).toMatch(/was not searched|not implemented/i);
   });
 
   it('files the article, the company, the address and the court documents', () => {
@@ -288,7 +289,7 @@ describe('Demery report regression', () => {
     expect(everything).not.toMatch(/A search cannot prove that nothing exists/);
     for (const id of ['grants', 'patents', 'criminal', 'board-actions']) {
       expect(sectionText(document, id)).toMatch(
-        /included this topic|was not searched|not implemented|returned no matching record/,
+        /included this topic|was not searched|not implemented|returned no matching record|dedicated search for this topic ran/,
       );
       expect(sectionText(document, id)).not.toMatch(/did not establish/);
     }

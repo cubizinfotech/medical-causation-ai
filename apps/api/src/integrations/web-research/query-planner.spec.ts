@@ -116,7 +116,12 @@ describe('planQueries', () => {
     expect(queries.some((q) => q.includes('site:seakexperts.com'))).toBe(true);
     expect(queries.some((q) => q.includes('site:jurispro.com'))).toBe(true);
     expect(queries.some((q) => q.includes('site:expertpages.com'))).toBe(true);
-    expect(queries.some((q) => q.includes('site:dri.org'))).toBe(false);
+    expect(queries.some((q) => q.includes('site:dri.org'))).toBe(true);
+    expect(queries.some((q) => q.includes('site:almexperts.com'))).toBe(true);
+    expect(queries.some((q) => q.includes('site:expertlaw.com'))).toBe(true);
+    expect(queries.some((q) => q.includes('site:expertwitness.com'))).toBe(
+      true,
+    );
   });
 
   it('gives every query a unique id', () => {

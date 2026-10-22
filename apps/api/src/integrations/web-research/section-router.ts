@@ -20,6 +20,7 @@ import type {
   WebClaimTopic,
   WebRecord,
   WebResearchDossier,
+  WebSourceKind,
   WebVerification,
 } from './web-research.types';
 
@@ -98,7 +99,7 @@ const BASIS_ORDER: Record<WebClaimBasis | 'record', number> = {
 
 /** Report section(s) a topic is filed under. */
 const TOPIC_SECTIONS: Partial<Record<WebClaimTopic, RoutedSectionId[]>> = {
-  education: ['education', 'university-accreditation'],
+  education: ['education'],
   board_certification: ['board-certifications', 'certification-orgs'],
   certification_org: ['certification-orgs'],
   license: ['licenses'],
@@ -120,6 +121,13 @@ const TOPIC_SECTIONS: Partial<Record<WebClaimTopic, RoutedSectionId[]>> = {
   testimony: ['testimony-inconsistencies'],
   university_rules: ['university-rules'],
 };
+
+const CRIMINAL_RECORD_KINDS: ReadonlySet<WebSourceKind> = new Set([
+  'news',
+  'court',
+  'justia',
+  'blog',
+]);
 
 const SECTION_VERIFICATION: Partial<Record<RoutedSectionId, WebClaimTopic>> = {
   'board-certifications': 'board_certification',
@@ -331,25 +339,22 @@ export function routeWebFindings(
     let claimedDocumentType = false;
     for (const claim of record.claims) {
       const basis = claim.basis ?? 'third_party';
+      if (
+        claim.topic === 'criminal' &&
+        !CRIMINAL_RECORD_KINDS.has(record.kind)
+      ) {
+        continue;
+      }
+      if (claim.topic === 'license') {
+        const official = officialSourceFor(record.url);
+        if (!official?.topics.includes('license')) continue;
+      }
+      if (claim.topic === 'grant' && record.kind === 'publication') {
+        continue;
+      }
       for (const sectionId of sectionsFor(claim)) {
         if (['order', 'pleading', 'deposition'].includes(claim.topic ?? '')) {
           claimedDocumentType = true;
-        }
-        if (sectionId === 'university-accreditation') {
-          const names = institutionsIn(`${claim.text} ${claim.quote}`);
-          if (names.length === 0) continue;
-          push({
-            ...base,
-            sectionId,
-            title: `Institution named: ${names.join('; ')}`,
-            statement: `The page names ${names.join('; ')} in connection with the expert’s education. Whether the institution is accredited was not checked against an accreditor’s list; no page read states it.`,
-            quote: claim.quote,
-            basis,
-            basisLabel: BASIS_LABEL[basis],
-            from: claim.from ?? 'page',
-            verification: null,
-          });
-          continue;
         }
         if (sectionId === 'certification-orgs') {
           const official = officialSourceFor(record.url);
@@ -680,8 +685,10 @@ export function sectionVerification(
 const NOT_SEARCHED = 'This was not searched in this investigation.';
 const SEARCH_INCOMPLETE =
   'The search for this topic did not complete, so no finding is reported.';
-const TOPIC_UNVERIFIED =
-  'A web search included this topic. No dedicated source for this category was searched, so it remains unverified.';
+const TOPIC_SEARCHED_EMPTY =
+  'A dedicated search for this topic ran and returned no matching public result. That is not proof that none exist.';
+const PRIOR_NOT_REUSED =
+  'Results from other investigations are not reused or revalidated here.';
 
 function blockedNote(
   dossier: WebResearchDossier,
@@ -744,7 +751,8 @@ export function coverageLine(
   if (attempted && !worked) {
     parts.push(SEARCH_INCOMPLETE);
   } else if (structured.length === 0) {
-    parts.push(queried ? TOPIC_UNVERIFIED : NOT_SEARCHED);
+    parts.push(queried ? TOPIC_SEARCHED_EMPTY : NOT_SEARCHED);
+    if (queried && sectionId === 'videos') parts.push(PRIOR_NOT_REUSED);
   }
   if (dossier) {
     const blocked = blockedNote(dossier, sectionId);

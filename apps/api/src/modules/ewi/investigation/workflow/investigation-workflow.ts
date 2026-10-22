@@ -176,8 +176,23 @@ export function describeResearchStage(
   const restricted = attempts.filter(
     (attempt) => attempt.attemptStatus === 'restricted',
   );
-  if (restricted.length > 0) {
-    const names = restricted.map((attempt) => attempt.sourceId).join(', ');
+  const blocked = restricted.filter(
+    (attempt) =>
+      attempt.coverage === 'blocked_or_access_denied' &&
+      attempt.checked &&
+      attempt.access !== 'restricted',
+  );
+  const neverSent = restricted.filter(
+    (attempt) => !blocked.some((entry) => entry.sourceId === attempt.sourceId),
+  );
+  if (blocked.length > 0) {
+    const names = blocked.map((attempt) => attempt.sourceId).join(', ');
+    parts.push(
+      `${names} could not be read (access wall, login, or bot protection). No request was treated as a negative finding.`,
+    );
+  }
+  if (neverSent.length > 0) {
+    const names = neverSent.map((attempt) => attempt.sourceId).join(', ');
     parts.push(`${names} ${AUTHORIZED_ACCESS}`);
   }
 

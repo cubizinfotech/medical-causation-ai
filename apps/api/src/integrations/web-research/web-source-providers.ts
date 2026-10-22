@@ -81,12 +81,59 @@ function haystackMentionsHost(
     ...dossier.records.flatMap((record) => record.queries),
     ...dossier.records.map((record) => record.url),
     ...dossier.pagesBlocked.map((page) => page.url),
+    ...(dossier.executedQueries ?? []).map((entry) => entry.query),
   ]
     .join(' ')
     .toLowerCase();
   return hosts.some(
     (host) => hay.includes(host.toLowerCase()) || hay.includes(`site:${host}`),
   );
+}
+
+const PRACTICE_PAGE_KINDS = new Set([
+  'expert_website',
+  'advertising',
+  'ime',
+  'profile',
+  'other',
+]);
+
+/**
+ * A practice or IME page can also answer the advertising catalog sources
+ * when the page itself markets forensic or expert-witness services. A
+ * biography without that language stays a website, not an advertisement.
+ */
+export function recordServesCatalogSource(
+  record: WebRecord,
+  sourceId: string,
+): boolean {
+  if (!PRACTICE_PAGE_KINDS.has(record.kind)) return false;
+  if (record.match.level !== 'strong' && record.match.level !== 'possible') {
+    return false;
+  }
+  const claims = record.claims ?? [];
+  const hay = [
+    record.title,
+    record.summary,
+    ...claims.map((claim) => `${claim.type} ${claim.topic} ${claim.quote}`),
+  ]
+    .join(' ')
+    .toLowerCase();
+  const ime =
+    /\bindependent medical\b|\bime\b|\bcompulsory examination\b|\brule 35\b|\bforensic evaluat/.test(
+      hay,
+    ) ||
+    claims.some((claim) => claim.topic === 'ime' || claim.type === 'forensic');
+  const ads =
+    /\bexpert witness\b|\bavailable to attorneys\b|\bmedicolegal\b|\bforensic (?:neuro)?psycholog/.test(
+      hay,
+    ) ||
+    claims.some(
+      (claim) => claim.topic === 'advertising' || claim.type === 'advertising',
+    );
+  if (sourceId === 'ime_websites' || sourceId === 'ime_advertising') return ime;
+  if (sourceId === 'advertising') return ads || ime;
+  return false;
 }
 
 /** Catalog source a web record belongs to. */
@@ -220,7 +267,9 @@ export class WebSourceProvider extends LiveResearchProvider {
       };
     }
 
-    const records = dossier.records.filter((r) => sourceIdForRecord(r) === id);
+    const records = dossier.records.filter(
+      (r) => sourceIdForRecord(r) === id || recordServesCatalogSource(r, id),
+    );
     const blocked = blockedPagesForSource(dossier.pagesBlocked, id, records);
     const items = [
       ...records.map((record) =>
@@ -233,10 +282,6 @@ export class WebSourceProvider extends LiveResearchProvider {
     const tied = records.filter(
       (r) => r.match.level === 'strong' || r.match.level === 'possible',
     );
-
-    if (id === 'web_search') {
-      items.unshift(summaryItem(this.definition, dossier, query, retrievedAt));
-    }
 
     if (records.length === 0 && blocked.length === 0) {
       if (!dedicatedSearchRan(id, dossier)) {
@@ -251,7 +296,7 @@ export class WebSourceProvider extends LiveResearchProvider {
         items,
         status: 'no_result',
         outcome: 'no_result',
-        message: `Searched ${searchedBy}. No ${label} that name ${query.expertName} were found in the results returned${dossier.partial ? ' (the run was cut short, so this is incomplete)' : ''}. A search cannot prove that none exist.`,
+        message: `Searched ${searchedBy}. No ${label} that name ${query.expertName} were found in the results returned${dossier.partial ? ' (the run was cut short, so this is incomplete)' : ''}. A search cannot prove that none exist.${id === 'youtube' ? ' Video hits from other investigations are not reused or revalidated here.' : ''}`,
       };
     }
     const unconfirmed = records.length - tied.length;
@@ -321,48 +366,6 @@ function blockedItem(
         basis: ['page blocked before identity could be confirmed'],
       },
       web: { read: 'restricted', readNote: page.reason },
-    },
-  };
-}
-
-function summaryItem(
-  definition: ProviderDefinition,
-  dossier: WebResearchDossier,
-  query: ExpertResearchQuery,
-  retrievedAt: string,
-): ExpertEvidenceItem {
-  const subjectRecords = dossier.records.filter(
-    (r) => r.match.level === 'strong' || r.match.level === 'possible',
-  );
-  const byKind = new Map<string, number>();
-  for (const record of subjectRecords) {
-    byKind.set(record.kind, (byKind.get(record.kind) ?? 0) + 1);
-  }
-  const kinds = [...byKind.entries()].map(([k, n]) => `${n} ${k}`).join(', ');
-  const others = dossier.candidates.filter((c) => c.role === 'other');
-  return {
-    sourceId: definition.id,
-    category: 'web',
-    title: 'Web research coverage',
-    summary: `${dossier.queriesRun} searches across ${describeSearchProviders(dossier)}; ${dossier.pagesRead} pages read; ${subjectRecords.length} pages matched to the subject${kinds ? ` (${kinds})` : ''}; ${others.length} other same-name candidate group${others.length === 1 ? '' : 's'} kept separate; ${dossier.pagesBlocked.length} page${dossier.pagesBlocked.length === 1 ? '' : 's'} could not be read.`,
-    simulated: false,
-    access: 'public',
-    informationStatus: 'unverified',
-    retrievedAt,
-    source: {
-      providerId: definition.id,
-      name: definition.name,
-      retrievedAt,
-      access: 'public',
-    },
-    raw: {
-      identity: { name: query.expertName, verifiedBy: 'source_match' },
-      webSummary: {
-        queriesRun: dossier.queriesRun,
-        pagesRead: dossier.pagesRead,
-        partial: dossier.partial,
-        limitations: dossier.limitations,
-      },
     },
   };
 }

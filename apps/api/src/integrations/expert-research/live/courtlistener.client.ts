@@ -24,6 +24,7 @@ export interface CourtListenerSearchHit {
   id?: number;
   description?: string;
   document_number?: string | number | null;
+  attachment_number?: string | number | null;
   is_available?: boolean;
   snippet?: string;
   docket_id?: number;

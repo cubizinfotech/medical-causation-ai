@@ -173,6 +173,19 @@ describe('extractFacts', () => {
     expect(facts.some((fact) => fact.topic === 'criminal')).toBe(false);
   });
 
+  it('does not treat a research paper about homicide offenders as the author’s criminal record', () => {
+    const facts = extractFacts({
+      url: 'https://www.researchgate.net/publication/281170036_Domestic_Homicide_Neuropsychological_Profiles_of_Murderers_Who_Kill_Family_Members',
+      kind: 'publication',
+      title:
+        'Domestic Homicide: Neuropsychological Profiles of Murderers Who Kill Family Members and Intimate Partners',
+      text: 'Hanlon, Brook, Demery JA, Cunningham. Murderers who kill family members had more extensive criminal history than other offenders.',
+      subject,
+      ownPage: false,
+    });
+    expect(facts.some((fact) => fact.topic === 'criminal')).toBe(false);
+  });
+
   it('does not treat examining a defendant as the expert’s criminal record', () => {
     const facts = extractFacts({
       url: 'https://ecf.example/1',

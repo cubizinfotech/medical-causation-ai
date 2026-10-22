@@ -1,4 +1,7 @@
-import type { ExpertEvidenceItem } from '@integrations/expert-research';
+import {
+  resolveCaseCaption,
+  type ExpertEvidenceItem,
+} from '@integrations/expert-research';
 import { readExpertChallenge } from './expert-challenge';
 import {
   LEGAL_DOCUMENT_TYPES,
@@ -57,7 +60,18 @@ export function isLegalItem(item: ExpertEvidenceItem): boolean {
 function matterFromItem(item: ExpertEvidenceItem, index: number): LegalMatter {
   const raw = item.raw ?? {};
   const documentType = resolveDocumentType(item, raw);
-  const caseName = readString(raw.caseName) ?? null;
+  const caption = resolveCaseCaption({
+    caseName: readString(raw.caseName),
+    caseNameFull: readString(raw.caseNameFull),
+    absolute_url: item.url,
+    url: item.url,
+  });
+  const caseName = caption.status === 'from_source' ? caption.name : null;
+  const title = replaceUnresolvedCaption(item.title, caseName);
+  const evidenceReference = replaceUnresolvedCaption(
+    readString(raw.evidenceReference) ?? item.title,
+    caseName,
+  );
   const documentDate =
     readString(raw.documentDate) ??
     readString(raw.date) ??
@@ -85,8 +99,8 @@ function matterFromItem(item: ExpertEvidenceItem, index: number): LegalMatter {
     relevance: readString(raw.relevance),
     summary,
     findingsRegardingExpert: readString(raw.findingsRegardingExpert),
-    evidenceReference: readString(raw.evidenceReference) ?? item.title,
-    title: item.title,
+    evidenceReference,
+    title,
     restricted,
     identityMatch: item.identityMatch,
     orderTags: readOrderTags(raw),
@@ -160,6 +174,19 @@ function readOrderTags(raw: Record<string, unknown>): OrderSignificanceTag[] {
 
 function isDocumentType(value: string): value is LegalDocumentType {
   return (LEGAL_DOCUMENT_TYPES as readonly string[]).includes(value);
+}
+
+function replaceUnresolvedCaption(
+  text: string,
+  caption: string | null,
+): string {
+  if (!caption) {
+    return text.replace(
+      /\s*—\s*Caption not listed on this search result/gi,
+      '',
+    );
+  }
+  return text.replace(/Caption not listed on this search result/gi, caption);
 }
 
 function readString(value: unknown): string | null {

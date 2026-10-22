@@ -189,4 +189,50 @@ describe('WebSourceProvider coverage', () => {
     expect(dedicatedSearchRan('news', bio)).toBe(false);
     expect(dedicatedSearchRan('expert_website', bio)).toBe(true);
   });
+
+  it('treats a zero-hit site: query as a dedicated empty search, not as never searched', async () => {
+    const empty = dossier([], {
+      topics: [{ topic: 'directories', queries: 1, hits: 0 }],
+      executedQueries: [
+        {
+          topic: 'directories',
+          query: '"Jason Demery" site:seakexperts.com',
+        },
+      ],
+    });
+    expect(dedicatedSearchRan('seak', empty)).toBe(true);
+    const seak = await provider('seak', empty).search(query);
+    expect(seak.status).toBe('no_result');
+    expect(seak.message).toMatch(/cannot prove that none exist/i);
+    expect(seak.message).not.toMatch(/not searched as a dedicated source/i);
+  });
+
+  it('files a forensic practice site under advertising when the page markets those services', async () => {
+    const practice = dossier([
+      record({
+        id: 'practice',
+        url: 'https://neuropsychologicalsciences.com/',
+        kind: 'expert_website',
+        title:
+          'Forensic Psychological Assessment & Neuropsychological Evaluations',
+        summary:
+          'Dr. Demery provides forensic neuropsychological evaluations and independent medical examinations for attorneys.',
+        claims: [
+          {
+            type: 'forensic',
+            text: 'IME',
+            quote: 'independent medical examinations for attorneys',
+            topic: 'ime',
+            basis: 'subject_stated',
+            from: 'page',
+          },
+        ],
+      }),
+    ]);
+    const ads = await provider('advertising', practice).search(query);
+    expect(ads.status).toBe('ok');
+    expect(ads.items[0].url).toContain('neuropsychologicalsciences.com');
+    const site = await provider('expert_website', practice).search(query);
+    expect(site.items[0].url).toContain('neuropsychologicalsciences.com');
+  });
 });

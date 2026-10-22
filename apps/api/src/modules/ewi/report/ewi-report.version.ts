@@ -36,8 +36,15 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * evidence, documented inconsistencies, or identified research gaps, each
  * with source citations; ungrounded legacy questions are omitted on export
  * without changing stored investigation rows.
+ * 3.9.0: PubMed acknowledgements are not grant awards; author order is taken
+ * from collected author lists; court captions stay unresolved instead of
+ * “Unnamed case”; coverage summaries are not findings; identifier-only
+ * questions are omitted.
+ * 3.9.1: docket URL slugs supply missing captions; unofficial pages are not
+ * license verification; empty video searches are not reused prior hits;
+ * identifier, contact-dump, and repetitive biography questions are dropped.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.8.0';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.9.1';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis and other licensed PDFs are not stored unless legally permitted.';

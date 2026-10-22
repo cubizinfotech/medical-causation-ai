@@ -3,7 +3,13 @@ import type {
   ExpertResearchProviderId,
   ExpertResearchQuery,
 } from '../expert-research.types';
-import { excerptsAround, detectStandard } from './courtlistener.provider';
+import {
+  excerptsAround,
+  detectStandard,
+  recapMergeKey,
+  recapPathParts,
+  resolveCaseCaption,
+} from './courtlistener.provider';
 import { JustiaResearchProvider } from './justia.provider';
 import { createLiveSourceProviders } from './live-sources';
 import { OrcidResearchProvider } from './orcid.provider';
@@ -536,6 +542,97 @@ describe('CourtListener live source', () => {
     expect(result.items[0].raw?.identity).toMatchObject({ ambiguous: true });
   });
 
+  it('does not invent Unnamed case when the RECAP hit has no caption', async () => {
+    const { get } = providers([
+      nppesRoute([doctor]),
+      {
+        match: (url) =>
+          url.pathname === '/api/rest/v4/search/' &&
+          url.searchParams.get('type') === 'rd',
+        respond: () => ({
+          count: 1,
+          results: [
+            {
+              id: 49,
+              absolute_url: '/docket/6664619/49/1/united-states-v-butl',
+              description: 'STIPULATION Regarding Competency',
+              snippet: 'Jane Smith, a neurologist',
+              docketNumber: '8:17-cr-15',
+              court: 'District Court, M.D. Florida',
+              dateFiled: '2018-02-01',
+            },
+          ],
+        }),
+      },
+      {
+        match: (url) => url.pathname === '/api/rest/v4/search/',
+        respond: () => ({ count: 0, results: [] }),
+      },
+    ]);
+    const result = await get('courtlistener').search(query);
+    expect(result.items[0].title).not.toMatch(/Unnamed case/i);
+    expect(result.items[0].raw?.captionStatus).toBe('from_source');
+    expect(result.items[0].raw?.caseName).toMatch(/United States v\. Butl/i);
+  });
+
+  it('stores the Head Kandy Daubert motion once when three attachments are returned', async () => {
+    const attachment = (id: number, n: number) => ({
+      id,
+      absolute_url: `/docket/66837428/431/${n}/head-kandy-llc-v-m`,
+      caseName: 'Head Kandy LLC v. Mutual of Omaha Insurance Company',
+      docket_id: 66837428,
+      document_number: 431,
+      attachment_number: n,
+      description:
+        'WITHDRAWN MOTION Daubert Motion to Exclude Testimony and Opinions of Jason Demery',
+      snippet: 'Jane Smith, a neurologist',
+      court: 'District Court, M.D. Florida',
+      dateFiled: '2024-01-01',
+      docketNumber: '8:23-cv-1',
+    });
+    const other = {
+      id: 900,
+      absolute_url: '/docket/66837428/174/1/head-kandy-llc-v-m',
+      caseName: 'Head Kandy LLC v. Mutual of Omaha Insurance Company',
+      docket_id: 66837428,
+      document_number: 174,
+      description: 'MOTION to Strike Supplemental Reports',
+      snippet: 'Jane Smith, a neurologist',
+      court: 'District Court, M.D. Florida',
+      dateFiled: '2024-02-01',
+      docketNumber: '8:23-cv-1',
+    };
+    const { get } = providers([
+      nppesRoute([doctor]),
+      {
+        match: (url) =>
+          url.pathname === '/api/rest/v4/search/' &&
+          url.searchParams.get('type') === 'rd',
+        respond: () => ({
+          count: 4,
+          results: [
+            attachment(1, 1),
+            attachment(2, 2),
+            attachment(3, 3),
+            other,
+          ],
+        }),
+      },
+      {
+        match: (url) => url.pathname === '/api/rest/v4/search/',
+        respond: () => ({ count: 0, results: [] }),
+      },
+    ]);
+    const result = await get('courtlistener').search(query);
+    const daubert = result.items.filter((item) =>
+      /Daubert Motion to Exclude/i.test(item.title),
+    );
+    expect(daubert).toHaveLength(1);
+    expect(
+      result.items.some((item) => /MOTION to Strike/i.test(item.title)),
+    ).toBe(true);
+  });
+
   it('reads opinion text around the surname when a token is set', async () => {
     const { get, calls } = providers(courtRoutes(), 'secret-token');
     const result = await get('courtlistener').search(query);
@@ -623,5 +720,79 @@ describe('court opinion helpers', () => {
     expect(windows).toHaveLength(1);
     expect(windows[0]).toContain('The motion to exclude Smith is granted.');
     expect(text.replace(/\s+/g, ' ')).toContain(windows[0]);
+  });
+
+  it('keeps an unresolved caption instead of Unnamed case', () => {
+    expect(resolveCaseCaption({})).toEqual({
+      name: 'Caption not listed on this search result',
+      status: 'unresolved',
+    });
+    expect(
+      resolveCaseCaption({ caseName: 'Head Kandy LLC v. Mutual of Omaha' }),
+    ).toEqual({
+      name: 'Head Kandy LLC v. Mutual of Omaha',
+      status: 'from_source',
+    });
+    expect(
+      resolveCaseCaption({
+        absolute_url:
+          '/docket/66837428/431/head-kandy-llc-v-mcneill/',
+      }),
+    ).toEqual({
+      name: 'Head Kandy LLC v. Mcneill',
+      status: 'from_source',
+    });
+    expect(
+      resolveCaseCaption({
+        caseName: 'Caption not listed on this search result',
+        absolute_url:
+          '/docket/67985665/26/roberts-v-usaa-general-indemnity-company/',
+      }),
+    ).toEqual({
+      name: 'Roberts v. USAA General Indemnity Company',
+      status: 'from_source',
+    });
+  });
+
+  it('collapses RECAP attachments of the same docket document', () => {
+    const base =
+      '/docket/66837428/431/%s/head-kandy-llc-v-mutual-of-omaha-insurance-company';
+    expect(recapPathParts(base.replace('%s', '1'))).toEqual({
+      docketId: '66837428',
+      documentNumber: '431',
+      attachmentNumber: '1',
+    });
+    expect(
+      recapMergeKey({
+        id: 11,
+        absolute_url: base.replace('%s', '1'),
+        docket_id: 66837428,
+        document_number: 431,
+        attachment_number: 1,
+      }),
+    ).toBe(
+      recapMergeKey({
+        id: 12,
+        absolute_url: base.replace('%s', '2'),
+        docket_id: 66837428,
+        document_number: 431,
+        attachment_number: 2,
+      }),
+    );
+    expect(
+      recapMergeKey({
+        id: 99,
+        absolute_url: '/docket/66837428/432/1/head-kandy-llc-v-m',
+        docket_id: 66837428,
+        document_number: 432,
+      }),
+    ).not.toBe(
+      recapMergeKey({
+        id: 12,
+        absolute_url: base.replace('%s', '2'),
+        docket_id: 66837428,
+        document_number: 431,
+      }),
+    );
   });
 });

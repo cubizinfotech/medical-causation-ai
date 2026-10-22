@@ -53,6 +53,18 @@ describe('CreateExpertInvestigationDto', () => {
     expect(dto.specialty).toBe('Marine surveyor extraordinaire');
   });
 
+  it('accepts an investigation with CV, city, NPI, and additional context omitted', async () => {
+    const dto = plainToInstance(CreateExpertInvestigationDto, {
+      expertName: 'Jason A. Demery',
+      specialty: 'Neuropsychology',
+    });
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.city).toBeUndefined();
+    expect(dto.npi).toBeUndefined();
+    expect(dto.additionalContext).toBeUndefined();
+    expect(dto.cvDocumentId).toBeUndefined();
+  });
+
   it('rejects a blank specialty', async () => {
     const dto = plainToInstance(CreateExpertInvestigationDto, {
       expertName: 'Jane A. Smith, MD',

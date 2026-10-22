@@ -170,4 +170,80 @@ describe('PubMed grant list', () => {
       { id: 'R01NS012345', agency: 'NINDS NIH HHS' },
     ]);
   });
+
+  it('keeps Demery paper acknowledgements on the article and does not emit grant findings', async () => {
+    if (!definition) throw new Error('pubmed catalog entry missing');
+    const xml = `<PubmedArticleSet>
+<PubmedArticle><MedlineCitation><PMID Version="1">21069617</PMID>
+<Article><AuthorList>
+<Author><LastName>Demery</LastName><ForeName>Jason A</ForeName><Initials>JA</Initials>
+<AffiliationInfo><Affiliation>Gainesville, FL neuropsychology.</Affiliation></AffiliationInfo></Author>
+<Author><LastName>Larson</LastName><ForeName>Michael J</ForeName></Author>
+<Author><LastName>Dixit</LastName><ForeName>Neha K</ForeName></Author>
+<Author><LastName>Bauer</LastName><ForeName>Russell M</ForeName></Author>
+<Author><LastName>Perlstein</LastName><ForeName>William M</ForeName></Author>
+</AuthorList></Article>
+<GrantList>
+<Grant><GrantID>K01 MH001857</GrantID><Agency>NIMH NIH HHS</Agency></Grant>
+<Grant><GrantID>K01 MH01857</GrantID><Agency>NIMH NIH HHS</Agency></Grant>
+<Grant><GrantID>R21 MH073076</GrantID><Agency>NIMH NIH HHS</Agency></Grant>
+</GrantList>
+</MedlineCitation></PubmedArticle>
+</PubmedArticleSet>`;
+    const fetchImpl = jest.fn((input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : input);
+      if (url.pathname.endsWith('efetch.fcgi')) {
+        return Promise.resolve(new Response(xml, { status: 200 }));
+      }
+      const body = url.pathname.endsWith('esearch.fcgi')
+        ? { esearchresult: { idlist: ['21069617'] } }
+        : {
+            result: {
+              uids: ['21069617'],
+              '21069617': {
+                uid: '21069617',
+                title:
+                  'Operating characteristics of executive functioning tests following traumatic brain injury.',
+                pubdate: '2010 Nov',
+                fulljournalname: 'The Clinical neuropsychologist',
+                authors: [
+                  { name: 'Demery JA' },
+                  { name: 'Larson MJ' },
+                  { name: 'Dixit NK' },
+                  { name: 'Bauer RM' },
+                  { name: 'Perlstein WM' },
+                ],
+              },
+            },
+          };
+      return Promise.resolve(
+        new Response(JSON.stringify(body), { status: 200 }),
+      );
+    }) as typeof fetch;
+    const result = await new PubMedResearchProvider(
+      definition,
+      fetchImpl,
+      1000,
+    ).search({
+      expertName: 'Jason A. Demery',
+      city: 'Gainesville, FL',
+      specialty: 'Neuropsychology',
+    });
+    expect(result.items.every((item) => item.category === 'publication')).toBe(
+      true,
+    );
+    expect(result.items.some((item) => item.category === 'grant')).toBe(false);
+    const paper = result.items[0];
+    expect(paper?.raw?.grants).toEqual(
+      expect.arrayContaining([
+        { id: 'K01 MH001857', agency: 'NIMH NIH HHS' },
+        { id: 'K01 MH01857', agency: 'NIMH NIH HHS' },
+        { id: 'R21 MH073076', agency: 'NIMH NIH HHS' },
+      ]),
+    );
+    expect(paper?.summary).toMatch(/not a personal grant award/i);
+    expect(result.items.map((item) => item.title).join(' ')).not.toMatch(
+      /K01 MH001857|R21 MH073076/,
+    );
+  });
 });

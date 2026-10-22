@@ -599,6 +599,238 @@ describe('question polisher', () => {
     expect(parseRewrites('not json').size).toBe(0);
   });
 
+  it('rejects NPI-only and Unnamed case drafts and keeps evidence-grounded questions', () => {
+    const useful: QuestionDraft = {
+      theme: 'Prior testimony and legal matters',
+      question:
+        'A court document, “Order granting motion to compel CME”, states: “Jason Demery, Ph.D., ABPP, a board-certified clinical neuropsychologist” Did you give that examination?',
+      label: 'unresolved',
+      sources: [
+        {
+          name: 'CourtListener',
+          url: 'https://www.courtlistener.com/docket/68056076/52/',
+        },
+      ],
+      evidenceBasis:
+        'Unresolved. CourtListener: “board-certified clinical neuropsychologist” https://www.courtlistener.com/docket/68056076/52/',
+      anchors: ['board-certified clinical neuropsychologist'],
+      evidenceIds: ['https://www.courtlistener.com/docket/68056076/52/'],
+      basisKind: 'sourced_fact',
+      relevance: 'A public filing names the expert.',
+      excerpt: 'board-certified clinical neuropsychologist',
+    };
+    expect(isValidDraft(useful)).toBe(true);
+    expect(
+      isValidDraft({
+        ...useful,
+        question:
+          'NPI Registry (NPPES) reported: "NPI 1700077724". You are aware of that, correct?',
+        excerpt: 'NPI 1700077724',
+        evidenceBasis: 'NPI 1700077724',
+        anchors: ['1700077724'],
+      }),
+    ).toBe(false);
+    expect(
+      isValidDraft({
+        ...useful,
+        question:
+          'Legal cases (CourtListener) reported “Unnamed case”: You are aware of that, correct?',
+        excerpt: 'Unnamed case',
+        evidenceBasis: 'Unnamed case',
+        anchors: ['Unnamed case'],
+      }),
+    ).toBe(false);
+
+    const questions = buildGroundedCrossExamQuestions({
+      expertName: 'Jason A. Demery',
+      evidence: [
+        {
+          sourceId: 'npi_registry',
+          category: 'identity',
+          title: 'NPI Registry: Jason Andrew Demery, PhD (NPI 1700077724)',
+          summary: 'NPI 1700077724',
+          url: 'https://npiregistry.cms.hhs.gov/provider-view/1700077724',
+          informationStatus: 'verified',
+          identityMatch: 'matched',
+          raw: { npi: '1700077724' },
+          source: {
+            providerId: 'npi_registry',
+            name: 'NPI Registry (NPPES)',
+            retrievedAt: '2026-10-22T00:00:00.000Z',
+            access: 'public',
+          },
+        },
+        {
+          sourceId: 'courtlistener',
+          category: 'legal',
+          title: 'Unnamed case',
+          summary: 'Search result.',
+          url: 'https://www.courtlistener.com/docket/6664619/49/1/united-states-v-butl',
+          informationStatus: 'unverified',
+          raw: { caseName: 'Unnamed case' },
+          source: {
+            providerId: 'courtlistener',
+            name: 'Legal cases (CourtListener)',
+            retrievedAt: '2026-10-22T00:00:00.000Z',
+            access: 'public',
+          },
+        },
+        {
+          sourceId: 'pubmed',
+          category: 'publication',
+          title:
+            'Operating characteristics of executive functioning tests following traumatic brain injury.',
+          summary: 'PubMed lists Demery JA first.',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/21069617/',
+          informationStatus: 'unverified',
+          identityMatch: 'matched',
+          raw: { pmid: '21069617', authorship: 'first of 5 authors' },
+          source: {
+            providerId: 'pubmed',
+            name: 'Publications (PubMed / NCBI)',
+            retrievedAt: '2026-10-22T00:00:00.000Z',
+            access: 'public',
+          },
+        },
+      ],
+    });
+    const text = questions.map((question) => question.question).join('\n');
+    expect(text).not.toMatch(/NPI 1700077724/);
+    expect(text).not.toMatch(/Unnamed case/);
+    expect(text).toMatch(/21069617/);
+  });
+
+  it('rejects contact-dump, boilerplate, and repetitive biography questions', () => {
+    const questions = buildGroundedCrossExamQuestions({
+      expertName: 'Jason A. Demery',
+      evidence: [
+        webItem({
+          level: 'strong',
+          kind: 'publication',
+          url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC3830977/',
+          title: 'GFAP study',
+          quote:
+            'Jason Demery, Email: jasondemery@gmail.com, 8491 NW 39th Ave., Gainesville',
+          claims: [
+            {
+              type: 'credential',
+              text: 'email',
+              quote:
+                'Jason Demery, Email: jasondemery@gmail.com, Assistant Professor, 8491 NW 39th Ave.',
+            },
+          ],
+        }),
+        webItem({
+          level: 'strong',
+          kind: 'profile',
+          url: 'https://abpp.org/directory/entry/32415/',
+          title: 'ABPP directory',
+          quote: 'Board Certified In Clinical Neuropsychology',
+          claims: [
+            {
+              type: 'credential',
+              text: 'cert',
+              quote: 'Board Certified In Clinical Neuropsychology',
+            },
+            {
+              type: 'credential',
+              text: 'boilerplate',
+              quote:
+                'This directory lists all current ABPP board certified psychologists.',
+            },
+            {
+              type: 'credential',
+              text: 'renewal',
+              quote:
+                'Board certification is an annual certification that is due January 1.',
+            },
+          ],
+        }),
+        webItem({
+          level: 'strong',
+          kind: 'expert_website',
+          url: 'https://neuropsychologicalsciences.com/about/',
+          title: 'About',
+          quote: 'Board certified in clinical neuropsychology',
+          claims: [
+            {
+              type: 'credential',
+              text: 'a',
+              quote:
+                'Dr. Demery is board certified in clinical neuropsychology by the American Board of Professional Psychology (ABPP).',
+            },
+            {
+              type: 'credential',
+              text: 'b',
+              quote:
+                'He completed his Ph.D. at the University of Florida followed by a postdoctoral fellowship.',
+            },
+            {
+              type: 'credential',
+              text: 'c',
+              quote:
+                'Jason Demery, Ph.D. Board Certified in Clinical Neuropsychology',
+            },
+          ],
+        }),
+        {
+          sourceId: 'courtlistener',
+          category: 'motion',
+          title: 'Caption not listed on this search result',
+          summary:
+            'This public motion contains Jason A. Demery, a Neuropsychology term, and admissibility-challenge language (Daubert, Frye, Rule 702, or a motion to exclude).',
+          url: 'https://www.courtlistener.com/docket/66837428/431/head-kandy-llc-v-mcneill/',
+          informationStatus: 'unverified',
+          raw: {
+            caseName: 'Caption not listed on this search result',
+            documentType: 'motion',
+            challenge: { standard: 'daubert' },
+          },
+          source: {
+            providerId: 'courtlistener',
+            name: 'Legal cases (CourtListener)',
+            retrievedAt: '2026-10-22T00:00:00.000Z',
+            access: 'public',
+          },
+        },
+      ],
+    });
+    const text = questions.map((question) => question.question).join('\n');
+    expect(text).not.toMatch(/jasondemery@gmail\.com/i);
+    expect(text).not.toMatch(/You are aware of that, correct\?/i);
+    expect(text).not.toMatch(/This directory lists all current/i);
+    expect(text).not.toMatch(/This public motion contains/i);
+    expect(text).toMatch(/Head Kandy LLC v\. Mcneill/);
+    const about = questions.filter((question) =>
+      question.sources?.some((source) =>
+        source.url?.includes('neuropsychologicalsciences.com'),
+      ),
+    );
+    expect(about.length).toBeLessThanOrEqual(2);
+    expect(questions.length).toBeLessThan(8);
+  });
+
+  it('rejects a polish that only adds “You are aware of that, correct?”', () => {
+    expect(
+      acceptRewrite(
+        'Court TV reported: “state expert, Dr. Jason Demery, testified”. You are aware of that, correct?',
+        {
+          theme: 'Public statements and media',
+          question:
+            'Court TV reported: “state expert, Dr. Jason Demery, testified”. Is that an accurate description of your testimony?',
+          label: 'verified',
+          sources: [{ name: 'courttv.com' }],
+          evidenceBasis:
+            'Verified. courttv.com: “state expert, Dr. Jason Demery, testified”',
+          anchors: ['state expert, Dr. Jason Demery, testified'],
+          evidenceIds: ['https://www.courttv.com/x'],
+          basisKind: 'sourced_fact',
+          relevance: 'News quote.',
+        },
+      ),
+    ).toBe(false);
+  });
+
   it('applies a valid rewrite', async () => {
     const polished = await polishQuestions([draft], () =>
       Promise.resolve(

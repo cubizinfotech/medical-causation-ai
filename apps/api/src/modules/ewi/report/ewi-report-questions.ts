@@ -1,4 +1,7 @@
-import type { ExpertEvidenceItem } from '@integrations/expert-research';
+import {
+  resolveCaseCaption,
+  type ExpertEvidenceItem,
+} from '@integrations/expert-research';
 import { isWebCoverageSummary } from '@integrations/web-research';
 import { isCatalogAbsenceFinding } from '../cv/cv-comparison';
 import type { CvCheck } from '../cv/cv.types';
@@ -84,14 +87,20 @@ const WEB_KIND_THEME: Record<string, (typeof QUESTION_THEMES)[number]> = {
 
 /** Stems that made earlier questions generic. A question using one is dropped. */
 const GENERIC_STEMS =
-  /\b(investigation file|collected record|collected status|finding ?key|finding f\d+|how should counsel weigh|jury should understand|this file does not|examination point|beyond what .{1,40} collected)\b/i;
+  /\b(investigation file|collected record|collected status|finding ?key|finding f\d+|how should counsel weigh|jury should understand|this file does not|examination point|beyond what .{1,40} collected|this public (?:motion|order|recap filing|published opinion) contains|this directory lists all current|board certification is an annual certification|you are aware of that, correct)\b/i;
 
 const SKIP_TITLE = /web research coverage|could not be read|coverage summary/i;
+
+const IDENTIFIER_ONLY = /^(?:npi\s*)?\d{10}$|unnamed case|^caption not listed/i;
+const EMAIL_ONLY = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+const STREET_ONLY =
+  /^\d+\s+\w[\w\s.'-]*(?:street|st\.?|avenue|ave\.?|boulevard|blvd\.?|drive|dr\.?|road|rd\.?|lane|ln\.?|way|suite|ste\.?)\b/i;
 
 const EMPTY_RESULT =
   /returned no record|no matching record was found|live adapter is not connected|no request was sent|not searched\./i;
 
-const MAX_PER_RECORD = 3;
+const MAX_PER_RECORD = 1;
+const MAX_PER_HOST_THEME = 2;
 const QUOTE_MAX = 220;
 
 export interface QuestionSourceAttempt {
@@ -150,7 +159,17 @@ export function buildQuestionDrafts(input: {
     ...licenseGapDrafts(input.evidence, input.sourceStatuses ?? []),
     ...cvClaimDrafts(input.cvCheck ?? null, drafts),
   );
-  return drafts;
+  const limitationExcerpts = new Set(
+    drafts
+      .filter((draft) => draft.basisKind === 'limitation')
+      .map((draft) => normalize(draft.excerpt ?? ''))
+      .filter(Boolean),
+  );
+  return drafts.filter((draft) => {
+    if (draft.basisKind === 'limitation') return true;
+    const excerpt = normalize(draft.excerpt ?? '');
+    return !excerpt || !limitationExcerpts.has(excerpt);
+  });
 }
 
 /** Drops invalid and duplicate drafts, groups by theme, and numbers them. */
@@ -158,12 +177,25 @@ export function finalizeQuestions(
   drafts: QuestionDraft[],
 ): CrossExamQuestion[] {
   const seen = new Set<string>();
+  const perHostTheme = new Map<string, number>();
   const kept: QuestionDraft[] = [];
   for (const draft of drafts) {
     if (!isValidDraft(draft)) continue;
     const key = normalize(draft.question);
-    if (seen.has(key)) continue;
+    const excerptKey = normalize(draft.excerpt ?? '').slice(0, 80);
+    if (seen.has(key) || (excerptKey && seen.has(`ex:${excerptKey}`))) {
+      continue;
+    }
+    const host = hostOf(draft.sources[0]?.url ?? '') || draft.sources[0]?.name;
+    const hostTheme = `${host ?? ''}:${draft.theme}`;
+    const used = perHostTheme.get(hostTheme) ?? 0;
+    const capHost =
+      draft.theme === 'Background and credentials' ||
+      draft.theme === 'Marketing and expert-witness business';
+    if (host && capHost && used >= MAX_PER_HOST_THEME) continue;
     seen.add(key);
+    if (excerptKey) seen.add(`ex:${excerptKey}`);
+    perHostTheme.set(hostTheme, used + 1);
     kept.push(draft);
   }
   const order = (theme: string) => {
@@ -214,10 +246,43 @@ export function renumberQuestions(
 }
 
 /** A newly generated draft is kept only when it is specific, sourced and linked. */
+export function isIdentifierOnlyDraft(draft: QuestionDraft): boolean {
+  const excerpt = (draft.excerpt ?? '').trim();
+  const hay = `${draft.question} ${excerpt} ${draft.evidenceBasis}`;
+  if (
+    /unnamed case|caption not listed/i.test(hay) &&
+    !/\b\d{1,2}:\d{2}-[a-z]{2}-\d+/i.test(hay)
+  ) {
+    return true;
+  }
+  if (IDENTIFIER_ONLY.test(excerpt) || EMAIL_ONLY.test(excerpt)) return true;
+  if (isContactDump(excerpt)) return true;
+  if (STREET_ONLY.test(excerpt) && excerpt.length < 80) return true;
+  if (
+    /^(?:[A-Z]{1,3}-?)?\d{4,8}$/i.test(excerpt) &&
+    !/\b(official|board record|self-reported|disciplin|revok|suspend|current license record|produce the official)\b/i.test(
+      draft.question,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\bnpi\b/i.test(draft.question) &&
+    !/\b(license|board|discipline|malpractice|npi.?enumerat)/i.test(
+      draft.question,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function isValidDraft(draft: QuestionDraft): boolean {
   const text = draft.question.trim();
   if (text.length < 30 || text.length > 700) return false;
   if (!text.endsWith('?')) return false;
+  if (isIdentifierOnlyDraft(draft)) return false;
+  if (isContactDump(text) || isContactDump(draft.excerpt ?? '')) return false;
   if (GENERIC_STEMS.test(text) || GENERIC_STEMS.test(draft.evidenceBasis)) {
     return false;
   }
@@ -313,6 +378,7 @@ function webDrafts(item: ExpertEvidenceItem, web: WebRaw): QuestionDraft[] {
     const key = normalize(fact.quote);
     if (used.has(key)) continue;
     used.add(key);
+    if (isIdentifierQuote(fact.quote)) continue;
     const allegation = fact.type === 'allegation' || web.kind === 'review';
     const label: QuestionLabel = unresolved
       ? 'unresolved'
@@ -384,36 +450,63 @@ function webQuestion(input: {
     return `If the ${host} page “${title}”${stamp} is about you, is this statement accurate: ${q}?`;
   }
   if (input.kind === 'review') {
-    return `A review on ${host}${stamp}${input.rating ? ` rated ${input.rating}` : ''} said: ${q} You are aware of that review, correct?`;
+    return `A review on ${host}${stamp}${input.rating ? ` rated ${input.rating}` : ''} said: ${q} Does that review describe your practice?`;
   }
   if (input.type === 'allegation') {
-    return `${host} reported${stamp}: ${q} You are aware of that allegation, correct?`;
+    return `${host} reported${stamp}: ${q} Is that allegation accurate as it concerns you?`;
   }
   if (input.kind === 'court' || input.kind === 'justia') {
-    return `A court document, “${title}”${stamp}, states: ${q} You are the person it describes, correct?`;
+    return `A court document, “${title}”${stamp}, states: ${q} Does that describe your role in that matter?`;
   }
   if (input.kind === 'news' || input.kind === 'blog') {
-    return `${host} wrote${stamp}: ${q} That description of you is accurate, correct?`;
+    return `${host} wrote${stamp}: ${q} Is that an accurate description of your work or testimony?`;
   }
   if (input.kind === 'social') {
-    return `On ${input.platform ?? host}${stamp} the following appears under your name: ${q} Those are your words, correct?`;
+    return `On ${input.platform ?? host}${stamp} the following appears under your name: ${q} Are those your words?`;
   }
   if (input.kind === 'video' || input.kind === 'presentation') {
-    return `In “${title}”${stamp} on ${host}, the following was said or shown: ${q} That was you, correct?`;
+    return `In “${title}”${stamp} on ${host}, the following was said or shown: ${q} Was that you?`;
   }
   if (input.basis === 'primary_source') {
-    return `${host}, which records these credentials, states: ${q} That entry is accurate, correct?`;
+    return `${host}, which records these credentials, states: ${q} Is that entry accurate?`;
   }
   if (input.basis === 'third_party' && input.type !== 'allegation') {
-    return `${host}${stamp} states about you: ${q} That is accurate, correct?`;
+    return `${host}${stamp} states about you: ${q} Is that accurate?`;
   }
   if (input.type === 'advertising' || input.type === 'forensic') {
-    return `${host} presents your services this way: ${q} That is how you market yourself, correct?`;
+    return `${host} presents your services this way: ${q} Is that how you market yourself?`;
   }
   if (input.type === 'credential') {
-    return `${host} states: ${q} That is how you describe your credentials, correct?`;
+    return `${host} states: ${q} Is that how you describe your credentials?`;
   }
-  return `${host}${stamp} states: ${q} That is accurate, correct?`;
+  return `${host}${stamp} states: ${q} Is that accurate?`;
+}
+
+function isContactDump(text: string): boolean {
+  const value = text.trim();
+  if (!value) return false;
+  const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value);
+  const hasStreet =
+    STREET_ONLY.test(value) ||
+    /\d+\s+[\w.'-]+.+\b(?:street|st\.?|avenue|ave\.?|boulevard|blvd\.?|drive|dr\.?|road|rd\.?|lane|ln\.?|way|suite)\b/i.test(
+      value,
+    );
+  const material =
+    /\b(testif|daubert|disciplin|malpractice|revok|suspend|conflict|methodology|income|open payments|license|self-reported|nppes|board record)\b/i.test(
+      value,
+    );
+  if (material) return false;
+  if (hasEmail) return true;
+  return hasStreet && value.length < 220;
+}
+
+function isIdentifierQuote(quote: string): boolean {
+  const text = quote.trim();
+  if (IDENTIFIER_ONLY.test(text) || EMAIL_ONLY.test(text)) return true;
+  if (isContactDump(text)) return true;
+  if (STREET_ONLY.test(text) && text.length < 80) return true;
+  if (/^npi\s*\d{10}$/i.test(text)) return true;
+  return false;
 }
 
 function themeForClaim(theme: string, type: string): string {
@@ -446,10 +539,17 @@ function registryDrafts(item: ExpertEvidenceItem): QuestionDraft[] {
   if (publication) return [publication];
   const legal = registryLegalDraft(item, source, id, date);
   if (legal) return [legal];
-  const identity = registryIdentityDraft(item, source, id, date);
-  if (identity) return [identity];
   const payment = registryPaymentDraft(item, source, id, date);
   if (payment) return [payment];
+
+  if (item.sourceId === 'npi_registry') return [];
+  if (
+    /this public (?:motion|order|recap filing|published opinion) contains/i.test(
+      item.summary ?? '',
+    )
+  ) {
+    return [];
+  }
 
   const fact = clip(stripCaveats(item.summary), 240);
   if (fact.length < 40 || !item.url) return [];
@@ -460,7 +560,7 @@ function registryDrafts(item: ExpertEvidenceItem): QuestionDraft[] {
       theme: themeForCategory(item.category),
       question:
         label === 'verified'
-          ? `${sourceName} records: “${fact}” That is accurate, correct?`
+          ? `${sourceName} records: “${fact}” Is that accurate?`
           : `${sourceName} lists, without independent confirmation: “${fact}” Can you confirm or correct that?`,
       label,
       sources: [source],
@@ -521,7 +621,7 @@ function registryLicenseDraft(
     theme: 'Background and credentials',
     question:
       label === 'verified'
-        ? `${source.name} lists license ${number}${statusBit}. That is your current license record, correct?`
+        ? `${source.name} lists license ${number}${statusBit}. Is that your current license record?`
         : `${source.name} lists license ${number}${statusBit}, without a complete official match. Can you confirm or correct that record?`,
     label,
     sources: [source],
@@ -596,7 +696,14 @@ function registryLegalDraft(
     /courtlistener|justia|state_court/.test(item.sourceId);
   if (!legal) return null;
   const raw = item.raw ?? {};
-  const caseName = readString(raw.caseName) ?? clip(item.title, 140);
+  const caseName = resolveCaseCaption({
+    caseName: readString(raw.caseName),
+    absolute_url: item.url,
+    url: item.url,
+  }).name;
+  if (/unnamed case/i.test(caseName) || /caption not listed/i.test(caseName)) {
+    return null;
+  }
   const caseNumber = readString(raw.caseNumber);
   const docType = readString(raw.documentType) ?? readString(raw.documentClass);
   const challenge = raw.challenge as { standard?: string } | undefined;
@@ -604,7 +711,7 @@ function registryLegalDraft(
   const kind = docType ? ` (${docType})` : '';
   const question = challenge
     ? `${source.name} has “${caseName}”${docket}${kind} with admissibility-challenge language naming you. Were you the expert whose testimony was at issue in that filing?`
-    : `${source.name} has “${caseName}”${docket}${kind} naming you. You are the person named in that public filing, correct?`;
+    : `${source.name} has “${caseName}”${docket}${kind} naming you. Were you the person named in that public filing?`;
   return sourcedDraft({
     theme: 'Prior testimony and legal matters',
     question,
@@ -615,32 +722,6 @@ function registryLegalDraft(
     basisKind: 'sourced_fact',
     relevance:
       'A public filing or opinion names the expert. It is not evidence that a complete docket was reviewed.',
-    date,
-    url: item.url,
-    sourceName: source.name,
-  });
-}
-
-function registryIdentityDraft(
-  item: ExpertEvidenceItem,
-  source: QuestionSource,
-  id: string,
-  date: string | null,
-): QuestionDraft | null {
-  if (item.category !== 'identity' && item.sourceId !== 'npi_registry') {
-    return null;
-  }
-  const npi = readString(item.raw?.npi);
-  if (!npi) return null;
-  return sourcedDraft({
-    theme: 'Background and credentials',
-    question: `${source.name} lists National Provider Identifier ${npi} for you. That is your NPI, correct?`,
-    label: item.informationStatus === 'verified' ? 'verified' : 'unresolved',
-    sources: [source],
-    excerpt: `NPI ${npi}`,
-    evidenceIds: [id],
-    basisKind: 'sourced_fact',
-    relevance: 'Identity confirmation from the NPI Registry.',
     date,
     url: item.url,
     sourceName: source.name,
@@ -823,8 +904,10 @@ function cvClaimDrafts(
   const already = existing.map((draft) => normalize(draft.question)).join(' ');
   const wanted = new Set(['license', 'board_certification', 'education']);
   const drafts: QuestionDraft[] = [];
+  const seenCategory = new Set<string>();
   for (const claim of check.claims) {
     if (!wanted.has(claim.category)) continue;
+    if (seenCategory.has(claim.category)) continue;
     if (claim.quote.trim().length < 20) continue;
     const key = normalize(claim.quote);
     if (
@@ -839,6 +922,7 @@ function cvClaimDrafts(
         (row.label === 'verified' || row.label === 'conflicting'),
     );
     if (compared) continue;
+    seenCategory.add(claim.category);
     const page = claim.page;
     drafts.push({
       theme: 'Background and credentials',

@@ -71,6 +71,18 @@ describe("expert investigation form", () => {
     ).toBe(false);
   });
 
+  it("accepts omitted city, NPI, additional context, and CV", () => {
+    const parsed = expertInvestigationSchema.parse({
+      expertName: "Jason A. Demery",
+      city: "",
+      specialty: "Neuropsychology",
+    });
+    expect(parsed.city).toBe("");
+    expect(parsed.npi).toBeUndefined();
+    expect(parsed.additionalContext).toBeUndefined();
+    expect(parsed.cvDocumentId).toBeUndefined();
+  });
+
   it("treats the NPI as optional", () => {
     const parsed = expertInvestigationSchema.parse({ ...base, npi: "  " });
     expect(parsed.npi).toBeUndefined();

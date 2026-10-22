@@ -12,11 +12,14 @@ const MAX_POLISHED = 72;
 const SYSTEM = `You tighten cross-examination questions for an attorney. You are not a source of facts.
 
 Rules:
-- Rewrite each draft as one short, leading question in the style: "You ..., correct?" or "<Source> reported ...: "<quote>" You are aware of that, correct?".
+- Rewrite each draft as one short examination question with a clear purpose (method, qualification, prior statement, discrepancy, or evidence gap).
+- Do not use the formula "You are aware of that, correct?" and do not add that ending to make a question sound like cross-examination.
+- Prefer "Is that accurate?", "Did you testify to that?", or "Does that describe your practice?" when a confirmation is needed.
 - Use ONLY the facts given in the draft and basis. Keep every quoted passage word for word.
 - Do not add names, dates, numbers, places, cases, findings or any other fact.
 - Keep the meaning of the label: an "allegation" is something a third party reported (say so, never state it as proven); an "unresolved" item must stay conditional ("If this refers to you ...", "Can you confirm ...").
 - Keep the source (outlet or website) and the date when the draft names one.
+- Drop a draft whose only fact is an identifier (NPI, email, street address, unnamed case).
 - Respond with one JSON object: {"items":[{"id":string,"question":string}]} and nothing else.`;
 
 /**
@@ -83,6 +86,9 @@ export function parseRewrites(raw: string): Map<string, string> {
 export function acceptRewrite(text: string, draft: QuestionDraft): boolean {
   const rewrite = text.trim();
   if (rewrite.length < 30 || rewrite.length > 700 || !rewrite.endsWith('?')) {
+    return false;
+  }
+  if (/you are aware of that, correct\?$/i.test(rewrite)) {
     return false;
   }
   const flat = squash(rewrite);

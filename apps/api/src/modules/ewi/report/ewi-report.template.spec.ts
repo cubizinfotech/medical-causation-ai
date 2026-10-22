@@ -406,7 +406,9 @@ describe('EWI report template', () => {
     expect(text).toMatch(/Authors: Doe J, Roe A/);
     expect(text).toMatch(/Date: 2019/);
     expect(text).toMatch(/Journal: Spine Journal/);
-    expect(text).toMatch(/First\/lead author status: yes/);
+    expect(text).toMatch(/Author order: first of 2 authors/);
+    expect(text).toMatch(/list position, not a publisher designation/i);
+    expect(text).not.toMatch(/First\/lead author status/i);
     expect(text).toMatch(/Retraction status: none stated/);
     expect(text).not.toMatch(/page 47|p\.\s*12/i);
   });
@@ -1204,6 +1206,118 @@ describe('EWI report source coverage', () => {
         ?.blocks.map((block) => block.text)
         .join(' ') ?? '';
     expect(depositions).toMatch(/not implemented/i);
+  });
+
+  it('does not use a news article as official license verification', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jason A. Demery',
+      city: 'Gainesville, FL',
+      specialty: 'Neuropsychology',
+      evidence: [
+        {
+          sourceId: 'news',
+          category: 'license',
+          title: 'Local news notes a Florida psychology license',
+          summary: 'A news article mentioned license PY7500.',
+          url: 'https://news.example/demery-license',
+          informationStatus: 'unverified',
+          raw: { web: { kind: 'news' } },
+        },
+        {
+          sourceId: 'other_public_websites',
+          category: 'license',
+          title: 'WebMD license blurb',
+          summary: 'Dr. Jason A Demery holds an active medical license in the state of Florida.',
+          url: 'https://doctor.webmd.com/doctor/jason-demery',
+          informationStatus: 'unverified',
+        },
+        {
+          sourceId: 'npi_registry',
+          category: 'license',
+          title: 'Licenses reported to the NPI Registry',
+          summary: 'FL PY7500. Self-reported to NPPES.',
+          informationStatus: 'unverified',
+          raw: { verificationStatus: 'nppes_self_reported' },
+        },
+      ],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-22T00:00:00.000Z',
+    });
+    const licenses =
+      document.sections
+        .find((section) => section.id === 'licenses')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(licenses).toMatch(/self-reported to NPPES/i);
+    expect(licenses).not.toMatch(/Local news notes/);
+    expect(licenses).not.toMatch(/news.example/);
+    expect(licenses).not.toMatch(/WebMD license blurb/);
+    expect(licenses).not.toMatch(/webmd.com/);
+  });
+
+  it('prints PubMed author order without calling first position a lead-author designation', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jason A. Demery',
+      city: 'Gainesville, Florida',
+      specialty: 'Neuropsychologist',
+      evidence: [
+        {
+          sourceId: 'pubmed',
+          category: 'publication',
+          title:
+            'Operating characteristics of executive functioning tests following traumatic brain injury.',
+          summary: 'PubMed article.',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/21069617/',
+          informationStatus: 'unverified',
+          raw: {
+            pmid: '21069617',
+            authors: [
+              'Demery JA',
+              'Larson MJ',
+              'Dixit NK',
+              'Bauer RM',
+              'Perlstein WM',
+            ],
+            identity: { name: 'Jason A. Demery' },
+          },
+        },
+        {
+          sourceId: 'pubmed',
+          category: 'publication',
+          title:
+            'Domestic Homicide: Neuropsychological Profiles of Murderers Who Kill Family Members',
+          summary: 'PubMed article.',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/26292990/',
+          informationStatus: 'unverified',
+          raw: {
+            pmid: '26292990',
+            authors: ['Hanlon RE', 'Brook M', 'Demery JA', 'Cunningham MD'],
+            identity: { name: 'Jason A. Demery' },
+          },
+        },
+      ],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-22T00:00:00.000Z',
+    });
+    const publications =
+      document.sections
+        .find((section) => section.id === 'publications')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(publications).toMatch(/PMID: 21069617/);
+    expect(publications).toMatch(/first of 5 authors/);
+    expect(publications).toMatch(/PMID: 26292990/);
+    expect(publications).toMatch(/author 3 of 4/);
+    expect(publications).toMatch(/list position, not a publisher designation/i);
+    expect(publications).not.toMatch(/First\/lead author status: not stated/i);
+    const grants =
+      document.sections
+        .find((section) => section.id === 'grants')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(grants).not.toMatch(/K01 MH001857|21069617/);
   });
 
   it('prints uploaded-document page citations and question evidence links', () => {

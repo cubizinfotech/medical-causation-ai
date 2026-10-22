@@ -401,10 +401,10 @@ describe('web catalog sources', () => {
     const providers = createWebSourceProviders(definitions, engine);
     const web = await providers.get('web_search' as never)?.search(query);
     expect(['ok', 'no_result']).toContain(web?.status);
-    const summary = web?.items.find(
-      (item) => item.title === 'Web research coverage',
-    );
-    expect(summary?.summary).toMatch(/other same-name candidate group/);
+    expect(
+      web?.items.some((item) => item.title === 'Web research coverage'),
+    ).toBe(false);
+    expect(web?.message ?? '').toMatch(/Searched|matched|pages/i);
     const attributed = web?.items.filter(
       (item) =>
         (item.raw as { identity?: { ambiguous?: boolean } })?.identity

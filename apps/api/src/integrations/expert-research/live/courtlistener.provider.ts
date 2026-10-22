@@ -32,6 +32,10 @@ import {
   type PersonName,
 } from './person-name';
 import { specialtySearchTerms } from './specialty-match';
+import { resolveCaseCaption } from './case-caption';
+
+export { resolveCaseCaption } from './case-caption';
+export type { CaptionStatus } from './case-caption';
 
 /** Words that mark an admissibility challenge to expert testimony. */
 export const CHALLENGE_TERMS = [
@@ -229,8 +233,8 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
     opinionExcerpts: string[] | undefined,
     retrievedAt: string,
   ): ExpertEvidenceItem {
-    const caseName =
-      hit.caseName?.trim() || hit.caseNameFull?.trim() || 'Unnamed case';
+    const caption = resolveCaseCaption(hit);
+    const caseName = caption.name;
     const date = hit.dateFiled?.trim() || null;
     const snippet = snippets.join(' … ') || hit.snippet || null;
     const citation = (hit.citation ?? []).filter(Boolean);
@@ -268,12 +272,25 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
         : docClass === 'other'
           ? 'public RECAP filing'
           : `public ${docClass}`;
+    const retrievalStatus = opinionExcerpts
+      ? 'full_text'
+      : snippet
+        ? 'snippet_only'
+        : 'metadata_only';
     const summary = [
       challenge
         ? `This ${kindLabel} contains ${who}, a ${query.specialty} term, and admissibility-challenge language (Daubert, Frye, Rule 702, or a motion to exclude). Whether the challenge was about this expert, and how the court ruled, is reported only when the court’s words say so.`
         : `This ${kindLabel} contains ${who}${specialtyInText ? ` and a ${query.specialty} term` : ''}. The expert’s role in the case (witness, treating physician, or party) was not determined.`,
       snippet ? `Search excerpt: “${htmlToText(snippet)}”` : null,
       hit.description ? `Filing description: ${hit.description}.` : null,
+      caption.status === 'unresolved'
+        ? 'The search result did not include a case caption.'
+        : null,
+      retrievalStatus === 'full_text'
+        ? 'Filing text was retrieved from CourtListener.'
+        : retrievalStatus === 'snippet_only'
+          ? 'Only a search snippet was available; the full document was not retrieved.'
+          : 'Only docket metadata was available; the full document was not retrieved.',
       DOCKET_COVERAGE_NOTE,
     ]
       .filter(Boolean)
@@ -312,13 +329,21 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
         docketCoverage:
           searchKind === 'opinion' ? 'opinion_only' : 'recap_document',
         caseName,
+        captionStatus: caption.status,
         caseNumber: hit.docketNumber?.trim() || null,
         court: hit.court?.trim() || null,
         filingDate: date,
         documentDate: date,
         citation: citation.join('; ') || null,
         documentNumber:
-          hit.document_number != null ? String(hit.document_number) : null,
+          hit.document_number != null
+            ? String(hit.document_number)
+            : (recapPathParts(hit.absolute_url)?.documentNumber ?? null),
+        attachmentNumber:
+          hit.attachment_number != null
+            ? String(hit.attachment_number)
+            : (recapPathParts(hit.absolute_url)?.attachmentNumber ?? null),
+        retrievalStatus,
         availablePublicly: hit.is_available !== false,
         relevance: challenge
           ? 'Filing mentions the expert together with an admissibility challenge.'
@@ -390,7 +415,7 @@ function mergeHits(
   ) => {
     const key =
       searchKind === 'recap_document'
-        ? `rd:${hit.id ?? hit.absolute_url ?? hit.description ?? hit.caseName}`
+        ? recapMergeKey(hit)
         : `o:${hit.cluster_id ?? hit.absolute_url ?? hit.caseName}`;
     const snippet = cleanSnippet(hit.opinions?.[0]?.snippet ?? hit.snippet);
     const existing = byKey.get(key);
@@ -399,6 +424,7 @@ function mergeHits(
         existing.snippets.push(snippet);
       }
       if (challenge) existing.challenge = true;
+      preferPrimaryRecapAttachment(existing, hit);
       return;
     }
     byKey.set(key, {
@@ -475,6 +501,53 @@ export function excerptsAround(
     .slice(0, max)
     .sort((left, right) => left.order - right.order)
     .map((entry) => entry.slice);
+}
+
+/** Docket id, document number, and attachment from a CourtListener docket URL. */
+export function recapPathParts(path: string | undefined): {
+  docketId: string;
+  documentNumber: string;
+  attachmentNumber: string | null;
+} | null {
+  if (!path) return null;
+  const match = path.match(/\/docket\/(\d+)\/(\d+)(?:\/(\d+))?(?:\/|$)/i);
+  if (!match) return null;
+  return {
+    docketId: match[1],
+    documentNumber: match[2],
+    attachmentNumber: match[3] ?? null,
+  };
+}
+
+export function recapMergeKey(hit: CourtListenerSearchHit): string {
+  const fromUrl = recapPathParts(hit.absolute_url);
+  const docket =
+    hit.docket_id != null ? String(hit.docket_id) : fromUrl?.docketId;
+  const document =
+    hit.document_number != null
+      ? String(hit.document_number)
+      : fromUrl?.documentNumber;
+  if (docket && document) return `rd:${docket}:${document}`;
+  return `rd:${hit.id ?? hit.absolute_url ?? hit.description ?? hit.caseName}`;
+}
+
+function attachmentRank(hit: CourtListenerSearchHit): number {
+  const stated =
+    hit.attachment_number != null
+      ? Number(hit.attachment_number)
+      : Number(recapPathParts(hit.absolute_url)?.attachmentNumber);
+  if (Number.isFinite(stated)) return stated;
+  return 0;
+}
+
+function preferPrimaryRecapAttachment(
+  existing: Hit,
+  incoming: CourtListenerSearchHit,
+): void {
+  if (existing.searchKind !== 'recap_document') return;
+  if (attachmentRank(incoming) < attachmentRank(existing.hit)) {
+    existing.hit = incoming;
+  }
 }
 
 function trimToWords(text: string, start: number, end: number): string {

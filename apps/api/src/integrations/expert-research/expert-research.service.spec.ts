@@ -348,7 +348,7 @@ describe('ExpertResearchService', () => {
     expect(research).toHaveBeenCalled();
     expect(
       result?.items.some((item) => item.title === 'Web research coverage'),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 

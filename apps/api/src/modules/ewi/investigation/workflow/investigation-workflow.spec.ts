@@ -130,6 +130,25 @@ describe('investigation workflow', () => {
     expect(message).toMatch(/Continuing|1 item/i);
   });
 
+  it('does not treat a blocked official license lookup as a source that was never queried', () => {
+    const stage = EWI_WORKFLOW_STAGES.find((item) => item.id === 'licenses');
+    if (!stage) throw new Error('licenses stage missing');
+    const message = describeResearchStage(stage, [
+      {
+        sourceId: 'state_license',
+        status: 'error',
+        outcome: 'restricted',
+        access: 'public',
+        message:
+          'The Florida Department of Health license lookup could not be read. This is not a finding that the license is invalid.',
+        retrievedAt: '2026-10-22T00:00:00.000Z',
+        items: [],
+      },
+    ]);
+    expect(message).toMatch(/could not be read|access wall/i);
+    expect(message).not.toMatch(/no request was sent/i);
+  });
+
   it('retries a transient provider failure with exponential backoff', async () => {
     const stages = EWI_WORKFLOW_STAGES.filter((stage) =>
       ['identify-expert', 'patents', 'report'].includes(stage.id),

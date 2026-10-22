@@ -413,8 +413,9 @@ const RULES: readonly TopicRule[] = [
     topic: 'criminal',
     pattern:
       /\b(?:arrest(?:ed)?|conviction|convicted of|criminal record|criminal history|mugshot|indicted)\b/i,
+    kinds: ['news', 'court', 'justia', 'blog'],
     unless:
-      /\b(?:examin(?:e[ds]?|ing)|evaluat\w+|competenc\w+|testif\w+|appoint(?:ed|ment)|the defendant)\b/i,
+      /\b(?:examin(?:e[ds]?|ing)|evaluat\w+|competenc\w+|testif\w+|appoint(?:ed|ment)|the defendant|profiles of|murderers who)\b/i,
   },
   {
     topic: 'university_rules',

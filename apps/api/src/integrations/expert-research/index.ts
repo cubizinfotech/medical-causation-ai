@@ -16,7 +16,12 @@ export type {
   CatalogCheck,
   ScholarlyType,
 } from './live/publication-lookup';
-export { describePosition } from './live/author-position';
+export { authorPositionIn, describePosition } from './live/author-position';
+export {
+  captionFromDocketUrl,
+  resolveCaseCaption,
+} from './live/case-caption';
+export type { CaptionStatus } from './live/case-caption';
 export type { AuthorPosition } from './live/author-position';
 export { articleTitle, sameTitle } from './live/publication-lookup';
 export {

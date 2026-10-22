@@ -1,5 +1,8 @@
 import {
   EXPERT_RESEARCH_CATALOG,
+  authorPositionIn,
+  describePosition,
+  parsePersonName,
   researchCoverageFor,
   type ExpertEvidenceItem,
   type ExpertIdentityResolution,
@@ -438,9 +441,9 @@ export function buildEwiReportDocument(input: {
         );
       case 'university-accreditation':
         return evidenceSection(spec, tracker, {
-          categories: ['university', 'accreditation'],
-          providers: ['university'],
-          titleHints: ['accredit', 'university'],
+          categories: ['accreditation'],
+          providers: ['university_accreditation'],
+          titleHints: ['accredit'],
         });
       case 'licenses':
         return licensesSection(spec, tracker);
@@ -468,7 +471,7 @@ export function buildEwiReportDocument(input: {
         );
       case 'publications':
         return withCvStatements(
-          publicationsSection(spec, tracker),
+          publicationsSection(spec, tracker, input.expertName),
           input.cvCheck,
           ['publication'],
         );
@@ -779,6 +782,21 @@ const SECTION_SOURCES: Partial<Record<RoutedSectionId, string[]>> = {
   corporate: ['corporate_affiliations'],
   'patient-reviews': ['patient_reviews'],
   'office-location': ['google_maps'],
+  social: ['social'],
+  news: ['news', 'blogs'],
+  websites: ['expert_website'],
+  directories: [
+    'expert_directory',
+    'dri',
+    'seak',
+    'alm_law',
+    'jurispro',
+    'expertlaw',
+    'expertpages',
+    'expertwitness_com',
+  ],
+  ime: ['ime_websites', 'ime_advertising', 'advertising'],
+  videos: ['youtube'],
 };
 
 function sourceName(id: string): string {
@@ -1421,6 +1439,20 @@ function cvComparisonBlocks(row: CvComparison): ReportBlock[] {
   return blocks;
 }
 
+function cvComparedSourcesLine(check: CvCheck): string {
+  const names = [
+    ...new Set(
+      check.comparisons
+        .map((row) => row.source?.name?.trim())
+        .filter((name): name is string => Boolean(name)),
+    ),
+  ];
+  if (names.length === 0) {
+    return 'were not compared with a catalog that actually ran for these claims.';
+  }
+  return `compared with ${names.join(', ')}.`;
+}
+
 function cvCoverageLine(check: CvCheck): string {
   const unread = [
     ...new Set([
@@ -1440,7 +1472,7 @@ function cvCoverageLine(check: CvCheck): string {
 function cvCheckBlocks(check: CvCheck): ReportBlock[] {
   const blocks: ReportBlock[] = [
     {
-      text: `Uploaded CV: ${check.document.name} (${check.document.pageCount} page${check.document.pageCount === 1 ? '' : 's'}). ${check.claims.length} claim(s) were read, each with its page and an exact quote, and compared with the NPI Registry, OpenAlex, Crossref, PubMed, CMS Open Payments, and CourtListener. ${cvCoverageLine(check)} "Not checked" means no connected source covers the claim; it is not a finding against the expert. A missing catalog result is not a confirmed discrepancy.`,
+      text: `Uploaded CV: ${check.document.name} (${check.document.pageCount} page${check.document.pageCount === 1 ? '' : 's'}). ${check.claims.length} claim(s) were read, each with its page and an exact quote, and ${cvComparedSourcesLine(check)} ${cvCoverageLine(check)} "Not checked" means no connected source covers the claim; it is not a finding against the expert. A missing catalog result is not a confirmed discrepancy.`,
       style: 'note',
     },
     ...check.warnings.map((warning) => ({
@@ -1584,6 +1616,7 @@ function membershipsSection(
 function publicationsSection(
   spec: EwiReportSectionSpec,
   tracker: ClaimTracker,
+  expertName: string,
 ): ReportSectionModel {
   const items = claimEvidence(tracker, {
     categories: ['publication'],
@@ -1615,29 +1648,30 @@ function publicationsSection(
       'publishedAt',
       'date',
       'year',
+      'pubdate',
     ]);
     const journal = stringField(raw, ['journal', 'venue', 'sourceTitle']);
-    const lead = stringField(raw, [
-      'firstAuthor',
-      'leadAuthor',
-      'isFirstAuthor',
-      'authorship',
-    ]);
+    const pmid = stringField(raw, ['pmid']);
+    const doi = stringField(raw, ['doi']);
+    const publisherLead = stringField(raw, ['leadAuthor', 'authorship']);
     const retraction = stringField(raw, [
       'retractionStatus',
       'retracted',
       'retraction',
     ]);
     if (authors) blocks.push({ text: `Authors: ${authors}` });
+    if (pmid) blocks.push({ text: `PMID: ${pmid}` });
+    if (doi) blocks.push({ text: `DOI: ${doi}` });
     if (date) blocks.push({ text: `Date: ${date}` });
     if (journal) blocks.push({ text: `Journal: ${journal}` });
     blocks.push({ text: `Source: ${item.sourceId}` });
-    if (lead) {
-      blocks.push({ text: `First/lead author status: ${lead}` });
-    } else {
+    blocks.push({
+      text: authorOrderLine(raw, expertName, item),
+      style: 'note',
+    });
+    if (publisherLead) {
       blocks.push({
-        text: 'First/lead author status: not stated in the collected record.',
-        style: 'note',
+        text: `Publisher designation of lead author: ${publisherLead}`,
       });
     }
     if (retraction) {
@@ -2350,14 +2384,18 @@ function licensesSection(
     categories: ['license', 'state_license'],
     providers: ['state_license'],
     excludeHints: ['disciplin', 'board action', 'sanction'],
+    excludeSourceIds: ['news', 'blogs', 'justia'],
   });
-  const official = items.filter((item) => item.sourceId === 'state_license');
-  const nppes = items.filter((item) => item.sourceId === 'npi_registry');
-  const other = items.filter(
+  const licenseItems = items.filter(isOfficialLicenseItem);
+  const official = licenseItems.filter(
+    (item) => item.sourceId === 'state_license',
+  );
+  const nppes = licenseItems.filter((item) => item.sourceId === 'npi_registry');
+  const other = licenseItems.filter(
     (item) =>
       item.sourceId !== 'state_license' && item.sourceId !== 'npi_registry',
   );
-  if (items.length === 0) {
+  if (licenseItems.length === 0) {
     return {
       id: spec.id,
       title: spec.title,
@@ -2374,6 +2412,16 @@ function licensesSection(
     blocks.push(...findingBlocks(item));
   }
   return { id: spec.id, title: spec.title, blocks };
+}
+
+function isOfficialLicenseItem(item: ExpertEvidenceItem): boolean {
+  if (item.sourceId === 'state_license' || item.sourceId === 'npi_registry') {
+    return true;
+  }
+  const url = item.url ?? '';
+  return /npiregistry\.cms\.hhs\.gov|mqa-internet\.doh\.state\.fl\.us|flhealthsource\.gov|doh\.state\.fl\.us/i.test(
+    url,
+  );
 }
 
 function evidenceSection(
@@ -2801,11 +2849,14 @@ function claimEvidence(
     providers?: string[];
     titleHints?: string[];
     excludeHints?: string[];
+    excludeSourceIds?: string[];
   },
 ): ExpertEvidenceItem[] {
   const items: ExpertEvidenceItem[] = [];
   tracker.evidence.forEach((item, index) => {
     if (tracker.claimed.has(index)) return;
+    if (isWebCoverageSummary(item)) return;
+    if (filter.excludeSourceIds?.includes(item.sourceId)) return;
     if (isLegalItem(item) || isPresenceItem(item) || isProfessionalItem(item)) {
       return;
     }
@@ -2821,6 +2872,13 @@ function claimEvidence(
       filter.titleHints?.some((hint) => hay.includes(hint.toLowerCase())) ??
       false;
     if (!matchesProvider && !matchesCategory && !matchesHint) return;
+    if (
+      matchesCategory &&
+      filter.categories?.includes('license') &&
+      !isOfficialLicenseItem(item)
+    ) {
+      return;
+    }
     tracker.claimed.add(index);
     items.push(item);
   });
@@ -2888,6 +2946,48 @@ function markLegalClaimed(tracker: ClaimTracker, matters: LegalMatter[]): void {
       tracker.claimed.add(index);
     }
   });
+}
+
+function authorListFromRaw(raw: Record<string, unknown>): string[] {
+  for (const key of ['authors', 'authorList', 'authorNames']) {
+    const value = raw[key];
+    if (
+      Array.isArray(value) &&
+      value.every((entry) => typeof entry === 'string')
+    ) {
+      return value.map((entry) => entry.trim()).filter(Boolean);
+    }
+  }
+  const joined = stringField(raw, ['authors', 'authorList', 'author']);
+  if (!joined) return [];
+  return joined
+    .split(/\s*;\s*|\s+and\s+|,(?=\s*[A-Z])/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function authorOrderLine(
+  raw: Record<string, unknown>,
+  expertName: string,
+  item: ExpertEvidenceItem,
+): string {
+  const authors = authorListFromRaw(raw);
+  if (authors.length === 0) {
+    return 'Author list was not provided by the source. Author order is not stated.';
+  }
+  const identityName =
+    (raw.identity as { name?: string } | undefined)?.name ??
+    expertName ??
+    item.source?.name;
+  const expert = parsePersonName(String(identityName ?? expertName));
+  if (!expert) {
+    return `Authors were listed (${authors.length}), but this expert could not be matched in the list without guessing.`;
+  }
+  const place = authorPositionIn(authors, expert);
+  if (!place) {
+    return 'Author order: this expert is not identified in the collected author list.';
+  }
+  return `Author order: ${describePosition(place.position, place.index, place.count)} (PubMed/source list order). This is list position, not a publisher designation of “lead author.”`;
 }
 
 function stringField(

@@ -451,6 +451,7 @@ export class WebResearchEngine {
     };
     const searchedSources: SearchedSource[] = [];
     const answers: string[] = [];
+    const executedQueries: Array<{ topic: string; query: string }> = [];
 
     const addHit = (hit: SearchHit) => {
       let host = '';
@@ -547,6 +548,10 @@ export class WebResearchEngine {
               );
               report.hits += hits.length;
               bumpTopic(plan.topic, hits.length);
+              executedQueries.push({
+                topic: plan.topic,
+                query: plan.request.query,
+              });
               consecutive = 0;
               for (const hit of hits)
                 addHit({ ...hit, query: plan.request.query });
@@ -1259,6 +1264,7 @@ export class WebResearchEngine {
         queries: stat.queries,
         hits: stat.hits,
       })),
+      executedQueries,
       companies: companiesOnTiedPages,
       verifications: verifyClaims(finalRecords, [
         ...searchedSources,

@@ -332,6 +332,11 @@ export interface WebResearchDossier {
   limitations: string[];
   /** Targeted searches per report topic. Absent in dossiers saved before version 3.3. */
   topics?: WebTopicCoverage[];
+  /**
+   * Queries that were actually sent, including site: searches that returned
+   * no hits. Used to tell a dedicated directory search from a generic run.
+   */
+  executedQueries?: readonly { topic: string; query: string }[];
   /** Businesses named on pages that name the subject. */
   companies?: WebCompanyTie[];
   /** Credential claims compared with the issuing bodies. */

@@ -47,6 +47,8 @@ export function normalizeProfessionalRecords(
 }
 
 export function isProfessionalItem(item: ExpertEvidenceItem): boolean {
+  // PubMed article grant lists are publication metadata, not NIH awards.
+  if (item.sourceId === 'pubmed') return false;
   return (
     PROFESSIONAL_PROVIDERS.has(item.sourceId) ||
     PROFESSIONAL_CATEGORIES.has(item.category)
