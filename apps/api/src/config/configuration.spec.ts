@@ -17,6 +17,7 @@ describe('Configuration', () => {
     expect(config.auth).toBeDefined();
     expect(config.jobs.stateTtlSeconds).toBeGreaterThan(0);
     expect(config.research.mode).toBeDefined();
+    expect(config.orcidOAuth.redirectUri).toMatch(/\/orcid\/callback$/);
   });
 
   it('should use default app port', () => {

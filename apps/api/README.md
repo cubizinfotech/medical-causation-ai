@@ -22,7 +22,7 @@ MCA and EWI never import each other.
 
 ## Endpoints
 
-Every route needs `Authorization: Bearer <token>` except the two marked public. Ids in paths are UUIDs.
+Every route needs `Authorization: Bearer <token>` except health, login, and the ORCID OAuth callback. Ids in paths are UUIDs.
 
 | Method and path | Purpose |
 |-----------------|---------|
@@ -41,6 +41,9 @@ Every route needs `Authorization: Bearer <token>` except the two marked public. 
 | `GET /ewi/histories[/:id]`, `POST /ewi/histories/:id/cancel`, `DELETE /ewi/histories/:id` | Own investigations |
 | `GET /ewi/histories/:id/report` | PDF report |
 | `/ewi/requests/*` | Record-request letters (attorneys and paralegals; off unless `EWI_REQUEST_WORKFLOW_ENABLED`) |
+| `POST /orcid/authorize` | Start user ORCID OAuth; returns `{ authorizationUrl }` (signed-in, 20 tries a minute) |
+| `GET /orcid/callback` | ORCID redirects here; public, one-time Redis state, then 302 to the website (no tokens) |
+| `GET /orcid/connection` | `{ connected, orcid, name }` for the signed-in user (never tokens) |
 
 Live progress: Socket.IO namespaces `/medical-analysis` and `/ewi`. Connect with `auth: { token }`, then emit `subscribe` with `{ jobId }`; only the owner's jobs can be joined.
 

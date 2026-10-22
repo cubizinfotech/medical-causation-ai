@@ -14,6 +14,7 @@ import { ewiRequestConfig } from './ewi-request.config';
 import { authConfig } from './auth.config';
 import { jobsConfig } from './jobs.config';
 import { researchConfig } from './research.config';
+import { orcidOAuthConfig } from './orcid-oauth.config';
 import { literatureConfig } from './literature.config';
 import { caseRecordsConfig } from './case-records.config';
 import { ewiDocumentsConfig } from './ewi-documents.config';
@@ -34,6 +35,7 @@ export const configuration = (): RootConfig => ({
   auth: authConfig(),
   jobs: jobsConfig(),
   research: researchConfig(),
+  orcidOAuth: orcidOAuthConfig(),
   literature: literatureConfig(),
   caseRecords: caseRecordsConfig(),
   ewiDocuments: ewiDocumentsConfig(),

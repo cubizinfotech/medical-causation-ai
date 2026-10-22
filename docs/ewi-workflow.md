@@ -160,6 +160,27 @@ The identity check runs once per investigation and is shared by the other three 
 
 Optional settings: `COURTLISTENER_API_TOKEN` (free account) lets the API read the opinion text around the expert's name, so rulings can be read from the court's words; without it only short search excerpts are available. `COURTLISTENER_TIMEOUT_MS` (default 60000) allows for slow full-text searches. `OPENALEX_API_KEY` (free, from openalex.org/settings/api) raises OpenAlex's daily limit tenfold and is recommended for live use; `OPENALEX_MAILTO` is the older contact-email option.
 
+#### ORCID: public research vs user OAuth
+
+These are separate. They share `ORCID_CLIENT_ID` / `ORCID_CLIENT_SECRET` but not tokens.
+
+| Flow | Who it is for | How it authenticates | Routes |
+|---|---|---|---|
+| Client-credentials public research | Matching an *expert* during an investigation | App `/read-public` token | Used by the live ORCID provider only |
+| Authorization-code user OAuth | Connecting the *signed-in app user*'s own ORCID | User login at ORCID, PKCE S256, `/authenticate` | `POST /orcid/authorize` (Bearer), `GET /orcid/callback` (public), `GET /orcid/connection` (Bearer) |
+
+Public-profile search is unchanged: a name match is not enough, and a connected user ORCID is not applied to an expert record.
+
+**Redirect URI.** Nest has no global `/api` prefix. The value in `ORCID_REDIRECT_URI` (or `{API_PUBLIC_URL}/orcid/callback` when that is empty) must be identical in the authorize request, the token exchange, and the ORCID Developer Tools app.
+
+- Local development: `http://localhost:3001/orcid/callback` (ORCID allows localhost HTTP).
+- IP Caddy layout: public URL `{API_PUBLIC_URL}/orcid/callback`, for example `http://<host>/api/orcid/callback`. Caddy strips `/api` and Nest sees `/orcid/callback`.
+- Split-domain HTTPS: `https://<API_DOMAIN>/orcid/callback`.
+
+ORCID production apps require HTTPS except for localhost. The current IP site is plain HTTP, so production user OAuth is not ready until a domain and TLS are in place and that exact HTTPS URI is registered. Do not treat a successful public-profile lookup as a successful user login.
+
+After ORCID redirects to the callback, the API stores tokens in Redis under the user who started `POST /orcid/authorize` and sends the browser to `{FRONTEND_URL}?orcid_oauth=<result>`. The website does not yet start this flow; a controlled local test uses a signed-in `POST /orcid/authorize` and then opens `authorizationUrl` in a browser. `GET /orcid/connection` returns `{ connected, orcid, name }` only — never tokens.
+
 #### How the AI is used (and not used)
 
 `EwiAnalysisService.interpret()` in [ewi-analysis.service.ts](../apps/api/src/modules/ewi/investigation/analysis/ewi-analysis.service.ts):
@@ -266,6 +287,7 @@ If anything throws, the job becomes `failed` with the error message. A cancellat
 | AI wording and fallback | `apps/api/src/modules/ewi/investigation/analysis/ewi-analysis.service.ts` |
 | Research providers | `apps/api/src/integrations/expert-research/` |
 | Live sources and identity check | `apps/api/src/integrations/expert-research/live/` |
+| ORCID user OAuth (authorization code) | `apps/api/src/integrations/orcid-oauth/` |
 | Daubert/Frye rulings | `apps/api/src/modules/ewi/research/legal/expert-challenge.ts` |
 | Identity card, challenge list | `apps/web/src/components/ewi/expert-identity-card.tsx`, `admissibility-challenges.tsx` |
 | Inconsistencies and questions | `apps/api/src/modules/ewi/research/` |

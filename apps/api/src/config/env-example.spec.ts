@@ -62,6 +62,7 @@ const READ_AND_PREVIOUSLY_OMITTED = [
   'JOB_MAX_STALLED_COUNT',
   'ORCID_CLIENT_ID',
   'ORCID_CLIENT_SECRET',
+  'ORCID_REDIRECT_URI',
 ];
 
 const UNUSED_CATALOG_ENV = [
@@ -108,6 +109,7 @@ describe('.env.example', () => {
     expect(values.get('JOB_MAX_STALLED_COUNT')).toBe('1');
     expect(values.get('ORCID_CLIENT_ID')).toBe('');
     expect(values.get('ORCID_CLIENT_SECRET')).toBe('');
+    expect(values.get('ORCID_REDIRECT_URI')).toBe('');
   });
 
   it('uses safe example defaults for research and email', () => {

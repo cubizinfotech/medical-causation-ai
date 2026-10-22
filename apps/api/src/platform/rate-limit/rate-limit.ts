@@ -16,3 +16,7 @@ export const JobRateLimit = () =>
 /** File uploads are parsed in the request. */
 export const UploadRateLimit = () =>
   Throttle({ default: { ttl: MINUTE, limit: 30 } });
+
+/** ORCID OAuth start and callback: enough for retries, not for spraying codes. */
+export const OAuthRateLimit = () =>
+  Throttle({ default: { ttl: MINUTE, limit: 20 } });

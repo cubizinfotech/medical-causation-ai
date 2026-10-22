@@ -4,7 +4,7 @@ import type { PlatformRole } from '../users/user.types';
 export const IS_PUBLIC_KEY = 'auth:public';
 export const ROLES_KEY = 'auth:roles';
 
-/** Skip authentication (health checks and login only). */
+/** Skip authentication (health checks, login, and the ORCID OAuth callback). */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
 /** Require one of these roles in addition to being signed in. */

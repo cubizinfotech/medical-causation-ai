@@ -239,6 +239,21 @@ export interface ResearchProviderSettings {
   web: WebResearchConfig;
 }
 
+/**
+ * Authorization-code OAuth for a signed-in app user. Separate from the
+ * ORCID client-credentials public-search provider.
+ */
+export interface OrcidOAuthSettings {
+  clientId?: string;
+  clientSecret?: string;
+  /** Public callback URL registered at orcid.org/developer-tools. */
+  redirectUri: string;
+  authorizeUrl: string;
+  tokenUrl: string;
+  timeoutMs: number;
+  stateTtlSeconds: number;
+}
+
 export interface WebResearchConfig {
   /** Provider ids to use. Unconfigured ones are skipped and reported. */
   providers: string[];
@@ -307,6 +322,7 @@ export interface RootConfig {
   auth: AuthSettings;
   jobs: JobsSettings;
   research: ResearchProviderSettings;
+  orcidOAuth: OrcidOAuthSettings;
   literature: LiteratureSearchSettings;
   caseRecords: CaseRecordsSettings;
   ewiDocuments: EwiDocumentsSettings;
