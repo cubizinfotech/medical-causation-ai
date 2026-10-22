@@ -87,7 +87,7 @@ const WEB_KIND_THEME: Record<string, (typeof QUESTION_THEMES)[number]> = {
 
 /** Stems that made earlier questions generic. A question using one is dropped. */
 const GENERIC_STEMS =
-  /\b(investigation file|collected record|collected status|finding ?key|finding f\d+|how should counsel weigh|jury should understand|this file does not|examination point|beyond what .{1,40} collected|this public (?:motion|order|recap filing|published opinion) contains|this directory lists all current|board certification is an annual certification|you are aware of that, correct)\b/i;
+  /\b(investigation file|collected record|collected status|finding ?key|finding f\d+|how should counsel weigh|jury should understand|this file does not|examination point|beyond what .{1,40} collected|this public (?:motion|order|recap filing|published opinion|opinion) contains|this directory lists all current|board certification is an annual certification|you are aware of that, correct|forensic psychological assessment(?:\s*&\s*neuropsychological evaluations)?\s+menu)\b/i;
 
 const SKIP_TITLE = /web research coverage|could not be read|coverage summary/i;
 
@@ -298,23 +298,34 @@ export function isValidDraft(draft: QuestionDraft): boolean {
 }
 
 /**
- * Stored questions may predate evidenceIds. They are printable when they
- * still name a source and are not generic filler.
+ * Maps a stored question onto the draft validator so rebuild uses the same
+ * identifier, contact-dump, and boilerplate rules as new generation.
  */
-export function questionIsGrounded(question: CrossExamQuestion): boolean {
-  const text = question.question.trim();
-  if (text.length < 30 || !text.endsWith('?')) return false;
-  if (
-    GENERIC_STEMS.test(text) ||
-    GENERIC_STEMS.test(question.evidenceBasis ?? '')
-  ) {
-    return false;
-  }
-  if (!question.evidenceBasis?.trim()) return false;
+export function draftFromStoredQuestion(
+  question: CrossExamQuestion,
+): QuestionDraft {
   const sources = question.sources ?? [];
-  const ids = question.evidenceIds ?? [];
-  if (sources.length === 0 && ids.length === 0) return false;
-  return sources.every((source) => source.name.trim().length > 0);
+  const evidenceIds = uniqueStrings([
+    ...(question.evidenceIds ?? []),
+    ...sources.map((source) => source.url ?? source.name),
+  ]);
+  return {
+    theme: question.category,
+    question: question.question,
+    label: question.label ?? 'unresolved',
+    sources,
+    evidenceBasis: question.evidenceBasis ?? '',
+    anchors: question.excerpt ? [question.excerpt.slice(0, 50)] : [],
+    evidenceIds,
+    basisKind: question.basisKind ?? 'sourced_fact',
+    relevance: question.relevance ?? '',
+    excerpt: question.excerpt,
+  };
+}
+
+/** A stored question is printable only when it would pass new-draft checks. */
+export function questionIsGrounded(question: CrossExamQuestion): boolean {
+  return isValidDraft(draftFromStoredQuestion(question));
 }
 
 function isUsableEvidence(item: ExpertEvidenceItem): boolean {
@@ -486,6 +497,9 @@ function isContactDump(text: string): boolean {
   const value = text.trim();
   if (!value) return false;
   const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value);
+  const hasPhone = /\b(?:tel\.?|telephone|phone)\b.{0,16}\(?\d{3}\)?/i.test(
+    value,
+  );
   const hasStreet =
     STREET_ONLY.test(value) ||
     /\d+\s+[\w.'-]+.+\b(?:street|st\.?|avenue|ave\.?|boulevard|blvd\.?|drive|dr\.?|road|rd\.?|lane|ln\.?|way|suite)\b/i.test(
@@ -496,7 +510,7 @@ function isContactDump(text: string): boolean {
       value,
     );
   if (material) return false;
-  if (hasEmail) return true;
+  if (hasEmail || hasPhone) return true;
   return hasStreet && value.length < 220;
 }
 

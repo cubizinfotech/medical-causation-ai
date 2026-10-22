@@ -19,6 +19,7 @@ export type {
 export { authorPositionIn, describePosition } from './live/author-position';
 export {
   captionFromDocketUrl,
+  captionSlugIsReliable,
   resolveCaseCaption,
 } from './live/case-caption';
 export type { CaptionStatus } from './live/case-caption';

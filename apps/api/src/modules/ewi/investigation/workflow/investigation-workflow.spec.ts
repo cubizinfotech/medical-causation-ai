@@ -444,10 +444,10 @@ describe('investigation workflow', () => {
       access: 'restricted',
       outcome: 'restricted',
     });
-    expect(attempt.attemptStatus).toBe('restricted');
+    expect(attempt.attemptStatus).toBe('unavailable');
     expect(attempt.disposition).toBe('paid_access');
-    expect(attempt.coverage).toBe('blocked_or_access_denied');
-    expect(attempt.checked).toBe(true);
+    expect(attempt.coverage).toBe('not_implemented');
+    expect(attempt.checked).toBe(false);
   });
 
   it('records implemented empty searches separately from unimplemented and failed sources', () => {

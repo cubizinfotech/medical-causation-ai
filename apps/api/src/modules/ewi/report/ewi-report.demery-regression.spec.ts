@@ -228,6 +228,8 @@ describe('Demery report regression', () => {
     const certifications = sectionText(document, 'board-certifications');
     expect(certifications).toMatch(/ABPP/);
     expect(certifications).not.toContain(GENERIC);
+    expect(certifications).not.toContain(ORDER);
+    expect(sectionText(document, 'ime')).not.toContain(ORDER);
     const organizations = sectionText(document, 'certification-orgs');
     expect(organizations).toMatch(
       /American Board of Professional Psychology|ABPP/,

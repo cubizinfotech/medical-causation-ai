@@ -8,9 +8,14 @@ import type { EwiInvestigationResult } from '../investigation/jobs/ewi-investiga
 import type { CvCheck, CvComparison } from '../cv/cv.types';
 import { isCatalogAbsenceFinding } from '../cv/cv-comparison';
 import {
-  buildGroundedCrossExamQuestions,
+  buildLegalResearchDossier,
+  type LegalResearchDossier,
+} from '../research/legal';
+import {
+  buildQuestionDrafts,
+  draftFromStoredQuestion,
+  finalizeQuestions,
   questionIsGrounded,
-  renumberQuestions,
 } from './ewi-report-questions';
 import type { EwiReportInput } from './ewi-pdf-report.service';
 import type { ReportSourceStatus } from './ewi-report.template';
@@ -39,7 +44,7 @@ export function prepareEwiReportInput(
     generatedAt: result.generatedAt,
     summary: result.summary,
     analysis: result.analysis?.document,
-    legalResearch: result.legalResearch,
+    legalResearch: legalResearchForReport(result),
     onlinePresence: result.onlinePresence,
     professionalBackground: result.professionalBackground,
     identity: result.identity ?? null,
@@ -96,59 +101,102 @@ function discrepanciesForReport(
   );
 }
 
+/**
+ * Rebuilds the legal dossier from stored evidence so docket URL slugs can
+ * supply captions that were unresolved when the investigation finished.
+ * Source-attempt rows stay as recorded. Findings rows are not written.
+ */
+function legalResearchForReport(
+  result: EwiInvestigationResult,
+): LegalResearchDossier | undefined {
+  const stored = result.legalResearch;
+  const evidence = result.evidence ?? [];
+  if (evidence.length === 0) return stored;
+  const rebuilt = buildLegalResearchDossier({ evidence });
+  if (stored?.sourceAttempts?.length) {
+    return { ...rebuilt, sourceAttempts: stored.sourceAttempts };
+  }
+  return rebuilt;
+}
+
 function questionsForReport(
   result: EwiInvestigationResult,
   discrepancies: ExpertDiscrepancy[],
 ): { questions: CrossExamQuestion[]; note?: string } {
   const stored = result.questions ?? [];
-  const grounded = stored.filter(
-    (question) =>
-      questionIsGrounded(question) && !STALE_QUESTION.test(question.question),
-  );
-  if (stored.length > 0 && grounded.length === stored.length) {
-    return { questions: stored };
-  }
-  if (grounded.length > 0) {
-    return {
-      questions: renumberQuestions(grounded),
-      note: 'Questions that could not be tied to collected evidence were omitted from this report. Stored investigation records were not changed.',
-    };
-  }
-  const questions = buildGroundedCrossExamQuestions({
+  const generatedInput = {
     expertName: result.expertName,
     evidence: result.evidence ?? [],
     discrepancies,
     cvCheck: result.cvCheck,
     sourceStatuses: result.sourceStatuses,
-  });
-  if (stored.length === 0 && questions.length === 0) {
-    return { questions: [] };
-  }
+  };
+  const storedDrafts = stored
+    .filter(
+      (question) =>
+        questionIsGrounded(question) && !STALE_QUESTION.test(question.question),
+    )
+    .map(draftFromStoredQuestion);
+  const generatedDrafts = buildQuestionDrafts(generatedInput);
+  const legalDrafts = generatedDrafts.filter(
+    (draft) => draft.theme === 'Prior testimony and legal matters',
+  );
+
   if (stored.length === 0) {
+    const questions = finalizeQuestions(generatedDrafts);
+    if (questions.length === 0) return { questions: [] };
     return {
       questions,
       note: 'These questions were generated from the current collected evidence. Stored investigation records were not changed.',
     };
   }
-  return {
-    questions,
-    note: 'These questions were generated from the current collected evidence. Earlier template-generated questions from a previous report version are not reprinted.',
-  };
+
+  if (storedDrafts.length === 0) {
+    const questions = finalizeQuestions(generatedDrafts);
+    return {
+      questions,
+      note: 'These questions were generated from the current collected evidence. Earlier template-generated questions from a previous report version are not reprinted.',
+    };
+  }
+
+  const fromStoredOnly = finalizeQuestions(storedDrafts);
+  const questions = finalizeQuestions([...storedDrafts, ...legalDrafts]);
+  const omitted = storedDrafts.length < stored.length;
+  const addedLegal = questions.length > fromStoredOnly.length;
+  if (!omitted && !addedLegal) {
+    return { questions };
+  }
+  const parts: string[] = [];
+  if (omitted) {
+    parts.push(
+      'Questions that could not be tied to collected evidence were omitted from this report.',
+    );
+  }
+  if (addedLegal) {
+    parts.push(
+      'Legal questions were generated from collected filings using the current captions.',
+    );
+  }
+  parts.push('Stored investigation records were not changed.');
+  return { questions, note: parts.join(' ') };
 }
 
 function sourceStatusesForReport(
   result: EwiInvestigationResult,
 ): ReportSourceStatus[] {
   return (result.sourceStatuses ?? []).map((status) => {
-    const coverage: ResearchCoverage =
-      status.coverage ??
-      researchCoverageFor({
-        status: status.status,
-        outcome: status.outcome,
-        message: status.message,
-        itemCount: status.itemCount,
-        skipped: status.attemptStatus === 'skipped',
-      });
+    const coverage: ResearchCoverage = researchCoverageFor({
+      status: status.status,
+      outcome: status.outcome,
+      message: status.message,
+      itemCount: status.itemCount,
+      skipped: status.attemptStatus === 'skipped',
+    });
+    const checked =
+      coverage === 'searched_with_results' ||
+      coverage === 'searched_no_results' ||
+      coverage === 'failed' ||
+      coverage === 'blocked_or_access_denied';
     return {
       sourceId: status.sourceId,
       status: status.status,
@@ -156,11 +204,7 @@ function sourceStatusesForReport(
       coverage,
       message: status.message,
       itemCount: status.itemCount,
-      checked:
-        coverage === 'searched_with_results' ||
-        coverage === 'searched_no_results' ||
-        coverage === 'failed' ||
-        coverage === 'blocked_or_access_denied',
+      checked,
       retrievedAt: status.retrievedAt,
     };
   });

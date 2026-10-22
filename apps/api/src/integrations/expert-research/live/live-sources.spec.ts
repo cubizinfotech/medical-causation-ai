@@ -571,8 +571,9 @@ describe('CourtListener live source', () => {
     ]);
     const result = await get('courtlistener').search(query);
     expect(result.items[0].title).not.toMatch(/Unnamed case/i);
-    expect(result.items[0].raw?.captionStatus).toBe('from_source');
-    expect(result.items[0].raw?.caseName).toMatch(/United States v\. Butl/i);
+    expect(result.items[0].title).not.toMatch(/United States v\. Butl/i);
+    expect(result.items[0].raw?.captionStatus).toBe('unresolved');
+    expect(result.items[0].raw?.caseName).toMatch(/Caption not listed/i);
   });
 
   it('stores the Head Kandy Daubert motion once when three attachments are returned', async () => {
@@ -735,12 +736,19 @@ describe('court opinion helpers', () => {
     });
     expect(
       resolveCaseCaption({
-        absolute_url:
-          '/docket/66837428/431/head-kandy-llc-v-mcneill/',
+        absolute_url: '/docket/66837428/431/head-kandy-llc-v-mcneill/',
       }),
     ).toEqual({
       name: 'Head Kandy LLC v. Mcneill',
       status: 'from_source',
+    });
+    expect(
+      resolveCaseCaption({
+        absolute_url: '/docket/6664619/49/1/united-states-v-butl',
+      }),
+    ).toEqual({
+      name: 'Caption not listed on this search result',
+      status: 'unresolved',
     });
     expect(
       resolveCaseCaption({

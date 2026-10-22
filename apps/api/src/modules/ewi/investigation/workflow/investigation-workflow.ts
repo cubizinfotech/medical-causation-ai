@@ -182,8 +182,11 @@ export function describeResearchStage(
       attempt.checked &&
       attempt.access !== 'restricted',
   );
-  const neverSent = restricted.filter(
-    (attempt) => !blocked.some((entry) => entry.sourceId === attempt.sourceId),
+  const neverSent = attempts.filter(
+    (attempt) =>
+      attempt.access === 'restricted' &&
+      !attempt.checked &&
+      !blocked.some((entry) => entry.sourceId === attempt.sourceId),
   );
   if (blocked.length > 0) {
     const names = blocked.map((attempt) => attempt.sourceId).join(', ');
@@ -229,8 +232,9 @@ export function describeResearchStage(
   }
   const unimplemented = attempts.filter(
     (attempt) =>
-      attempt.coverage === 'not_implemented' ||
-      attempt.coverage === 'not_configured',
+      (attempt.coverage === 'not_implemented' ||
+        attempt.coverage === 'not_configured') &&
+      !neverSent.some((entry) => entry.sourceId === attempt.sourceId),
   );
   if (unimplemented.length > 0) {
     parts.push(

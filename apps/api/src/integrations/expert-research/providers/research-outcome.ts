@@ -32,11 +32,9 @@ export function researchOutcomeFor(input: {
     return 'authentication_required';
   }
   if (input.status === 'error') return 'api_failure';
-  if (
-    input.status === 'no_result' ||
-    (input.status === 'ok' && input.itemCount === 0)
-  ) {
-    return 'no_result';
+  if (input.status === 'no_result') return 'no_result';
+  if (input.status === 'ok' && input.itemCount === 0) {
+    return 'unavailable';
   }
   if (input.status === 'skipped') return 'unavailable';
   if (input.status === 'unavailable') return 'unavailable';
@@ -60,6 +58,14 @@ export function researchCoverageFor(input: {
   // Historical rows may store outcome=restricted even when no request was sent.
   if (NOT_CONFIGURED.test(message)) return 'not_configured';
   if (NOT_IMPLEMENTED.test(message)) return 'not_implemented';
+  if (neverContactedRestricted(input)) return 'not_implemented';
+  if (
+    input.status === 'ok' &&
+    itemCount === 0 &&
+    input.outcome !== 'no_result'
+  ) {
+    return 'pending';
+  }
   const outcome =
     input.outcome && isResearchOutcome(input.outcome)
       ? input.outcome
@@ -70,6 +76,28 @@ export function researchCoverageFor(input: {
           itemCount,
         });
   return coverageFromOutcome(outcome, input.status, itemCount);
+}
+
+/** Restricted catalogs with no attempt are not empty searches or access walls. */
+function neverContactedRestricted(input: {
+  status?: string | null;
+  outcome?: string | null;
+  itemCount?: number;
+  access?: string | null;
+}): boolean {
+  if ((input.itemCount ?? 0) > 0) return false;
+  if (
+    input.status === 'error' ||
+    input.status === 'no_result' ||
+    input.status === 'ok'
+  ) {
+    return false;
+  }
+  return (
+    input.access === 'restricted' ||
+    input.outcome === 'restricted' ||
+    input.outcome === 'authentication_required'
+  );
 }
 
 export function coverageFromOutcome(
@@ -96,10 +124,12 @@ export function coverageFromOutcome(
   if (outcome === 'no_result' || status === 'no_result') {
     return 'searched_no_results';
   }
-  if (itemCount > 0 || outcome === 'success' || outcome === 'conflicting') {
+  if (itemCount > 0 || outcome === 'conflicting') {
     return 'searched_with_results';
   }
-  if (status === 'ok' && itemCount === 0) return 'searched_no_results';
+  if (outcome === 'success' && itemCount > 0) {
+    return 'searched_with_results';
+  }
   return 'pending';
 }
 

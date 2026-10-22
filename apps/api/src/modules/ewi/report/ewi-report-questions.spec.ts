@@ -9,6 +9,7 @@ import {
   buildQuestionDrafts,
   finalizeQuestions,
   isValidDraft,
+  questionIsGrounded,
   type QuestionDraft,
 } from './ewi-report-questions';
 
@@ -222,11 +223,47 @@ describe('evidence-based cross-examination questions', () => {
       isValidDraft({
         ...base,
         question:
+          'Can you confirm if Legal cases (CourtListener) reports: “This public opinion contains Jason A. Demery”?',
+        excerpt:
+          'This public opinion contains Jason A. Demery and a Neuropsychology term.',
+        evidenceBasis:
+          'Unresolved. CourtListener: “This public opinion contains Jason A. Demery”',
+      }),
+    ).toBe(false);
+    expect(
+      isValidDraft({
+        ...base,
+        question:
+          'Does the 2018-06-13 entry on neuropsychologicalsciences.com state: “Neuropsychological Sciences contact Jason A. Demery, Ph.D., ABPP-CN Tel. (352) 359”?',
+        excerpt:
+          'Neuropsychological Sciences contact Jason A. Demery, Ph.D., ABPP-CN Tel. (352) 359',
+      }),
+    ).toBe(false);
+    expect(
+      isValidDraft({
+        ...base,
+        question:
           'The Gainesville clinic page lists you as a neuropsychologist.',
       }),
     ).toBe(false);
     expect(isValidDraft({ ...base, evidenceIds: [] })).toBe(false);
     expect(finalizeQuestions([base, { ...base }])).toHaveLength(1);
+    expect(
+      questionIsGrounded({
+        number: 1,
+        category: 'Background and credentials',
+        question:
+          'NPI Registry (NPPES) lists license PY7500 as self-reported. Can you produce the official board record for PY7500?',
+        evidenceBasis:
+          'Unresolved. NPI Registry (NPPES): “PY7500” https://example.test/npi',
+        label: 'unresolved',
+        sources: [
+          { name: 'NPI Registry (NPPES)', url: 'https://example.test/npi' },
+        ],
+        evidenceIds: ['https://example.test/npi'],
+        excerpt: 'PY7500',
+      }),
+    ).toBe(true);
   });
 
   it('builds a question from a CV conflict and skips unverifiable rows', () => {
@@ -800,6 +837,7 @@ describe('question polisher', () => {
     expect(text).not.toMatch(/You are aware of that, correct\?/i);
     expect(text).not.toMatch(/This directory lists all current/i);
     expect(text).not.toMatch(/This public motion contains/i);
+    expect(text).not.toMatch(/This public opinion contains/i);
     expect(text).toMatch(/Head Kandy LLC v\. Mcneill/);
     const about = questions.filter((question) =>
       question.sources?.some((source) =>

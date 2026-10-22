@@ -129,6 +129,18 @@ const CRIMINAL_RECORD_KINDS: ReadonlySet<WebSourceKind> = new Set([
   'blog',
 ]);
 
+/** Topics that must not be inferred from a court filing or Justia page. */
+const TOPICS_NOT_FROM_COURT_CLAIMS = new Set<string>([
+  'board_certification',
+  'certification_org',
+  'license',
+  'education',
+  'ime',
+  'advertising',
+  'deposition',
+  'testimony',
+]);
+
 const SECTION_VERIFICATION: Partial<Record<RoutedSectionId, WebClaimTopic>> = {
   'board-certifications': 'board_certification',
   'certification-orgs': 'board_certification',
@@ -350,6 +362,14 @@ export function routeWebFindings(
         if (!official?.topics.includes('license')) continue;
       }
       if (claim.topic === 'grant' && record.kind === 'publication') {
+        continue;
+      }
+      // A court filing that mentions "board certified" is not board-certification
+      // verification, a license lookup, an IME listing, or a degree record.
+      if (
+        (record.kind === 'court' || record.kind === 'justia') &&
+        TOPICS_NOT_FROM_COURT_CLAIMS.has(claim.topic ?? '')
+      ) {
         continue;
       }
       for (const sectionId of sectionsFor(claim)) {

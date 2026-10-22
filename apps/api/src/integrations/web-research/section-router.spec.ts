@@ -168,6 +168,49 @@ describe('routeWebFindings', () => {
     ).toBe(true);
   });
 
+  it('does not file a Justia or PACER page as board-certification or IME verification', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'justia-order',
+          'https://law.justia.com/cases/federal/district-courts/florida/flmdce/6:2023cv02315/437798/52/',
+          'justia',
+          [
+            claim(
+              'board_certification',
+              'Jason Demery, Ph.D., ABPP, a board-certified clinical neuropsychologist',
+            ),
+            claim(
+              'ime',
+              'A federal court order granted a motion to compel a compulsory medical examination',
+            ),
+          ],
+          'possible',
+          'UNITED STATES DISTRICT COURT MIDDLE DISTRICT OF FLORIDA',
+        ),
+        record(
+          'pacer',
+          'https://ecf.flmd.uscourts.gov/cgi-bin/show_public_doc?2023-02540-26-8-cv',
+          'court',
+          [
+            claim(
+              'board_certification',
+              'board-certified clinical neuropsychologist',
+            ),
+            claim('ime', 'compulsory medical examination of a plaintiff'),
+          ],
+          'possible',
+          'Order granting motion to compel CME',
+        ),
+      ]),
+    );
+    expect(routed.get('board-certifications')).toBeUndefined();
+    expect(routed.get('certification-orgs')).toBeUndefined();
+    expect(routed.get('ime')).toBeUndefined();
+    expect(routed.get('licenses')).toBeUndefined();
+    expect(routed.get('orders')?.length).toBeGreaterThan(0);
+  });
+
   it('does not file a homicide research paper as a criminal record', () => {
     const routed = routeWebFindings(
       dossier([

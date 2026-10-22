@@ -2,7 +2,7 @@
 
 This page follows one Expert Witness Investigation through the code: what the browser does, what the API does, where data is stored, and how the finished results and the PDF report get back to the attorney.
 
-For the product overview, see [how-it-works.md](./how-it-works.md). For the causation-analysis flow, see [mca-workflow.md](./mca-workflow.md).
+For the product overview, see [how-it-works.md](./how-it-works.md). For the causation-analysis flow, see [mca-workflow.md](./mca-workflow.md). For the runtime-versus-catalog audit, provider register, and per-investigation cost notes, see [ewi/README.md](./ewi/README.md).
 
 ## The short version
 

@@ -1003,6 +1003,73 @@ describe('EWI report source coverage', () => {
     expect(depositions).not.toMatch(/CourtListener/i);
   });
 
+  it('prints pending, never-sent Lexis, explicit no-results, and an access wall differently', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-22T00:00:00.000Z',
+      sourceStatuses: [
+        {
+          sourceId: 'youtube',
+          status: 'ok',
+          coverage: 'pending',
+          itemCount: 0,
+          checked: false,
+        },
+        {
+          sourceId: 'pubmed',
+          status: 'no_result',
+          coverage: 'searched_no_results',
+          itemCount: 0,
+          checked: true,
+        },
+        {
+          sourceId: 'lexisnexis',
+          status: 'unavailable',
+          coverage: 'not_implemented',
+          message:
+            'Not searched. LexisNexis is restricted. No request was sent.',
+          itemCount: 0,
+          checked: false,
+        },
+        {
+          sourceId: 'justia',
+          status: 'error',
+          coverage: 'blocked_or_access_denied',
+          message: 'Justia presented a bot-protection or access wall.',
+          itemCount: 0,
+          checked: true,
+        },
+      ],
+    });
+    const videos =
+      document.sections
+        .find((section) => section.id === 'videos')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(videos).toMatch(/has not been searched yet/i);
+    expect(videos).not.toMatch(/returned no matching record/i);
+    const publications =
+      document.sections
+        .find((section) => section.id === 'publications')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(publications).toMatch(/returned no matching record/i);
+    const lawsuits =
+      document.sections
+        .find((section) => section.id === 'lawsuits')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(lawsuits).toMatch(/LexisNexis is not implemented/i);
+    expect(lawsuits).not.toMatch(/LexisNexis could not be accessed/i);
+    expect(lawsuits).toMatch(/Justia could not be accessed/i);
+    expect(lawsuits).not.toMatch(/no request was sent/i);
+  });
+
   it('does not treat a global web run as a review of every category', () => {
     const document = buildEwiReportDocument({
       expertName: 'Jane Doe',
@@ -1227,7 +1294,8 @@ describe('EWI report source coverage', () => {
           sourceId: 'other_public_websites',
           category: 'license',
           title: 'WebMD license blurb',
-          summary: 'Dr. Jason A Demery holds an active medical license in the state of Florida.',
+          summary:
+            'Dr. Jason A Demery holds an active medical license in the state of Florida.',
           url: 'https://doctor.webmd.com/doctor/jason-demery',
           informationStatus: 'unverified',
         },

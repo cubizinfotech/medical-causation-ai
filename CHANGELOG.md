@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (2026-10-22): court pages no longer file as board certification
+
+- A Justia or PACER page that mentions “board certified,” an IME, or testimony is no longer routed into Board Certifications, Licenses, Education, IME, or Testimony inconsistencies. Those claims still belong on the expert’s own site or an issuing-body page. Orders and motions still file under Orders / Pleadings by document type.
+- Provider audit, register, and cost notes: `docs/ewi/`. Paid APIs, PACER fetch, YouTube Data API, and the live 3.9.0 Demery PDF were not changed.
+
 ### Fixed (2026-10-19): red spell-check lines in the Word reports
 
 - Word underlined identifiers as misspelled: `board_certification`, `source:board_certification`, `courtlistener`, web addresses. The Word export now marks them "do not check spelling" (`w:noProof`): words with an underscore, references such as `source:pubmed`, paths, links, source and category names (the EWI template passes the research catalog's names), and whole source lines (Basis, Source refs, source index). Ordinary words in the same sentence are still checked, so edits are still spell-checked.

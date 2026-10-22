@@ -43,8 +43,13 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * 3.9.1: docket URL slugs supply missing captions; unofficial pages are not
  * license verification; empty video searches are not reused prior hits;
  * identifier, contact-dump, and repetitive biography questions are dropped.
+ * 3.9.2: rebuild re-normalizes captions from stored evidence URLs; truncated
+ * docket slugs stay unresolved; stored questions use the same filters as new
+ * drafts and can be supplemented with caption-aware legal questions; empty
+ * `ok` results are not treated as completed searches; never-sent restricted
+ * catalogs are not checked.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.9.1';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.9.2';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis and other licensed PDFs are not stored unless legally permitted.';

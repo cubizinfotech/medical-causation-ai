@@ -124,6 +124,66 @@ describe('researchOutcomeFor / researchCoverageFor', () => {
     ).toBe('not_implemented');
   });
 
+  it('does not treat an ok result with zero items as a completed empty search', () => {
+    expect(
+      researchCoverageFor({
+        status: 'ok',
+        outcome: 'success',
+        itemCount: 0,
+      }),
+    ).toBe('pending');
+    expect(
+      researchOutcomeFor({
+        status: 'ok',
+        access: 'public',
+        itemCount: 0,
+      }),
+    ).toBe('unavailable');
+  });
+
+  it('keeps an explicit no_result status as searched_no_results', () => {
+    expect(
+      researchCoverageFor({
+        status: 'no_result',
+        itemCount: 0,
+        message: 'PubMed returned no record.',
+      }),
+    ).toBe('searched_no_results');
+  });
+
+  it('keeps an attempted public access wall distinct from a never-sent catalog', () => {
+    expect(
+      researchCoverageFor({
+        status: 'error',
+        outcome: 'restricted',
+        access: 'public',
+        message: 'Justia presented a bot-protection or access wall.',
+        itemCount: 0,
+      }),
+    ).toBe('blocked_or_access_denied');
+    expect(
+      researchCoverageFor({
+        status: 'unavailable',
+        outcome: 'restricted',
+        access: 'restricted',
+        message: 'Not searched. LexisNexis is restricted. No request was sent.',
+        itemCount: 0,
+      }),
+    ).toBe('not_implemented');
+  });
+
+  it('does not mark a never-contacted restricted catalog as checked coverage', () => {
+    expect(
+      researchCoverageFor({
+        status: 'unavailable',
+        outcome: 'restricted',
+        access: 'restricted',
+        message: 'Authorized access required',
+        itemCount: 0,
+      }),
+    ).toBe('not_implemented');
+  });
+
   it('classifies rate limits as failed, not as empty searches', () => {
     expect(
       researchCoverageFor({

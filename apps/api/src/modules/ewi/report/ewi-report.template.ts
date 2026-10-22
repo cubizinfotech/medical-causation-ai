@@ -775,6 +775,7 @@ const SECTION_SOURCES: Partial<Record<RoutedSectionId, string[]>> = {
   lawsuits: [
     'courtlistener',
     'justia',
+    'lexisnexis',
     'malpractice_records',
     'state_court_records',
   ],
@@ -957,16 +958,17 @@ function withWebFindings(
   if (verification && (findings.length > 0 || own.length > 0)) {
     blocks.push(...verificationBlocks(verification));
   }
+  const coverage = structuredCoverage(section.id, statuses);
   if (blocks.length === 0) {
     blocks.push({
-      text: coverageLine(
-        dossier,
-        section.id,
-        structuredCoverage(section.id, statuses),
-        expertName,
-      ),
+      text: coverageLine(dossier, section.id, coverage, expertName),
       style: 'note',
     });
+  } else {
+    for (const line of coverage) {
+      if (/returned records in other sections/i.test(line)) continue;
+      blocks.push({ text: line, style: 'note' });
+    }
   }
   return { ...section, blocks };
 }
@@ -1790,6 +1792,12 @@ function pleadingsSection(
       style: 'subheading',
     });
     blocks.push({ text: filing.description });
+    if (isSearchSnippetMatter(filing.matter)) {
+      blocks.push({
+        text: 'Taken from a search result; the full document was not read.',
+        style: 'note',
+      });
+    }
     if (filing.matter.caseName) {
       blocks.push({ text: `Case: ${filing.matter.caseName}` });
     }
@@ -2672,24 +2680,42 @@ function isOpenPaymentsTotals(record: ProfessionalRecord): boolean {
   );
 }
 
+const SEARCH_SNIPPET =
+  /search snippet|search-result summary|taken from a search result/i;
+
+function isSearchSnippetMatter(matter: LegalMatter): boolean {
+  return SEARCH_SNIPPET.test(
+    `${matter.summary ?? ''} ${matter.shortDescription ?? ''} ${matter.findingsRegardingExpert ?? ''}`,
+  );
+}
+
 function orderDetailBlocks(matter: LegalMatter): ReportBlock[] {
   const blocks: ReportBlock[] = [];
+  const snippet = isSearchSnippetMatter(matter);
   const fields = [
     matter.caseName ? `Case: ${matter.caseName}` : null,
     matter.caseNumber ? `Case number: ${matter.caseNumber}` : null,
     matter.documentDate || matter.filingDate
       ? `Date: ${matter.documentDate ?? matter.filingDate}`
       : null,
-    matter.findingsRegardingExpert
-      ? `Finding: ${matter.findingsRegardingExpert}`
-      : matter.shortDescription
-        ? `Finding: ${matter.shortDescription}`
-        : matter.summary && !matter.restricted
-          ? `Finding: ${matter.summary}`
-          : null,
+    snippet
+      ? null
+      : matter.findingsRegardingExpert
+        ? `Finding: ${matter.findingsRegardingExpert}`
+        : matter.shortDescription
+          ? `Finding: ${matter.shortDescription}`
+          : matter.summary && !matter.restricted
+            ? `Finding: ${matter.summary}`
+            : null,
     `Evidence reference: ${matter.evidenceReference}`,
   ].filter((line): line is string => Boolean(line));
   for (const line of fields) blocks.push({ text: line });
+  if (snippet) {
+    blocks.push({
+      text: 'Taken from a search result; the full document was not read.',
+      style: 'note',
+    });
+  }
   if (matter.restricted) {
     blocks.push({
       text: 'Restricted source. Authorized access only. Content body and LexisNexis PDFs are not stored.',
