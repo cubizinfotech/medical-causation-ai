@@ -5,7 +5,7 @@ import type {
 } from '../expert-research.types';
 import { parseCityState } from './location';
 import { parsePersonName, type PersonName } from './person-name';
-import { specialtyOverlaps } from './specialty-match';
+import { searchProfessionPhrase, specialtyOverlaps } from './specialty-match';
 import { LiveResearchProvider, type LiveRunResult } from './live-provider.base';
 import {
   YoutubeClient,
@@ -196,7 +196,7 @@ export function buildYoutubeQuery(
   query: ExpertResearchQuery,
   name: PersonName,
 ): string {
-  const specialty = query.specialty.trim();
+  const specialty = searchProfessionPhrase(query.specialty);
   const person = `"${capitalize(name.first)} ${capitalize(name.last)}"`;
   return specialty ? `${person} ${specialty}` : person;
 }

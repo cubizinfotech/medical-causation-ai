@@ -161,6 +161,12 @@ describe('YouTube name and evidence matching', () => {
 
   it('quotes the expert name in the search query', () => {
     expect(buildYoutubeQuery(query, name)).toBe('"Jane Smith" Neurology');
+    expect(
+      buildYoutubeQuery(
+        { ...query, specialty: 'Clinical & Forensic Neuropsychologist' },
+        name,
+      ),
+    ).toBe('"Jane Smith" Neuropsychologist');
   });
 });
 

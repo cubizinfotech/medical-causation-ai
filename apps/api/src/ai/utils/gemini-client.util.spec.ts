@@ -1,4 +1,38 @@
-import { resolveGeminiEmbeddingModel } from './gemini-client.util';
+import {
+  resolveGeminiApiKey,
+  resolveGeminiEmbeddingModel,
+  usableGeminiApiKey,
+} from './gemini-client.util';
+
+describe('usableGeminiApiKey', () => {
+  const warn = jest.spyOn(console, 'warn').mockImplementation();
+
+  afterEach(() => {
+    warn.mockClear();
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+  });
+
+  afterAll(() => {
+    warn.mockRestore();
+  });
+
+  it('keeps a full Gemini or Google AI key', () => {
+    expect(usableGeminiApiKey('AQ.' + 'x'.repeat(40))).toMatch(/^AQ\./);
+    expect(usableGeminiApiKey('AIza' + 'y'.repeat(35))).toMatch(/^AIza/);
+  });
+
+  it('drops a truncated key that lost the leading A', () => {
+    expect(usableGeminiApiKey('Q.' + 'x'.repeat(40))).toBeUndefined();
+    expect(usableGeminiApiKey('short')).toBeUndefined();
+    expect(usableGeminiApiKey('')).toBeUndefined();
+  });
+
+  it('does not resolve a truncated env key for Gemini clients', () => {
+    process.env.GEMINI_API_KEY = 'Q.' + 'x'.repeat(40);
+    expect(resolveGeminiApiKey()).toBe('');
+  });
+});
 
 describe('resolveGeminiEmbeddingModel', () => {
   const fallback = 'gemini-embedding-2';

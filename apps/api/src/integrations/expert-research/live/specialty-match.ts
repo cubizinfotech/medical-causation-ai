@@ -166,6 +166,22 @@ const SEARCH_EXPANSIONS: Record<string, string[]> = {
 };
 
 /**
+ * Operator-style search phrase. Long titles such as "Clinical & Forensic
+ * Neuropsychologist" keep the distinctive field word so Google and YouTube
+ * still match pages that only say "neuropsychologist".
+ */
+export function searchProfessionPhrase(specialty: string): string {
+  const trimmed = specialty.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return '';
+  const distinctive = trimmed.split(/\s+/).filter((word) => {
+    const bare = word.toLowerCase().replace(/[^a-z]/g, '');
+    return bare.length > 3 && !GENERIC_WORDS.has(bare);
+  });
+  if (distinctive.length <= 1) return trimmed;
+  return distinctive[distinctive.length - 1];
+}
+
+/**
  * Terms for a full-text search that should mention the specialty, e.g.
  * "Neurology" -> ["neurolog*"]. Any one term is enough. Empty when only
  * generic words are left.

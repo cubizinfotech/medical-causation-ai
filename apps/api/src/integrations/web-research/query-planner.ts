@@ -3,6 +3,7 @@ import {
   displayName,
 } from '../expert-research/live/person-name';
 import { parseCityState } from '../expert-research/live/location';
+import { searchProfessionPhrase } from '../expert-research/live/specialty-match';
 import { contextTerms, type IdentitySubject } from './identity-assess';
 import { officialSourceForAcronym } from './claim-topics';
 import type { SearchRequest, WebClaimTopic } from './web-research.types';
@@ -121,7 +122,9 @@ function nameClause(subject: IdentitySubject): {
  */
 export function planQueries(subject: IdentitySubject): PlannedQuery[] {
   const { clause, label } = nameClause(subject);
-  const profession = subject.specialty.trim();
+  const statedProfession = subject.specialty.trim();
+  const profession =
+    searchProfessionPhrase(statedProfession) || statedProfession;
   const { city, state } = parseCityState(subject.city || '');
   const place = [city, state].filter(Boolean).join(' ');
   const base = `${clause} ${profession}`.trim();
@@ -146,7 +149,7 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     });
   };
 
-  const subjectLine = `${label}, ${profession}${place ? `, ${place}` : ''}`;
+  const subjectLine = `${label}, ${statedProfession}${place ? `, ${place}` : ''}`;
 
   add('identity', {
     query: `${base}${where}`,
@@ -368,7 +371,8 @@ export function planFollowUps(
   signals: FollowUpSignals,
 ): PlannedQuery[] {
   const { clause, label } = nameClause(subject);
-  const profession = subject.specialty.trim();
+  const profession =
+    searchProfessionPhrase(subject.specialty) || subject.specialty.trim();
   const plans: PlannedQuery[] = [];
   const seen = new Set<string>();
   let counter = 0;

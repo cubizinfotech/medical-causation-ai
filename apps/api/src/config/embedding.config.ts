@@ -1,8 +1,9 @@
+import { resolveGeminiApiKey } from '@ai/utils/gemini-client.util';
 import type { EmbeddingConfigSettings } from './ai-config.types';
 import { DEFAULT_EMBEDDING_PROVIDER } from '@ai/constants';
 
 function resolveGoogleApiKey(): string {
-  return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
+  return resolveGeminiApiKey();
 }
 
 export const embeddingConfig = (): EmbeddingConfigSettings => ({

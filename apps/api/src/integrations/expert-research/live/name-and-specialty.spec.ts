@@ -6,6 +6,7 @@ import {
   personNameFromParts,
 } from './person-name';
 import {
+  searchProfessionPhrase,
   specialtyMatches,
   specialtySearchTerms,
   specialtyStems,
@@ -125,6 +126,16 @@ describe('specialty matching', () => {
       ),
     ).toBe(true);
     expect(taxonomyMatches('OB/GYN', 'Obstetrics & Gynecology')).toBe(true);
+  });
+
+  it('shortens a long specialty title to the field word for search', () => {
+    expect(
+      searchProfessionPhrase('Clinical & Forensic Neuropsychologist'),
+    ).toBe('Neuropsychologist');
+    expect(searchProfessionPhrase('Neuropsychology')).toBe('Neuropsychology');
+    expect(searchProfessionPhrase('Licensed electrician')).toBe(
+      'Licensed electrician',
+    );
   });
 
   it('expands phrases into words court opinions use', () => {

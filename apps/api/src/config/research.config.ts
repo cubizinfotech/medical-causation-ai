@@ -1,3 +1,4 @@
+import { usableGeminiApiKey } from '@ai/utils/gemini-client.util';
 import type { ResearchProviderSettings } from './config.types';
 
 function firstEnv(...names: string[]): string | undefined {
@@ -62,7 +63,7 @@ export const researchConfig = (): ResearchProviderSettings => {
       serperApiKey: process.env.SERPER_API_KEY?.trim() || undefined,
       braveApiKey: process.env.BRAVE_SEARCH_API_KEY?.trim() || undefined,
       tavilyApiKey: process.env.TAVILY_API_KEY?.trim() || undefined,
-      geminiApiKey: process.env.GEMINI_API_KEY?.trim() || undefined,
+      geminiApiKey: usableGeminiApiKey(process.env.GEMINI_API_KEY),
       geminiModel:
         process.env.WEB_SEARCH_GEMINI_MODEL?.trim() ||
         process.env.GEMINI_LLM_MODEL?.trim() ||

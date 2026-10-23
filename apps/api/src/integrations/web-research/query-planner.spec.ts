@@ -103,6 +103,17 @@ describe('planQueries', () => {
     expect(identity?.request.prompt).toContain('Jason A. Demery');
   });
 
+  it('searches a long specialty title by the field word', () => {
+    const identity = planQueries(
+      subject({ specialty: 'Clinical & Forensic Neuropsychologist' }),
+    ).find((plan) => plan.topic === 'identity');
+    expect(identity?.request.query).toContain('Neuropsychologist');
+    expect(identity?.request.query).not.toMatch(/Clinical & Forensic/);
+    expect(identity?.request.prompt).toContain(
+      'Clinical & Forensic Neuropsychologist',
+    );
+  });
+
   it('works for a profession that is not medical', () => {
     const plans = planQueries(
       subject({ specialty: 'Licensed electrician', city: 'Dallas, TX' }),

@@ -130,4 +130,13 @@ describe('researchConfig', () => {
     process.env.WEB_RESEARCH_DEADLINE_MS = '5000';
     expect(researchConfig().web.deadlineMs).toBe(60000);
   });
+
+  it('does not treat a truncated Gemini key as configured for web search', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    process.env.GEMINI_API_KEY = 'Q.' + 'x'.repeat(40);
+    expect(researchConfig().web.geminiApiKey).toBeUndefined();
+    process.env.GEMINI_API_KEY = 'AQ.' + 'x'.repeat(40);
+    expect(researchConfig().web.geminiApiKey).toMatch(/^AQ\./);
+    warn.mockRestore();
+  });
 });

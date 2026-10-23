@@ -1,3 +1,4 @@
+import { resolveGeminiApiKey } from '@ai/utils/gemini-client.util';
 import type { ProviderConfigSettings } from './ai-config.types';
 import type { AnthropicEffort } from './config.types';
 import { DEFAULT_LLM_PROVIDER } from '@ai/constants';
@@ -11,7 +12,7 @@ const ANTHROPIC_EFFORTS: readonly AnthropicEffort[] = [
 ];
 
 function resolveGoogleApiKey(): string {
-  return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
+  return resolveGeminiApiKey();
 }
 
 /** Causation analysis is accuracy-sensitive, so the default is "high". */

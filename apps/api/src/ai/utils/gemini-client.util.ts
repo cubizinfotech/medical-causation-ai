@@ -1,7 +1,35 @@
 import { GoogleGenAI } from '@google/genai';
 
+/** Google AI Studio keys start with AIza; Gemini keys start with AQ. */
+const GEMINI_KEY_SHAPE = /^(AIza|AQ\.)/;
+
+let warnedUnusableGeminiKey = false;
+
+/**
+ * Drop a truncated or pasted-wrong key so Gemini is treated as unconfigured
+ * instead of authenticating with a value that cannot succeed.
+ */
+export function usableGeminiApiKey(
+  value: string | undefined,
+): string | undefined {
+  const key = value?.trim();
+  if (!key) return undefined;
+  if (GEMINI_KEY_SHAPE.test(key) && key.length >= 32) return key;
+  if (!warnedUnusableGeminiKey) {
+    warnedUnusableGeminiKey = true;
+    console.warn(
+      'GEMINI_API_KEY does not look like a full Google AI key (expected AIza… or AQ.…). Gemini chat and web search will not use it.',
+    );
+  }
+  return undefined;
+}
+
 export function resolveGeminiApiKey(): string {
-  return process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
+  return (
+    usableGeminiApiKey(process.env.GEMINI_API_KEY) ??
+    usableGeminiApiKey(process.env.GOOGLE_API_KEY) ??
+    ''
+  );
 }
 
 /**
