@@ -8,6 +8,7 @@ import {
   createCatalogProviders,
   createExpertResearchRuntime,
   createPublicationLookup,
+  createTranscriptionEnricherFrom,
   ExpertResearchService,
 } from './expert-research.service';
 
@@ -45,6 +46,7 @@ export function webResearchLlmFrom(ai: AiService): WebResearchLlm {
           createCatalogProviders(runtime),
           createPublicationLookup(runtime),
           runtime.live?.webEngine ?? null,
+          createTranscriptionEnricherFrom(runtime),
         );
       },
       inject: [ConfigService, AiService],

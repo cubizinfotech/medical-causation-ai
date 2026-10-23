@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-10-23): always search for an expert profile photograph
+
+- Every investigation now runs a dedicated staff/faculty/practice photo search. A photo is used only when the page is already about this person, it is a practice, faculty, directory or review page (not news, court, video or social), and the image names the person or is marked as a headshot. Tracking pixels and site logos are skipped. If no such photo can be read, the report says so.
+
+### Fixed (2026-10-23): EWI investigations no longer freeze on the first stage
+
+- An API restart left the investigation locked for 30 minutes, so the UI stayed on Expert Identification. EWI now uses a 2-minute lock, force-closes the worker on shutdown, and reports each stage as soon as it starts. Web research is capped at 4 minutes so a run can finish in 5–7 minutes.
+
+### Changed (2026-10-23): deeper EWI public-web coverage (report 3.10.0)
+
+- Web search plans more topical queries (per-platform social including Instagram, DRI speaker pages, CV/first-author, extra directories, CHEA/USDE follow-ups). Serper and Brave request page 2 on high-value topics. Gemini grounding budget follows `WEB_SEARCH_MAX_QUERIES` (default 64). More pages are opened (`WEB_FETCH_MAX_PAGES` default 80). Serper is skipped for the rest of a run after a credit or auth failure, including HTTP 400 “Not enough credits.”
+- YouTube listings keep the watch URL and a caption-exists flag. AssemblyAI transcribes at most two direct public audio/video files (not YouTube). The Videos section explains when a transcript could not be made.
+- PubMed stores author position (default 40 articles). The Publications section includes a first-author / CV comparison table with source links.
+- CourtListener follows `next` pages. NPI-confirmed RECAP searches no longer drop filings that lack a specialty word. Orders and Pleadings coverage names CourtListener and Justia instead of unimplemented stubs.
+- Cross-examination questions target 100 evidence-based items. If fewer distinct facts exist, the report says why and names the extra evidence that would be needed. Facts are not invented to pad the list. A truncated catalog author list is labelled “unable to verify,” not confirmed first authorship.
+- Live development verification (new investigation `94aa5f4f`, not historic job `192fdaa2`): Serper no-credit responses are skipped for the rest of the run, including news-lead follow-up; NPI-confirmed RECAP filings stay unverified unless the filing also shows a credential, specialty, or place; a docket line that starts with MOTION is not classified as an order just because the snippet says “order.” Report 3.10.1 rebuilds the shortfall note so it names the extra evidence that would be needed.
+- Not deployed. Historic client PDFs were not overwritten.
+
+### Added (2026-10-23): YouTube Data API v3 and research credential wiring
+
+- Live EWI video research calls YouTube Data API v3 `search.list` / `videos.list` when `YOUTUBE_API_KEY` is set (title, channel, date, URL, description). Transcripts are not retrieved. Without a key, public web search for YouTube pages is unchanged.
+- `SERPER_API_KEY` remains the existing Serper web-search provider (not a replacement for Gemini grounding).
+- `ASSEMBLYAI_API_KEY` is read into config only. Transcription is not invoked: AssemblyAI does not accept a YouTube watch URL, and the app does not download restricted media.
+- CourtListener still uses `COURTLISTENER_API_TOKEN` (`Authorization: Token`); `COURTLISTENER_API_KEY` is an alias. PubMed still uses `PUBMED_API_KEY`; `NCBI_API_KEY` is an alias. OpenAlex still sends `api_key` as a query parameter.
+- Editing laptop `.env.live` does not update the live server until that file is copied to the droplet as `.env` and `mca-api` is restarted.
+
 ### Fixed (2026-10-22): court pages no longer file as board certification
 
 - A Justia or PACER page that mentions “board certified,” an IME, or testimony is no longer routed into Board Certifications, Licenses, Education, IME, or Testimony inconsistencies. Those claims still belong on the expert’s own site or an issuing-body page. Orders and motions still file under Orders / Pleadings by document type.

@@ -198,6 +198,53 @@ describe('WebResearchEngine', () => {
     expect(blocked?.match.level).not.toBe('strong');
   });
 
+  it('requests page 2 from Serper when page 1 returned hits', async () => {
+    const serper = fakeProvider('serper', allHits, { budget: 80 });
+    const dossier = await new WebResearchEngine({
+      settings: { ...settings, maxQueries: 8 },
+      providers: [serper],
+      fetcher: fakeFetcher(),
+    }).run(query);
+    const pages = serper.requests.map((request) => request.page ?? 1);
+    expect(pages).toContain(2);
+    expect(dossier.queriesRun).toBeGreaterThan(serper.requests.filter((r) => (r.page ?? 1) === 1).length);
+  });
+
+  it('stops calling Serper after a credit failure, including news-lead resolution', async () => {
+    let serperCalls = 0;
+    const serper = fakeProvider('serper', [], {
+      concurrency: 4,
+      budget: 80,
+      kinds: ['web', 'news', 'places', 'scholar'],
+      async search() {
+        serperCalls += 1;
+        throw new SearchProviderError(
+          'The search service reports no remaining credit (HTTP 400).',
+          'quota',
+          400,
+        );
+      },
+    });
+    const gemini = fakeProvider('gemini_grounding', [
+      hit(
+        'https://news.google.com/articles/abc',
+        'Demery testified',
+        'Published by Court TV.',
+      ),
+      ...allHits,
+    ]);
+    const dossier = await new WebResearchEngine({
+      settings: { ...settings, maxQueries: 20 },
+      providers: [serper, gemini],
+      fetcher: fakeFetcher(),
+    }).run(query);
+    expect(serperCalls).toBeLessThanOrEqual(4);
+    expect(
+      dossier.providers.find((provider) => provider.providerId === 'serper')
+        ?.failures[0]?.kind,
+    ).toBe('quota');
+  });
+
   it('records a failing provider and does not claim the web was searched', async () => {
     const failing = fakeProvider('broken', [], {
       async search() {
@@ -347,10 +394,13 @@ describe('WebResearchEngine', () => {
 
   it('keeps a public photo from a page about the expert', async () => {
     const photo = 'https://neuro-clinic.example/jason.png';
-    const png = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-      'base64',
-    );
+    const png = Buffer.concat([
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+      ),
+      Buffer.alloc(5_000, 0),
+    ]);
     const fetcher = {
       fetchPage: async (url: string): Promise<FetchedPage> => {
         const page =
@@ -384,6 +434,54 @@ describe('WebResearchEngine', () => {
     expect(dossier.portrait?.dataUrl.startsWith('data:image/png;base64,')).toBe(
       true,
     );
+    expect(dossier.limitations.join(' ')).not.toMatch(/photograph of this person/);
+  });
+
+  it('keeps a faculty headshot whose file name names the expert', async () => {
+    const faculty = 'https://med.ufl.edu/faculty/jason-demery';
+    const photo = 'https://med.ufl.edu/faculty/demery-headshot.jpg';
+    const jpeg = Buffer.alloc(6_000, 1);
+    const fetcher = {
+      fetchPage: async (url: string): Promise<FetchedPage> => {
+        if (url === faculty) {
+          return {
+            url: faculty,
+            finalUrl: faculty,
+            status: 'read',
+            note: null,
+            title: 'Jason A. Demery, Ph.D.',
+            description: null,
+            publishedAt: null,
+            text: 'Dr. Jason A. Demery is a clinical neuropsychologist on the University of Florida faculty in Gainesville.',
+            portraits: [{ url: photo, via: 'img', label: 'headshot' }],
+          };
+        }
+        return (
+          PAGES[url] ?? {
+            url,
+            finalUrl: url,
+            status: 'failed',
+            note: 'The page could not be reached.',
+          }
+        );
+      },
+      fetchImage: async (url: string) =>
+        url === photo
+          ? { url, mimeType: 'image/jpeg' as const, bytes: jpeg }
+          : null,
+    } as unknown as SafeFetcher;
+    const dossier = await new WebResearchEngine({
+      settings,
+      providers: [
+        fakeProvider('fake_search', [
+          hit(faculty, 'Jason A. Demery faculty', 'neuropsychologist Gainesville'),
+          ...allHits,
+        ]),
+      ],
+      fetcher,
+    }).run(query);
+    expect(dossier.portrait?.sourceUrl).toBe(faculty);
+    expect(dossier.portrait?.imageUrl).toBe(photo);
   });
 });
 

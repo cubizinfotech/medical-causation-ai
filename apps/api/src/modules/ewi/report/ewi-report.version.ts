@@ -48,8 +48,14 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * drafts and can be supplemented with caption-aware legal questions; empty
  * `ok` results are not treated as completed searches; never-sent restricted
  * catalogs are not checked.
+ * 3.10.0: deeper public-web search and pagination; YouTube caption flag and
+ * capped AssemblyAI transcripts of direct media; first-author/CV table;
+ * CourtListener pagination and honest pleadings/orders coverage; 100
+ * evidence-based questions with a shortfall explanation.
+ * 3.10.1: question shortfall names the extra evidence that would be needed;
+ * truncated catalog author lists are “unable to verify,” not first author.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.9.2';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.1';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis and other licensed PDFs are not stored unless legally permitted.';

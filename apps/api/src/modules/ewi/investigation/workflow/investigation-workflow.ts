@@ -364,6 +364,12 @@ export async function executeInvestigationWorkflow(
     }
 
     logger?.log(`EWI stage ${stage.id} started for ${request.expertName}`);
+    await report(
+      dependencies,
+      stage,
+      Math.max(1, Math.round((index / stages.length) * 100)),
+      `${stage.label}…`,
+    );
 
     if (stage.kind === 'identify') {
       const name = request.expertName?.trim() ?? '';

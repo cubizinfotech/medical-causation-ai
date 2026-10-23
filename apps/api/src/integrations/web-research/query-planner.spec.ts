@@ -16,6 +16,7 @@ describe('planQueries', () => {
     const topics = new Set(planQueries(subject()).map((plan) => plan.topic));
     for (const topic of [
       'identity',
+      'portrait',
       'directories',
       'news',
       'litigation',
@@ -50,6 +51,46 @@ describe('planQueries', () => {
     );
     expect(social?.request.prompt).toMatch(/institutional/i);
     expect(social?.request.prompt).toMatch(/https URL/i);
+  });
+
+  it('splits social search into per-platform site queries and paginates high-value topics', () => {
+    const plans = planQueries(subject());
+    const socialQueries = plans
+      .filter((plan) => plan.topic === 'social')
+      .map((plan) => plan.request.query);
+    expect(socialQueries.some((q) => q.includes('site:linkedin.com'))).toBe(
+      true,
+    );
+    expect(socialQueries.some((q) => q.includes('site:facebook.com'))).toBe(
+      true,
+    );
+    expect(socialQueries.some((q) => q.includes('site:instagram.com'))).toBe(
+      true,
+    );
+    expect(socialQueries.some((q) => q.includes('site:bsky.app'))).toBe(true);
+    expect(plans.some((plan) => plan.request.query.includes('site:dri.org') && /speaker|conference/.test(plan.request.query))).toBe(true);
+    expect(plans.some((plan) => plan.request.query.includes('site:abpp.org'))).toBe(true);
+    expect(plans.some((plan) => plan.request.query.includes('site:hgexperts.com'))).toBe(true);
+    const identity = plans.find((plan) => plan.topic === 'identity');
+    expect(identity?.paginate).toBe(true);
+    expect(identity?.request.num).toBe(20);
+  });
+
+  it('always searches for a staff or practice photograph', () => {
+    const portrait = planQueries(subject()).find(
+      (plan) => plan.topic === 'portrait',
+    );
+    expect(portrait?.request.query).toMatch(/headshot|profile photo|biography/i);
+    expect(portrait?.request.query).toMatch(/Neuropsychology/);
+    expect(portrait?.request.query).toMatch(/Gainesville/);
+    expect(portrait?.request.prompt).toMatch(/photograph/i);
+    const topics = planQueries(subject()).map((plan) => plan.topic);
+    expect(topics.indexOf('portrait')).toBeGreaterThan(
+      topics.indexOf('identity'),
+    );
+    expect(topics.indexOf('portrait')).toBeLessThan(
+      topics.indexOf('certification'),
+    );
   });
 
   it('uses the profession and the place to narrow the search', () => {
@@ -180,6 +221,12 @@ describe('planFollowUps', () => {
           p.request.query.includes('University of Florida'),
       ),
     ).toBe(true);
+    expect(plans.some((p) => p.request.query.includes('site:chea.org'))).toBe(
+      true,
+    );
+    expect(plans.some((p) => p.request.query.includes('site:ope.ed.gov'))).toBe(
+      true,
+    );
   });
 });
 

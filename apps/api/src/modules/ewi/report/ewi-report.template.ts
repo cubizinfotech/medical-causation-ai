@@ -471,7 +471,12 @@ export function buildEwiReportDocument(input: {
         );
       case 'publications':
         return withCvStatements(
-          publicationsSection(spec, tracker, input.expertName),
+          publicationsSection(
+            spec,
+            tracker,
+            input.expertName,
+            input.cvCheck,
+          ),
           input.cvCheck,
           ['publication'],
         );
@@ -768,8 +773,8 @@ const SECTION_SOURCES: Partial<Record<RoutedSectionId, string[]>> = {
   grants: ['grants', 'grant_results'],
   patents: ['patents', 'trademarks'],
   'awards-military': ['awards', 'military_claims'],
-  orders: ['orders'],
-  pleadings: ['motions', 'pleadings'],
+  orders: ['orders', 'courtlistener', 'justia', 'state_court_records'],
+  pleadings: ['motions', 'pleadings', 'courtlistener', 'justia', 'state_court_records'],
   depositions: ['depositions'],
   'testimony-inconsistencies': ['expert_testimony'],
   lawsuits: [
@@ -797,7 +802,7 @@ const SECTION_SOURCES: Partial<Record<RoutedSectionId, string[]>> = {
     'expertwitness_com',
   ],
   ime: ['ime_websites', 'ime_advertising', 'advertising'],
-  videos: ['youtube'],
+  videos: ['youtube', 'presentations'],
 };
 
 function sourceName(id: string): string {
@@ -1619,19 +1624,27 @@ function publicationsSection(
   spec: EwiReportSectionSpec,
   tracker: ClaimTracker,
   expertName: string,
+  cvCheck?: CvCheck | null,
 ): ReportSectionModel {
   const items = claimEvidence(tracker, {
     categories: ['publication'],
-    providers: ['pubmed', 'author_verification', 'crossref', 'openalex'],
+    providers: [
+      'pubmed',
+      'author_verification',
+      'crossref',
+      'openalex',
+      'orcid',
+    ],
   });
-  if (items.length === 0) {
+  const comparisonBlocks = firstAuthorComparisonBlocks(cvCheck, expertName);
+  if (items.length === 0 && comparisonBlocks.length === 0) {
     return {
       id: spec.id,
       title: spec.title,
       blocks: [{ text: EMPTY, style: 'note' }],
     };
   }
-  const blocks: ReportBlock[] = [];
+  const blocks: ReportBlock[] = [...comparisonBlocks];
   for (const item of items) {
     blocks.push({ text: item.title, style: 'subheading' });
     blocks.push({
@@ -2307,7 +2320,7 @@ function questionsSection(
   };
   const blocks: ReportBlock[] = [
     {
-      text: `${questions.length} cross-examination question(s), each tied to collected evidence or an identified evidence gap. No count was targeted and none were padded. Labels: Verified (${counts.verified}) means a cited source states the fact about this expert; Allegation (${counts.allegation}) means a third party reported it and it has not been adjudicated; Unresolved (${counts.unresolved}) means the identity or the detail is not confirmed, sources conflict, or the research is incomplete, so the question is conditional.`,
+      text: `${questions.length} cross-examination question(s), each tied to a distinct collected fact, a CV discrepancy, or a coverage gap. The target is 100 when enough distinct facts exist. None were padded and no facts were invented. Labels: Verified (${counts.verified}) means a cited source states the fact about this expert; Allegation (${counts.allegation}) means a third party reported it and it has not been adjudicated; Unresolved (${counts.unresolved}) means the identity or the detail is not confirmed, sources conflict, or the research is incomplete, so the question is conditional.`,
       style: 'note',
     },
   ];
@@ -2635,17 +2648,18 @@ function presenceRecordBlocks(record: PresenceRecord): ReportBlock[] {
   for (const statement of record.importantStatements) {
     blocks.push({ text: `Important statement: ${statement}` });
   }
-  if (
+  if (record.transcript) {
+    blocks.push({ text: `Transcript: ${record.transcript}` });
+  } else if (
     record.transcriptAvailable === false ||
     record.transcriptUnavailableReason
   ) {
     blocks.push({
       text:
-        record.transcriptUnavailableReason ?? 'Transcription was unavailable.',
+        record.transcriptUnavailableReason ??
+        'This video cannot be transcribed automatically; open the link to watch it.',
       style: 'note',
     });
-  } else if (record.transcript) {
-    blocks.push({ text: `Transcript excerpt: ${record.transcript}` });
   }
   if (record.neutralSummary && record.kind === 'patient_review') {
     blocks.push({
@@ -2990,6 +3004,70 @@ function authorListFromRaw(raw: Record<string, unknown>): string[] {
     .split(/\s*;\s*|\s+and\s+|,(?=\s*[A-Z])/g)
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function firstAuthorComparisonBlocks(
+  check: CvCheck | null | undefined,
+  _expertName: string,
+): ReportBlock[] {
+  const rows = (check?.comparisons ?? []).filter(
+    (row) => row.topic === 'publication',
+  );
+  if (rows.length === 0) return [];
+  const blocks: ReportBlock[] = [
+    { text: 'First-author and CV comparison', style: 'subheading' },
+    {
+      text: 'Each CV citation is compared with the catalog record (OpenAlex, PubMed, Crossref, or ORCID). “Misrepresentation” is not used unless the catalogs actually disagree with the CV. Equal-contribution notes are kept when the source stated them.',
+      style: 'note',
+    },
+  ];
+  for (const row of rows) {
+    const klass = firstAuthorClass(row);
+    blocks.push({ text: `${klass}: ${row.title}` });
+    if (row.cv?.statement) {
+      blocks.push({ text: `CV citation: ${row.cv.statement}` });
+    }
+    if (row.source?.statement) {
+      blocks.push({ text: `Verified citation: ${row.source.statement}` });
+    }
+    if (row.source?.url) {
+      blocks.push({
+        text: row.source.url,
+        link: row.source.url,
+        style: 'citation',
+      });
+    }
+    if (row.note) blocks.push({ text: row.note, style: 'note' });
+  }
+  return blocks;
+}
+
+function firstAuthorClass(row: CvComparison): string {
+  const hay = `${row.title} ${row.note}`.toLowerCase();
+  if (row.label === 'conflicting') return 'citation mismatch';
+  if (
+    /\bnot verifiable\b|\bauthor list is truncated\b|\bunable to verify\b/.test(
+      hay,
+    )
+  ) {
+    return 'unable to verify';
+  }
+  if (
+    row.label === 'verified' &&
+    /\bsole author\b|\bfirst of\b|\bfirst author\b/.test(hay)
+  ) {
+    return 'confirmed first author';
+  }
+  if (
+    row.label === 'verified' &&
+    /\bmiddle\b|\blast of\b|\bauthor [2-9]\b|\bauthor \d{2}\b|\blast author\b/.test(
+      hay,
+    )
+  ) {
+    return 'not first-listed';
+  }
+  if (row.label === 'verified') return 'not first-listed';
+  return 'unable to verify';
 }
 
 function authorOrderLine(

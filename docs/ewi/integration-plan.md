@@ -11,7 +11,7 @@
 |---|---|---|---|---|---|
 | P0 | Stop court/Justia pages filing as board certification, license, IME, or testimony inconsistency | Existing `section-router` | Fixes Word (9) credential misfile | No | **Done in working tree** (tests added). Live 3.9.0 PDF **not** rebuilt |
 | P0 | Honest coverage language already in template 3.9.2 | Uncommitted report rebuild | Distinguishes no-result vs not-implemented vs blocked | No | In working tree; Word (9) still a prior export |
-| P1 | YouTube Data API **search/list metadata only**; store video id, title, channel, date, URL; identity gate | Google Cloud project + `YOUTUBE_API_KEY`; feature flag default **false** | Real video discovery vs `site:youtube` | $0 quota | **Not started — needs account approval** |
+| P1 | YouTube Data API **search/list metadata only**; store video id, title, channel, date, URL; identity gate | Google Cloud project + `YOUTUBE_API_KEY`; enabled when the key is set | Real video discovery vs `site:youtube` | $0 quota | **Done** (captions still not retrieved) |
 | P1 | Manual video/file ingest + STT flag default **false** | P1 discovery or user URL | Transcripts with timestamps | STT usage | **Not started** |
 | P1 | USPTO ODP inventor search | USPTO.gov + ID.me key; flag default **false** | Patents section | $0 | **Not started — needs key holder** |
 | P1 | ABPP.org / AACN routing: only official hosts for `board_certification` | `officialSourceFor` already used for licenses | Stop leftover web “ABPP” claims | No | Next unpaid code step |

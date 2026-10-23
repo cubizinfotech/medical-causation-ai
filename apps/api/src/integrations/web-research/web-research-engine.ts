@@ -38,6 +38,7 @@ import {
 } from './registries/sunbiz';
 import { SafeFetcher, type FetchedPage } from './safe-fetcher';
 import { classifyUrl } from './source-kind';
+import { usablePortraitCandidates } from './page-portraits';
 import { BraveSearchProvider } from './providers/brave.provider';
 import { GeminiGroundedSearchProvider } from './providers/gemini-grounded.provider';
 import {
@@ -50,6 +51,7 @@ import {
   SearchProviderError,
   type SearchHit,
   type SearchProvider,
+  type SearchRequest,
   type PageReadStatus,
   type ExpertPortrait,
   type WebBlockedPage,
@@ -73,6 +75,9 @@ export const DEFAULT_WEB_PROVIDER_IDS = [
   'gdelt',
 ] as const;
 
+/** Serper and Brave accept a page parameter. Gemini grounding does not. */
+const PAGINATING_SEARCH_PROVIDERS = new Set(['serper', 'brave']);
+
 export interface WebResearchEngineDeps {
   settings: WebResearchSettings;
   providers?: SearchProvider[];
@@ -95,6 +100,7 @@ export function buildSearchProviders(
     new GeminiGroundedSearchProvider(
       settings.geminiApiKey,
       settings.geminiModel ?? 'gemini-2.5-flash',
+      settings.maxQueries,
     ),
     new SerperSearchProvider(settings.serperApiKey, fetchImpl),
     new BraveSearchProvider(settings.braveApiKey, fetchImpl),
@@ -305,10 +311,22 @@ export class WebResearchEngine {
     reports: Map<string, WebProviderReport>,
     until: number,
   ): Promise<void> {
+    const usable = (provider: SearchProvider): boolean => {
+      const report = reports.get(provider.id);
+      if (!report) return true;
+      if (report.failures.some((f) => f.kind === 'quota' || f.kind === 'auth')) {
+        return false;
+      }
+      return report.hits > 0 || report.failedRequests === 0;
+    };
     const resolver =
       providers.find(
-        (p) => p.kinds.includes('web') && p.id !== 'gemini_grounding',
-      ) ?? providers.find((p) => p.kinds.includes('web'));
+        (p) =>
+          p.kinds.includes('web') &&
+          p.id !== 'gemini_grounding' &&
+          usable(p),
+      ) ??
+      providers.find((p) => p.kinds.includes('web') && usable(p));
     if (!resolver) return;
     const report = reports.get(resolver.id) as WebProviderReport;
     const leads = [...pool.entries()]
@@ -370,11 +388,13 @@ export class WebResearchEngine {
           kind: 'news',
         });
       } catch (error) {
+        const kind =
+          error instanceof SearchProviderError ? error.kind : 'http';
         const message =
           error instanceof Error ? error.message : 'Search failed.';
         report.failedRequests += 1;
         if (!report.failures.some((f) => f.message === message)) {
-          report.failures.push({ kind: 'http', message });
+          report.failures.push({ kind, message });
         }
       }
     });
@@ -539,48 +559,70 @@ export class WebResearchEngine {
             deadlineHit = true;
             return;
           }
-          for (let attempt = 1; attempt <= 2; attempt++) {
-            report.requests += 1;
-            try {
-              const hits = await provider.search(
-                plan.request,
-                settings.searchTimeoutMs,
-              );
-              report.hits += hits.length;
-              bumpTopic(plan.topic, hits.length);
-              executedQueries.push({
-                topic: plan.topic,
-                query: plan.request.query,
-              });
-              consecutive = 0;
-              for (const hit of hits)
-                addHit({ ...hit, query: plan.request.query });
-              return;
-            } catch (error) {
-              const kind =
-                error instanceof SearchProviderError ? error.kind : 'http';
-              const message =
-                error instanceof Error ? error.message : 'Search failed.';
-              report.failedRequests += 1;
-              if (!report.failures.some((f) => f.message === message)) {
-                report.failures.push({ kind, message });
+          const hits = await runSearch();
+          if (hits === null) return;
+          if (
+            plan.paginate &&
+            PAGINATING_SEARCH_PROVIDERS.has(provider.id) &&
+            hits.length > 0 &&
+            (plan.request.page ?? 1) === 1 &&
+            report.requests < provider.budget &&
+            !disabled &&
+            this.now() <= searchBy
+          ) {
+            await runSearch({ ...plan.request, page: 2 });
+          }
+
+          async function runSearch(
+            request: SearchRequest = plan.request,
+          ): Promise<SearchHit[] | null> {
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              if (disabled) return null;
+              report.requests += 1;
+              try {
+                const found = await provider.search(
+                  request,
+                  settings.searchTimeoutMs,
+                );
+                report.hits += found.length;
+                bumpTopic(plan.topic, found.length);
+                if (request.page == null || request.page <= 1) {
+                  executedQueries.push({
+                    topic: plan.topic,
+                    query: plan.request.query,
+                  });
+                }
+                consecutive = 0;
+                for (const hit of found)
+                  addHit({ ...hit, query: plan.request.query });
+                return found;
+              } catch (error) {
+                const kind =
+                  error instanceof SearchProviderError ? error.kind : 'http';
+                const message =
+                  error instanceof Error ? error.message : 'Search failed.';
+                report.failedRequests += 1;
+                if (!report.failures.some((f) => f.message === message)) {
+                  report.failures.push({ kind, message });
+                }
+                if (
+                  kind === 'quota' ||
+                  kind === 'auth' ||
+                  kind === 'unsupported'
+                ) {
+                  disabled = true;
+                  return null;
+                }
+                if (kind === 'rate_limited' && attempt === 1) {
+                  await new Promise((resolve) => setTimeout(resolve, 5000));
+                  continue;
+                }
+                consecutive += 1;
+                if (consecutive >= 4) disabled = true;
+                return null;
               }
-              if (
-                kind === 'quota' ||
-                kind === 'auth' ||
-                kind === 'unsupported'
-              ) {
-                disabled = true;
-                return;
-              }
-              if (kind === 'rate_limited' && attempt === 1) {
-                await new Promise((resolve) => setTimeout(resolve, 5000));
-                continue;
-              }
-              consecutive += 1;
-              if (consecutive >= 4) disabled = true;
-              return;
             }
+            return null;
           }
         });
       }),
@@ -622,6 +664,13 @@ export class WebResearchEngine {
       let priority = haystack.includes(surname) ? 4 : 0;
       priority += Math.min(page.providers.size, 3);
       if (IMPORTANT_KINDS.has(classifyUrl(page.url, 'web').kind)) priority += 1;
+      if (
+        /head[-_]?shot|portrait|staff[-_/ ]photo|faculty|biography|physician[-_/ ]profile|about[-_]dr/i.test(
+          `${page.title} ${page.url}`,
+        )
+      ) {
+        priority += 2;
+      }
       if (sunbizUrls.has(canonicalUrl(page.url))) priority += 3;
       if (suppliedKeys.has(canonicalUrl(page.url))) priority += 20;
       page.priority = priority;
@@ -789,11 +838,14 @@ export class WebResearchEngine {
         }
       }
       const leads = extractResearchLeads(pageTexts);
+      const fromContext = extractResearchLeads([subject.context ?? '']);
       const followPlans = planFollowUps(subject, {
         acronyms: [...acronyms],
         state: subjectState || null,
         programs: leads.programs,
-        institutions: leads.institutions,
+        institutions: [
+          ...new Set([...fromContext.institutions, ...leads.institutions]),
+        ],
         searchNih: true,
       });
       const followProviders = configured
@@ -804,6 +856,9 @@ export class WebResearchEngine {
         )
         .filter((p) => {
           const r = reports.get(p.id) as WebProviderReport;
+          if (r.failures.some((f) => f.kind === 'quota' || f.kind === 'auth')) {
+            return false;
+          }
           return r.requests === 0 || r.failedRequests < r.requests;
         })
         .slice(0, 2);
@@ -837,11 +892,13 @@ export class WebResearchEngine {
                 }
               }
             } catch (error) {
+              const kind =
+                error instanceof SearchProviderError ? error.kind : 'http';
               const message =
                 error instanceof Error ? error.message : 'Search failed.';
               report.failedRequests += 1;
               if (!report.failures.some((f) => f.message === message)) {
-                report.failures.push({ kind: 'http', message });
+                report.failures.push({ kind, message });
               }
             }
           });
@@ -1166,7 +1223,7 @@ export class WebResearchEngine {
           order[a.match.level] - order[b.match.level] ||
           (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''),
       )
-      .slice(0, 150);
+      .slice(0, Math.max(1, settings.maxPages));
 
     const tiedIds = new Set(
       finalRecords
@@ -1242,6 +1299,11 @@ export class WebResearchEngine {
       reads,
       subject.name.last,
     );
+    if (!portrait) {
+      limitations.push(
+        'No public staff, faculty or practice photograph of this person could be read from the pages that were confirmed to be about them.',
+      );
+    }
 
     return {
       ranAt: new Date(started).toISOString(),
@@ -1294,9 +1356,10 @@ export class WebResearchEngine {
       advertising: 1,
       ime: 1,
       profile: 2,
-      directory: 3,
-      university: 4,
-      other: 5,
+      university: 3,
+      directory: 4,
+      review: 5,
+      other: 6,
     };
     const ranked = [...records]
       .filter(
@@ -1312,30 +1375,18 @@ export class WebResearchEngine {
             (b.match.level === 'strong' ? 0 : 1) ||
           (kindRank[a.kind] ?? 9) - (kindRank[b.kind] ?? 9),
       )
-      .slice(0, 6);
-    const surnameRe = new RegExp(
-      `\\b${surname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
-      'i',
-    );
-    const ownKinds = new Set([
-      'expert_website',
-      'advertising',
-      'ime',
-      'profile',
-      'other',
-    ]);
+      .slice(0, 12);
     for (const record of ranked) {
       const fetched = reads.get(record.id);
       if (!fetched?.portraits?.length) continue;
-      const usable = fetched.portraits.filter((candidate) => {
-        if (candidate.via === 'img' || candidate.via === 'jsonld') {
-          return Boolean(candidate.label && surnameRe.test(candidate.label));
-        }
-        return ownKinds.has(record.kind);
+      const usable = usablePortraitCandidates(fetched.portraits, {
+        kind: record.kind,
+        matchLevel: record.match.level,
+        surname,
       });
-      for (const candidate of usable.slice(0, 3)) {
+      for (const candidate of usable.slice(0, 4)) {
         const image = await this.fetcher.fetchImage(candidate.url);
-        if (!image) continue;
+        if (!image || image.bytes.length < 4_000) continue;
         return {
           dataUrl: `data:${image.mimeType};base64,${image.bytes.toString('base64')}`,
           mimeType: image.mimeType,

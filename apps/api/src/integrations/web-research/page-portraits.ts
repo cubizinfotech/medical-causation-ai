@@ -5,13 +5,44 @@ export type PortraitVia = 'og' | 'twitter' | 'jsonld' | 'img';
 export interface PortraitCandidate {
   url: string;
   via: PortraitVia;
-  /** Alt text or JSON-LD Person name, when the markup stated one. */
+  /** Alt text, CSS hint, or JSON-LD Person name, when the markup stated one. */
   label?: string;
 }
 
+/** Site chrome, not a photograph of a person. */
 const JUNK =
   /logo|favicon|sprite|wordmark|placeholder|default[-_]?avatar|badge|seal|banner|hero[-_]?bg|tracking|pixel|1x1|icon[-_./]|apple-touch/i;
 const IMAGE_EXT = /\.(jpe?g|png|webp)(\?|#|$)/i;
+/**
+ * Markup or URL that usually means a staff / faculty / practice headshot,
+ * not a decorative image.
+ */
+export const PORTRAIT_HINT =
+  /head[-_]?shot|portrait|profile[-_]?photo|staff[-_]?(?:photo|img|image)|bio[-_]?photo|physician[-_]?photo|faculty[-_]?photo|team[-_]?photo|provider[-_]?photo|doctor[-_]?(?:photo|img)|profile[-_]?img/i;
+
+const PHOTO_PAGE_KINDS = new Set([
+  'expert_website',
+  'advertising',
+  'ime',
+  'profile',
+  'directory',
+  'university',
+  'review',
+  'other',
+]);
+const OWN_PHOTO_KINDS = new Set([
+  'expert_website',
+  'advertising',
+  'ime',
+  'profile',
+  'other',
+]);
+
+export interface PortraitPageContext {
+  kind: string;
+  matchLevel: string;
+  surname: string;
+}
 
 /**
  * Public portrait URLs on a page. These are candidates only: a photo is
@@ -34,6 +65,8 @@ export function extractPortraitCandidates(
   if (og) take(og, 'og');
   const twitter = metaContent(html, ['twitter:image', 'twitter:image:src']);
   if (twitter) take(twitter, 'twitter');
+  const itemprop = metaContent(html, ['image']);
+  if (itemprop) take(itemprop, 'og');
 
   for (const image of jsonLdPersonImages(html)) {
     take(image.url, 'jsonld', image.name);
@@ -41,15 +74,85 @@ export function extractPortraitCandidates(
 
   for (const img of html.matchAll(/<img\b([^>]+)>/gi)) {
     const attrs = img[1];
-    const src = attr(attrs, 'src') ?? attr(attrs, 'data-src');
+    const src = imgSrc(attrs);
     if (!src) continue;
     const alt = attr(attrs, 'alt') ?? attr(attrs, 'title') ?? '';
-    if (JUNK.test(alt) || JUNK.test(src)) continue;
-    if (!IMAGE_EXT.test(src) && !alt.trim()) continue;
-    take(src, 'img', alt.trim() || undefined);
+    const hint = `${attr(attrs, 'class') ?? ''} ${attr(attrs, 'id') ?? ''} ${src}`;
+    if (JUNK.test(alt) || JUNK.test(src) || JUNK.test(hint)) continue;
+    const looksPortrait = PORTRAIT_HINT.test(hint) || PORTRAIT_HINT.test(alt);
+    if (!IMAGE_EXT.test(src) && !alt.trim() && !looksPortrait) continue;
+    const label = [alt.trim(), looksPortrait ? 'headshot' : '']
+      .filter(Boolean)
+      .join(' ');
+    take(src, 'img', label || undefined);
   }
 
-  return found.slice(0, 8);
+  return found.slice(0, 12);
+}
+
+/**
+ * Conditions for using a candidate as this expert's profile photo:
+ * 1. The page is a practice, faculty, profile, directory or review page
+ *    already judged to be about this person (not news, court, video or social).
+ * 2. A possible match is used only on the person's own site.
+ * 3. An `<img>` or JSON-LD photo must name the surname, or (on a strong
+ *    match) look like a headshot in the URL, alt text or CSS class.
+ * 4. Open Graph / Twitter images are used on the person's own site; on a
+ *    directory, university or review page they also need a name or headshot hint.
+ */
+export function usablePortraitCandidates(
+  candidates: readonly PortraitCandidate[],
+  page: PortraitPageContext,
+): PortraitCandidate[] {
+  if (!PHOTO_PAGE_KINDS.has(page.kind)) return [];
+  if (page.matchLevel !== 'strong' && page.matchLevel !== 'possible') {
+    return [];
+  }
+  const own = OWN_PHOTO_KINDS.has(page.kind);
+  if (page.matchLevel === 'possible' && !own) return [];
+
+  const surnameRe = surnamePattern(page.surname);
+  if (!surnameRe) return [];
+
+  return candidates.filter((candidate) => {
+    if (JUNK.test(candidate.url) || JUNK.test(candidate.label ?? '')) {
+      return false;
+    }
+    const named =
+      Boolean(candidate.label && surnameRe.test(candidate.label)) ||
+      surnameRe.test(candidate.url);
+    const looksPortrait = PORTRAIT_HINT.test(
+      `${candidate.url} ${candidate.label ?? ''}`,
+    );
+    if (candidate.via === 'img' || candidate.via === 'jsonld') {
+      return named || (looksPortrait && page.matchLevel === 'strong');
+    }
+    if (own) return true;
+    return named || looksPortrait;
+  });
+}
+
+function surnamePattern(surname: string): RegExp | null {
+  const trimmed = surname.trim();
+  if (trimmed.length < 2) return null;
+  return new RegExp(
+    `\\b${trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+    'i',
+  );
+}
+
+function imgSrc(attrs: string): string | null {
+  const srcset = attr(attrs, 'srcset') ?? attr(attrs, 'data-srcset');
+  if (srcset) {
+    const first = srcset.split(',')[0]?.trim().split(/\s+/)[0];
+    if (first) return first;
+  }
+  return (
+    attr(attrs, 'src') ??
+    attr(attrs, 'data-src') ??
+    attr(attrs, 'data-lazy-src') ??
+    attr(attrs, 'data-original')
+  );
 }
 
 function metaContent(html: string, names: readonly string[]): string | null {

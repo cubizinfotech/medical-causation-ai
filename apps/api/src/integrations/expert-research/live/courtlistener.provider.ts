@@ -52,8 +52,8 @@ export const CHALLENGE_TERMS = [
   'admissibility',
 ];
 
-const MAX_HITS = 30;
-const MAX_TEXT_FETCHES = 6;
+const DEFAULT_MAX_HITS = 80;
+const MAX_TEXT_FETCHES = 12;
 const EXCERPT_RADIUS = 450;
 const MAX_EXCERPTS = 4;
 
@@ -86,12 +86,18 @@ interface Hit {
  * later, and only from the court's own words.
  */
 export class CourtListenerResearchProvider extends LiveResearchProvider {
+  private readonly maxHits: number;
+
   constructor(
     definition: ProviderDefinition,
     private readonly resolver: ExpertIdentityResolver,
     private readonly client: CourtListenerClient,
+    maxHits?: number,
   ) {
     super(definition);
+    this.maxHits = Number.isFinite(maxHits)
+      ? Math.min(200, Math.max(10, Math.floor(maxHits as number)))
+      : DEFAULT_MAX_HITS;
   }
 
   protected async run(
@@ -119,15 +125,23 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
     const identity = await this.identity(query);
     const names = nameClause(name, identity);
     const base = `(${names}) AND (${specialtyTerms.join(' OR ')})`;
+    const npiConfirmed =
+      identity?.resolution.status === 'confirmed' && Boolean(identity.record);
+    const recapQuery = npiConfirmed ? `(${names})` : base;
     const [challenges, mentions, recap] = await Promise.all([
       this.client.searchOpinions(
         `${base} AND (${CHALLENGE_TERMS.join(' OR ')})`,
       ),
       this.client.searchOpinions(base),
-      this.searchRecap(base),
+      this.searchRecap(recapQuery),
     ]);
 
-    const hits = mergeHits(challenges.hits, mentions.hits, recap.hits);
+    const hits = mergeHits(
+      challenges.hits,
+      mentions.hits,
+      recap.hits,
+      this.maxHits,
+    );
     if (hits.length === 0) {
       return {
         items: [],
@@ -137,7 +151,14 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
 
     const excerpts = await this.excerpts(hits, name);
     const items = hits.map((entry) =>
-      this.toItem(entry, query, name, excerpts.get(entry.hit), retrievedAt),
+      this.toItem(
+        entry,
+        query,
+        name,
+        excerpts.get(entry.hit),
+        retrievedAt,
+        npiConfirmed,
+      ),
     );
     const challengeCount = hits.filter((entry) => entry.challenge).length;
     const opinions = hits.filter(
@@ -232,6 +253,7 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
     name: PersonName,
     opinionExcerpts: string[] | undefined,
     retrievedAt: string,
+    npiConfirmed: boolean,
   ): ExpertEvidenceItem {
     const caption = resolveCaseCaption(hit);
     const caseName = caption.name;
@@ -247,14 +269,17 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
       searchKind,
       title: caseName,
       description: hit.description ?? snippet ?? undefined,
+      documentNumber:
+        hit.document_number != null ? String(hit.document_number) : undefined,
+      snippet: snippet ?? hit.snippet ?? undefined,
       court: hit.court,
     });
     const documentType = legalDocumentTypeFor(docClass, challenge);
     const courtLevel = courtLevelOf(hit.court);
-    const specialtyInText = specialtyMentioned(
-      `${snippet ?? ''} ${hit.description ?? ''} ${caseName}`,
-      query.specialty,
-    );
+    const filingText = `${snippet ?? ''} ${hit.description ?? ''} ${caseName}`;
+    const specialtyInText = specialtyMentioned(filingText, query.specialty);
+    const recapSupported =
+      specialtyInText || recapHasSupportingIdentity(filingText, query);
     const rawChallenge: RawExpertChallenge | undefined = challenge
       ? {
           standard: detectStandard([snippet ?? '', ...excerpts].join(' ')),
@@ -280,7 +305,7 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
     const summary = [
       challenge
         ? `This ${kindLabel} contains ${who}, a ${query.specialty} term, and admissibility-challenge language (Daubert, Frye, Rule 702, or a motion to exclude). Whether the challenge was about this expert, and how the court ruled, is reported only when the court’s words say so.`
-        : `This ${kindLabel} contains ${who}${specialtyInText ? ` and a ${query.specialty} term` : ''}. The expert’s role in the case (witness, treating physician, or party) was not determined.`,
+        : `This ${kindLabel} contains ${who}${specialtyInText ? ` and a ${query.specialty} term` : recapSupported && npiConfirmed && searchKind === 'recap_document' ? ' (name search after NPI identity was confirmed, with a professional or place marker on the filing)' : npiConfirmed && searchKind === 'recap_document' ? ' (name search after NPI identity was confirmed; this filing does not also show the specialty, credential, or place, so identity stays unverified)' : ''}. The expert’s role in the case (witness, treating physician, or party) was not determined.`,
       snippet ? `Search excerpt: “${htmlToText(snippet)}”` : null,
       hit.description ? `Filing description: ${hit.description}.` : null,
       caption.status === 'unresolved'
@@ -316,11 +341,26 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
         identity: {
           name: query.expertName,
           specialty: query.specialty,
-          verifiedBy: specialtyInText ? 'source_match' : undefined,
-          ambiguous: !specialtyInText,
+          verifiedBy: specialtyInText
+            ? 'source_match'
+            : recapSupported && npiConfirmed && searchKind === 'recap_document'
+              ? 'npi'
+              : undefined,
+          ambiguous: !(
+            specialtyInText ||
+            (recapSupported &&
+              npiConfirmed &&
+              searchKind === 'recap_document')
+          ),
           basis: specialtyInText
             ? ['full name in filing', 'specialty term in filing']
-            : ['full name in filing'],
+            : recapSupported && npiConfirmed && searchKind === 'recap_document'
+              ? [
+                  'full name in filing',
+                  'NPI identity confirmed',
+                  'professional or place marker on filing',
+                ]
+              : ['full name in filing'],
         },
         documentType,
         documentClass: docClass,
@@ -369,6 +409,33 @@ function specialtyMentioned(text: string, specialty: string): boolean {
   return text.toLowerCase().includes(stem);
 }
 
+/** Name-only PACER hits are not treated as this expert, even after NPI. */
+function recapHasSupportingIdentity(
+  text: string,
+  query: ExpertResearchQuery,
+): boolean {
+  if (specialtyMentioned(text, query.specialty)) return true;
+  if (
+    /\b(ph\.?d\.?|abpp|m\.?d\.?|psyd|expert witness|neuropsych|forensic)\b/i.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+  const hay = text.toLowerCase();
+  for (const part of (query.city ?? '')
+    .toLowerCase()
+    .split(/[,\s]+/)
+    .filter((token) => token.length >= 2)) {
+    if (part.length === 2) {
+      if (new RegExp(`\\b${part}\\b`, 'i').test(text)) return true;
+    } else if (hay.includes(part)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Phrases for the expert's name, e.g. ("Jane Smith" OR "Jane A. Smith").
  * A confirmed NPI record adds its registered first and middle names
@@ -406,6 +473,7 @@ function mergeHits(
   challenges: CourtListenerSearchHit[],
   mentions: CourtListenerSearchHit[],
   recap: CourtListenerSearchHit[],
+  maxHits = DEFAULT_MAX_HITS,
 ): Hit[] {
   const byKey = new Map<string, Hit>();
   const add = (
@@ -438,7 +506,7 @@ function mergeHits(
   for (const hit of mentions) add(hit, false, 'opinion');
   for (const hit of recap)
     add(hit, recapLooksLikeChallenge(hit), 'recap_document');
-  return [...byKey.values()].slice(0, MAX_HITS);
+  return [...byKey.values()].slice(0, maxHits);
 }
 
 function recapLooksLikeChallenge(hit: CourtListenerSearchHit): boolean {

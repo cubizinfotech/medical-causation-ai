@@ -8,7 +8,8 @@ import { LiveResearchProvider, type LiveRunResult } from './live-provider.base';
 import { parseCityState } from './location';
 import { parsePersonName, type PersonName } from './person-name';
 
-const MAX_ARTICLES = 12;
+const DEFAULT_MAX_ARTICLES = 40;
+const PUBMED_MAX_ARTICLES_CAP = 200;
 const PUBMED_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
 
 interface PubMedAuthor {
@@ -22,6 +23,8 @@ interface PubMedSummary {
   fulljournalname?: string;
   source?: string;
   authors?: PubMedAuthor[];
+  articleids?: Array<{ idtype?: string; value?: string }>;
+  elocationid?: string;
 }
 
 /**
@@ -30,14 +33,18 @@ interface PubMedSummary {
  * sides have one). The summary does not prove affiliation.
  */
 export class PubMedResearchProvider extends LiveResearchProvider {
+  private readonly maxArticles: number;
+
   constructor(
     definition: ProviderDefinition,
     private readonly fetchImpl: typeof fetch | undefined,
     private readonly timeoutMs: number,
     private readonly apiKey?: string,
     private readonly email?: string,
+    maxArticles?: number,
   ) {
     super(definition);
+    this.maxArticles = clampPubMedMax(maxArticles);
   }
 
   protected async run(
@@ -66,7 +73,7 @@ export class PubMedResearchProvider extends LiveResearchProvider {
           authorListed(author.name ?? '', name),
         ),
       )
-      .slice(0, MAX_ARTICLES);
+      .slice(0, this.maxArticles);
     if (matched.length === 0) {
       return {
         items: [],
@@ -142,7 +149,7 @@ export class PubMedResearchProvider extends LiveResearchProvider {
     const initials = `${name.first[0]}${name.middle[0]?.[0] ?? ''}`;
     const url = this.endpoint('esearch.fcgi', {
       term: `${name.last} ${initials}[Author]`,
-      retmax: String(MAX_ARTICLES),
+      retmax: String(this.maxArticles),
       sort: 'pub_date',
     });
     const payload = await fetchJson<{
@@ -193,6 +200,8 @@ export class PubMedResearchProvider extends LiveResearchProvider {
     const journal =
       article.fulljournalname || article.source || 'journal not listed';
     const year = article.pubdate?.slice(0, 4);
+    const doi = doiFromSummary(article);
+    const place = authorPlace(authors, name);
     return this.item({
       category: 'publication',
       title: article.title ?? 'Untitled PubMed article',
@@ -201,6 +210,9 @@ export class PubMedResearchProvider extends LiveResearchProvider {
         year ? `(${year})` : null,
         `in ${journal}.`,
         authors.length > 0 ? `Authors: ${authors.join(', ')}.` : null,
+        place
+          ? `Listed as ${place.position === 'sole' ? 'the sole author' : place.position === 'first' ? 'first author' : place.position === 'last' ? 'last author' : `author ${place.index + 1} of ${place.count}`}.`
+          : null,
         `An author string matches ${name.last} and the expert’s initials.`,
         affiliations.length > 0
           ? `Affiliation listed for this author: ${affiliations[0].slice(0, 300)}.`
@@ -226,7 +238,11 @@ export class PubMedResearchProvider extends LiveResearchProvider {
       informationStatus: 'unverified',
       raw: {
         pmid,
+        doi,
         authors,
+        authorPosition: place?.position ?? null,
+        authorIndex: place?.index ?? null,
+        authorCount: place?.count ?? authors.length,
         journal,
         pubdate: article.pubdate ?? null,
         affiliations,
@@ -242,6 +258,41 @@ export class PubMedResearchProvider extends LiveResearchProvider {
       },
     });
   }
+}
+
+function clampPubMedMax(value: number | undefined): number {
+  if (!Number.isFinite(value)) return DEFAULT_MAX_ARTICLES;
+  return Math.min(PUBMED_MAX_ARTICLES_CAP, Math.max(1, Math.floor(value as number)));
+}
+
+function doiFromSummary(article: PubMedSummary): string | null {
+  const fromIds = (article.articleids ?? []).find(
+    (id) => id.idtype?.toLowerCase() === 'doi',
+  )?.value;
+  if (fromIds?.trim()) return fromIds.trim();
+  const elocation = article.elocationid?.trim();
+  if (elocation && /^10\.\d{4,}/.test(elocation.replace(/^doi:\s*/i, ''))) {
+    return elocation.replace(/^doi:\s*/i, '');
+  }
+  return null;
+}
+
+function authorPlace(
+  authors: string[],
+  name: PersonName,
+): { position: 'sole' | 'first' | 'last' | 'middle'; index: number; count: number } | null {
+  const index = authors.findIndex((author) => authorListed(author, name));
+  if (index < 0) return null;
+  const count = authors.length;
+  const position =
+    count === 1
+      ? 'sole'
+      : index === 0
+        ? 'first'
+        : index === count - 1
+          ? 'last'
+          : 'middle';
+  return { position, index, count };
 }
 
 /** "Demery JA" and "Demery, Jason A" match; "Demery JB" does not. */

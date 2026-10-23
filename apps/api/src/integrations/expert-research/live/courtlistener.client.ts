@@ -32,6 +32,7 @@ export interface CourtListenerSearchHit {
 
 interface SearchResponse {
   count?: number;
+  next?: string | null;
   results?: CourtListenerSearchHit[];
 }
 
@@ -50,6 +51,8 @@ export interface CourtListenerClientOptions {
   /** Optional. Search works without it; opinion text needs it. */
   token?: string;
   baseUrl?: string;
+  /** Extra `next` pages after the first. Default 3. */
+  maxPages?: number;
 }
 
 /** CourtListener (Free Law Project) case law search, read only. */
@@ -80,17 +83,38 @@ export class CourtListenerClient {
     query: string,
     type: 'o' | 'rd',
   ): Promise<{ hits: CourtListenerSearchHit[]; count: number }> {
-    const url = new URL(`${this.baseUrl}/search/`);
-    url.searchParams.set('q', query);
-    url.searchParams.set('type', type);
-    url.searchParams.set('highlight', 'on');
-    url.searchParams.set('order_by', 'score desc');
-    const body = await fetchJson<SearchResponse>(url, {
-      timeoutMs: this.options.timeoutMs,
-      fetchImpl: this.options.fetchImpl,
-      headers: this.headers,
-    });
-    return { hits: body.results ?? [], count: body.count ?? 0 };
+    const hits: CourtListenerSearchHit[] = [];
+    const seen = new Set<string>();
+    let next: string | null = null;
+    const maxPages = Math.min(8, Math.max(1, this.options.maxPages ?? 3));
+    for (let page = 0; page < maxPages; page++) {
+      const url = next
+        ? new URL(next, `${this.baseUrl}/`)
+        : new URL(`${this.baseUrl}/search/`);
+      if (!next) {
+        url.searchParams.set('q', query);
+        url.searchParams.set('type', type);
+        url.searchParams.set('highlight', 'on');
+        url.searchParams.set('order_by', 'score desc');
+      }
+      const body = await fetchJson<SearchResponse>(url, {
+        timeoutMs: this.options.timeoutMs,
+        fetchImpl: this.options.fetchImpl,
+        headers: this.headers,
+      });
+      for (const hit of body.results ?? []) {
+        const key =
+          type === 'rd'
+            ? `rd:${hit.id ?? hit.absolute_url ?? JSON.stringify(hit)}`
+            : `o:${hit.cluster_id ?? hit.absolute_url ?? hit.caseName}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hits.push(hit);
+      }
+      next = body.next?.trim() || null;
+      if (!next || (body.results ?? []).length === 0) break;
+    }
+    return { hits, count: hits.length };
   }
 
   /**

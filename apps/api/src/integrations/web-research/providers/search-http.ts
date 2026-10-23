@@ -16,6 +16,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 /**
  * One request to a search API. Retries once on rate limits, 5xx and network
  * drops. Everything else is a typed SearchProviderError.
@@ -92,6 +100,26 @@ export async function searchHttp<T>(
     );
   }
   if (!response.ok) {
+    let detail = '';
+    try {
+      detail = (await response.text()).slice(0, 400);
+    } catch {
+      detail = '';
+    }
+    if (response.status === 400) {
+      const host = hostOf(url);
+      const creditFailure =
+        /not enough credit|insufficient credit|no remaining credit|quota|\bcredits?\b/i.test(
+          detail,
+        ) || /(^|\.)serper\.dev$/i.test(host);
+      if (creditFailure) {
+        throw new SearchProviderError(
+          'The search service reports no remaining credit (HTTP 400).',
+          'quota',
+          400,
+        );
+      }
+    }
     throw new SearchProviderError(
       `The search service returned HTTP ${response.status}.`,
       'http',

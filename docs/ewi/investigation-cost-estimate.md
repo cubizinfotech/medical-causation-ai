@@ -2,7 +2,7 @@
 
 **Currency:** USD  
 **Pricing retrieved:** 22 October 2026  
-**Default query budget:** `WEB_SEARCH_MAX_QUERIES=44`, `WEB_SEARCH_MAX_PAGES=150`  
+**Default query budget:** `WEB_SEARCH_MAX_QUERIES=64`, `WEB_SEARCH_MAX_PAGES=150`, `WEB_FETCH_MAX_PAGES=80`  
 **Default web search model:** `gemini-2.5-flash`  
 **Assumption:** one expert, one run, no PACER, no TrialSmith, no Lexis unless Scenario 3.
 
@@ -17,7 +17,7 @@ Gemini Search grounding (2.5 Flash, paid project): 1,500 grounded prompts/day fr
 | Step | Typical units | High units |
 |---|---|---|
 | Dedicated public APIs (NPI, OpenAlex, PubMed, NIH, ORCID, Open Payments, CourtListener, Justia, FL MQA) | ~20–80 HTTP calls | ~150 |
-| Web grounded searches | 20–44 prompts | 44 (cap) |
+| Web grounded searches | 20–64 prompts | 64 (cap) |
 | Page fetches | 10–40 | 150 cap |
 | LLM wording / questions | ~50k–200k tokens combined | ~500k |
 | Videos discovered (today) | 0 (web site: query) | 0 without YouTube API |

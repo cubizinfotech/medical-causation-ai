@@ -1,5 +1,10 @@
 import type { ConfigService } from '@nestjs/config';
-import { workerConnection, workerOptions } from './worker-options';
+import {
+  EWI_LOCK_MS,
+  workerConnection,
+  workerOptions,
+  ewiWorkerOptions,
+} from './worker-options';
 
 function configWith(jobs: {
   concurrency?: number;
@@ -33,6 +38,16 @@ describe('workerOptions', () => {
     expect(options.concurrency).toBe(2);
     expect(options.lockDuration).toBe(3_600_000);
     expect(options.maxStalledCount).toBe(0);
+  });
+
+  it('caps the EWI lock so a dead worker recovers in two minutes', () => {
+    const options = ewiWorkerOptions(
+      configWith({
+        lockDurationMs: 1_800_000,
+      }),
+    );
+    expect(options.lockDuration).toBe(EWI_LOCK_MS);
+    expect(options.stalledInterval).toBe(15_000);
   });
 });
 

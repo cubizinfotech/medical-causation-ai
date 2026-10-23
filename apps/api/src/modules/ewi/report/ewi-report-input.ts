@@ -15,6 +15,7 @@ import {
   buildQuestionDrafts,
   draftFromStoredQuestion,
   finalizeQuestions,
+  QUESTION_TARGET,
   questionIsGrounded,
 } from './ewi-report-questions';
 import type { EwiReportInput } from './ewi-pdf-report.service';
@@ -147,7 +148,12 @@ function questionsForReport(
     if (questions.length === 0) return { questions: [] };
     return {
       questions,
-      note: 'These questions were generated from the current collected evidence. Stored investigation records were not changed.',
+      note: [
+        'These questions were generated from the current collected evidence. Stored investigation records were not changed.',
+        questionShortfallNote(questions.length, result),
+      ]
+        .filter(Boolean)
+        .join(' '),
     };
   }
 
@@ -155,7 +161,10 @@ function questionsForReport(
     const questions = finalizeQuestions(generatedDrafts);
     return {
       questions,
-      note: 'These questions were generated from the current collected evidence. Earlier template-generated questions from a previous report version are not reprinted.',
+      note: [
+        'These questions were generated from the current collected evidence. Earlier template-generated questions from a previous report version are not reprinted.',
+        questionShortfallNote(questions.length, result),
+      ].join(' '),
     };
   }
 
@@ -163,9 +172,6 @@ function questionsForReport(
   const questions = finalizeQuestions([...storedDrafts, ...legalDrafts]);
   const omitted = storedDrafts.length < stored.length;
   const addedLegal = questions.length > fromStoredOnly.length;
-  if (!omitted && !addedLegal) {
-    return { questions };
-  }
   const parts: string[] = [];
   if (omitted) {
     parts.push(
@@ -177,8 +183,95 @@ function questionsForReport(
       'Legal questions were generated from collected filings using the current captions.',
     );
   }
-  parts.push('Stored investigation records were not changed.');
-  return { questions, note: parts.join(' ') };
+  if (parts.length > 0) {
+    parts.push('Stored investigation records were not changed.');
+  }
+  parts.push(questionShortfallNote(questions.length, result));
+  return { questions, note: parts.filter(Boolean).join(' ') };
+}
+
+export interface QuestionShortfallContext {
+  cvCheck?: EwiInvestigationResult['cvCheck'] | null;
+  sourceStatuses?: Array<{
+    sourceId: string;
+    coverage?: string | null;
+    outcome?: string | null;
+  }>;
+  evidence?: Array<{ sourceId: string; category: string }>;
+}
+
+export function questionShortfallNote(
+  count: number,
+  result?: QuestionShortfallContext,
+): string {
+  if (count >= QUESTION_TARGET) {
+    return `${count} evidence-based questions were generated (target ${QUESTION_TARGET}). None were padded.`;
+  }
+  const needed = missingEvidenceForMoreQuestions(result);
+  return `${count} evidence-based question(s) were generated. The target is ${QUESTION_TARGET} when there are enough distinct collected facts. This report has fewer because only ${count} distinct sourced fact(s), discrepancy(ies), or coverage gap(s) were available. Facts were not invented to reach ${QUESTION_TARGET}.${needed}`;
+}
+
+/** What additional permitted evidence would be needed to write more questions. */
+export function missingEvidenceForMoreQuestions(
+  result?: QuestionShortfallContext,
+): string {
+  if (!result) return '';
+  const missing: string[] = [];
+  if (!result.cvCheck) {
+    missing.push('an uploaded curriculum vitae');
+  }
+  const evidence = result.evidence ?? [];
+  const foundSource = (id: string) =>
+    evidence.some((item) => item.sourceId === id);
+  const statuses = result.sourceStatuses ?? [];
+  const coverageOf = (id: string) =>
+    statuses.find((status) => status.sourceId === id)?.coverage ??
+    statuses.find((status) => status.sourceId === id)?.outcome ??
+    '';
+  const unresolved = (id: string) => {
+    const coverage = coverageOf(id);
+    return (
+      coverage === 'not_implemented' ||
+      coverage === 'not_configured' ||
+      coverage === 'blocked_or_access_denied' ||
+      coverage === 'failed' ||
+      coverage === 'unavailable'
+    );
+  };
+  if (unresolved('board_certification')) {
+    missing.push('an official board-certification directory entry');
+  }
+  if (unresolved('state_license')) {
+    missing.push('official state license-board pages that can be read');
+  }
+  if (unresolved('social')) {
+    missing.push('public social-media profiles that open without a login');
+  }
+  if (!foundSource('youtube') && !evidence.some((item) => item.category === 'video')) {
+    missing.push(
+      'public videos or a direct audio/video file that can be transcribed',
+    );
+  }
+  if (
+    !foundSource('courtlistener') &&
+    !foundSource('justia') &&
+    !evidence.some(
+      (item) => item.category === 'legal' || item.category === 'court_order',
+    )
+  ) {
+    missing.push('additional public court filings with readable text');
+  }
+  if (unresolved('depositions')) {
+    missing.push('a user-supplied deposition transcript (depositions are not scraped)');
+  }
+  if (unresolved('patents')) {
+    missing.push('public patent or trademark records after USPTO identity verification');
+  }
+  if (unresolved('university_accreditation')) {
+    missing.push('CHEA or U.S. Department of Education accreditation confirmation');
+  }
+  if (missing.length === 0) return '';
+  return ` More questions would need: ${missing.slice(0, 8).join('; ')}.`;
 }
 
 function sourceStatusesForReport(

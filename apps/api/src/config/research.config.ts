@@ -1,5 +1,18 @@
 import type { ResearchProviderSettings } from './config.types';
 
+function firstEnv(...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function clampMs(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
 export const researchConfig = (): ResearchProviderSettings => {
   const mode = (process.env.RESEARCH_PROVIDER ?? 'mock').trim().toLowerCase();
   return {
@@ -8,8 +21,10 @@ export const researchConfig = (): ResearchProviderSettings => {
     retryMaxAttempts: Number(process.env.RESEARCH_RETRY_MAX_ATTEMPTS ?? 3),
     retryDelayMs: Number(process.env.RESEARCH_RETRY_DELAY_MS ?? 1000),
     minIntervalMs: Number(process.env.RESEARCH_MIN_INTERVAL_MS ?? 0),
-    courtListenerToken:
-      process.env.COURTLISTENER_API_TOKEN?.trim() || undefined,
+    courtListenerToken: firstEnv(
+      'COURTLISTENER_API_TOKEN',
+      'COURTLISTENER_API_KEY',
+    ),
     courtListenerTimeoutMs: Number(
       process.env.COURTLISTENER_TIMEOUT_MS ?? 60000,
     ),
@@ -18,6 +33,23 @@ export const researchConfig = (): ResearchProviderSettings => {
     crossrefMailto: process.env.CROSSREF_MAILTO?.trim() || undefined,
     orcidClientId: process.env.ORCID_CLIENT_ID?.trim() || undefined,
     orcidClientSecret: process.env.ORCID_CLIENT_SECRET?.trim() || undefined,
+    pubmedApiKey: firstEnv('PUBMED_API_KEY', 'NCBI_API_KEY'),
+    pubmedEmail: process.env.PUBMED_EMAIL?.trim() || undefined,
+    youtubeApiKey: process.env.YOUTUBE_API_KEY?.trim() || undefined,
+    youtubeMaxResults: Number(process.env.YOUTUBE_MAX_RESULTS ?? 25),
+    assemblyAiApiKey: process.env.ASSEMBLYAI_API_KEY?.trim() || undefined,
+    transcriptionEnabled:
+      (process.env.EWI_TRANSCRIPTION_ENABLED ?? 'true').trim().toLowerCase() !==
+      'false',
+    transcriptionMaxFiles: Number(process.env.EWI_TRANSCRIPTION_MAX_FILES ?? 2),
+    transcriptionMaxMinutes: Number(
+      process.env.EWI_TRANSCRIPTION_MAX_MINUTES ?? 30,
+    ),
+    pubmedMaxArticles: Number(process.env.PUBMED_MAX_ARTICLES ?? 40),
+    courtListenerMaxPages: Number(
+      process.env.COURTLISTENER_MAX_PAGES ?? 3,
+    ),
+    courtListenerMaxHits: Number(process.env.COURTLISTENER_MAX_HITS ?? 80),
     openPaymentsYears: Number(process.env.OPEN_PAYMENTS_YEARS ?? 7),
     web: {
       providers: (
@@ -35,12 +67,16 @@ export const researchConfig = (): ResearchProviderSettings => {
         process.env.WEB_SEARCH_GEMINI_MODEL?.trim() ||
         process.env.GEMINI_LLM_MODEL?.trim() ||
         undefined,
-      maxQueries: Number(process.env.WEB_SEARCH_MAX_QUERIES ?? 44),
+      maxQueries: Number(process.env.WEB_SEARCH_MAX_QUERIES ?? 64),
       maxPages: Number(process.env.WEB_SEARCH_MAX_PAGES ?? 150),
       searchTimeoutMs: Number(process.env.WEB_SEARCH_TIMEOUT_MS ?? 45000),
       fetchTimeoutMs: Number(process.env.WEB_FETCH_TIMEOUT_MS ?? 15000),
-      maxFetchPages: Number(process.env.WEB_FETCH_MAX_PAGES ?? 40),
-      deadlineMs: Number(process.env.WEB_RESEARCH_DEADLINE_MS ?? 420000),
+      maxFetchPages: Number(process.env.WEB_FETCH_MAX_PAGES ?? 80),
+      deadlineMs: clampMs(
+        Number(process.env.WEB_RESEARCH_DEADLINE_MS ?? 180000),
+        60_000,
+        240_000,
+      ),
       archiveFallback:
         (process.env.WEB_ARCHIVE_FALLBACK ?? 'true').trim().toLowerCase() !==
         'false',

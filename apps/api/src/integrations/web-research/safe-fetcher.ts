@@ -46,7 +46,8 @@ export interface SafeFetcherOptions {
 const USER_AGENT =
   'Mozilla/5.0 (compatible; EWI-PublicResearch/1.0; +public-records-research)';
 const MAX_REDIRECTS = 5;
-const MAX_IMAGE_BYTES = 400_000;
+/** Practice headshots are often 0.5–1.5 MB. Tracking pixels are far smaller. */
+const MAX_IMAGE_BYTES = 2_000_000;
 
 const CHALLENGE_MARKERS = [
   /just a moment\.\.\./i,

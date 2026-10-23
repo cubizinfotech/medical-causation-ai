@@ -80,7 +80,6 @@ const UNUSED_CATALOG_ENV = [
   'OTHER_DIRECTORY_API_KEY',
   'ADVERTISING_DIRECTORY_API_KEY',
   'IME_DIRECTORY_API_KEY',
-  'YOUTUBE_API_KEY',
   'SOCIAL_API_KEY',
   'NEWS_API_KEY',
   'GOOGLE_MAPS_API_KEY',
@@ -122,6 +121,20 @@ describe('.env.example', () => {
     expect(values.get('SERPER_API_KEY')).toBe('');
     expect(values.get('BRAVE_SEARCH_API_KEY')).toBe('');
     expect(values.get('TAVILY_API_KEY')).toBe('');
+    expect(values.get('YOUTUBE_API_KEY')).toBe('');
+    expect(values.get('YOUTUBE_MAX_RESULTS')).toBe('25');
+    expect(values.get('EWI_TRANSCRIPTION_ENABLED')).toBe('true');
+    expect(values.get('EWI_TRANSCRIPTION_MAX_FILES')).toBe('2');
+    expect(values.get('WEB_FETCH_MAX_PAGES')).toBe('80');
+    expect(values.get('WEB_SEARCH_MAX_QUERIES')).toBe('64');
+    expect(values.get('ASSEMBLYAI_API_KEY')).toBe('');
+    expect(values.get('COURTLISTENER_API_TOKEN')).toBe('');
+    expect(values.get('OPENALEX_API_KEY')).toBe('');
+    expect(values.get('PUBMED_API_KEY')).toBe('');
+    expect(values.has('NCBI_API_KEY')).toBe(false);
+    expect(contents).toContain('NCBI_API_KEY');
+    expect(values.has('COURTLISTENER_API_KEY')).toBe(false);
+    expect(contents).toContain('COURTLISTENER_API_KEY');
     expect(contents).toMatch(/LEXIS_STORAGE_ENABLED=false/);
     expect(values.get('LEXIS_STORAGE_ENABLED')).toBeUndefined();
   });

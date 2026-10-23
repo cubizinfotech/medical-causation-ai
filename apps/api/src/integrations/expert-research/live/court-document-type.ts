@@ -42,10 +42,16 @@ export function classifyCourtDocument(input: {
   searchKind: CourtSearchKind;
   title?: string;
   description?: string;
+  documentNumber?: string;
+  snippet?: string;
   court?: string;
 }): CourtDocumentClass {
-  const hay = `${input.title ?? ''} ${input.description ?? ''}`.trim();
+  const hay =
+    `${input.description ?? ''} ${input.snippet ?? ''} ${input.documentNumber ?? ''} ${input.title ?? ''}`.trim();
   if (input.searchKind === 'opinion') return 'opinion';
+  const lead = (input.description ?? '').trim();
+  if (/^(withdrawn\s+)?motion\b/i.test(lead)) return 'motion';
+  if (/^(minute\s+)?order\b|^ordered\b/i.test(lead)) return 'order';
   if (DEPOSITION.test(hay)) return 'deposition';
   if (TESTIMONY.test(hay)) return 'testimony';
   if (MOTION.test(hay) && !ORDER.test(hay)) return 'motion';

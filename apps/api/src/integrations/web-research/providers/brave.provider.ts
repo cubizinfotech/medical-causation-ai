@@ -42,9 +42,16 @@ export class BraveSearchProvider implements SearchProvider {
     const path = request.kind === 'news' ? 'news/search' : 'web/search';
     const url = new URL(`https://api.search.brave.com/res/v1/${path}`);
     url.searchParams.set('q', request.query);
-    url.searchParams.set('count', String(Math.min(request.num ?? 10, 20)));
+    const count = Math.min(request.num ?? 10, 20);
+    url.searchParams.set('count', String(count));
     if (request.page && request.page > 1) {
-      url.searchParams.set('offset', String(request.page - 1));
+      // Brave's offset is a 0-based page index (max 9), not a result skip
+      // count. Page 2 is offset=1, which skips `count` results. Multiplying
+      // by count exceeds the API maximum and is rejected.
+      url.searchParams.set(
+        'offset',
+        String(Math.min(Math.max(request.page - 1, 0), 9)),
+      );
     }
     const payload = await searchHttp<BraveResponse>(url.toString(), {
       headers: { 'X-Subscription-Token': this.apiKey ?? '' },

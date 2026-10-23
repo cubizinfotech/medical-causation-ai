@@ -413,6 +413,148 @@ describe('EWI report template', () => {
     expect(text).not.toMatch(/page 47|p\.\s*12/i);
   });
 
+  it('prints a first-author CV comparison table with source URLs', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-09-23T00:00:00.000Z',
+      cvCheck: {
+        document: {
+          id: 'cv1',
+          name: 'Doe-CV.pdf',
+          pageCount: 4,
+          unreadablePages: [],
+          ocrPages: [],
+        },
+        status: 'completed',
+        claims: [],
+        warnings: [],
+        comparisons: [
+          {
+            id: 'p1',
+            topic: 'publication',
+            label: 'verified',
+            severity: 'low',
+            title:
+              'Verified match. Publication found with the expert as an author (first of 3 authors): Memory after TBI',
+            cv: {
+              statement: 'Doe J, Roe A (2018). Memory after TBI.',
+              page: 3,
+            },
+            source: {
+              name: 'PubMed',
+              statement: 'Memory after TBI (2018). Authors: Doe J, Roe A, Lee B.',
+              url: 'https://pubmed.ncbi.nlm.nih.gov/99/',
+            },
+            note: 'PubMed lists the expert as first of 3 authors.',
+          },
+        ],
+      },
+    });
+    const text =
+      document.sections
+        .find((section) => section.id === 'publications')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(text).toMatch(/confirmed first author/i);
+    expect(text).toContain('https://pubmed.ncbi.nlm.nih.gov/99/');
+    expect(text).toContain('CV citation:');
+  });
+
+  it('does not call a truncated catalog list confirmed first authorship', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-09-23T00:00:00.000Z',
+      cvCheck: {
+        document: {
+          id: 'cv1',
+          name: 'Doe-CV.pdf',
+          pageCount: 4,
+          unreadablePages: [],
+          ocrPages: [],
+        },
+        status: 'completed',
+        claims: [],
+        warnings: [],
+        comparisons: [
+          {
+            id: 'p2',
+            topic: 'publication',
+            label: 'verified',
+            severity: 'low',
+            title:
+              'Verified match (author position not verifiable). Publication found with the expert as an author (first of 3 authors): Memory after TBI',
+            cv: {
+              statement: 'Doe J, Roe A (2018). Memory after TBI.',
+              page: 3,
+            },
+            source: {
+              name: 'PubMed',
+              statement: 'Memory after TBI (2018). Authors: Doe J, Roe A.',
+              url: 'https://pubmed.ncbi.nlm.nih.gov/99/',
+            },
+            note: 'Author position not verifiable: the catalog author list is truncated or shorter than the CV citation.',
+          },
+        ],
+      },
+    });
+    const text =
+      document.sections
+        .find((section) => section.id === 'publications')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(text).toMatch(/unable to verify/i);
+    expect(text).not.toMatch(/confirmed first author/i);
+  });
+
+  it('keeps the YouTube URL and explains when a transcript is unavailable', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [
+        {
+          sourceId: 'youtube',
+          category: 'video',
+          title: 'Grand rounds',
+          summary: 'Public YouTube video.',
+          url: 'https://www.youtube.com/watch?v=abc123XYZ00',
+          access: 'public',
+          informationStatus: 'unverified',
+          raw: {
+            presenceKind: 'youtube',
+            platform: 'youtube',
+            transcriptAvailable: false,
+            transcriptUnavailableReason:
+              'This YouTube video cannot be transcribed automatically; open the link to watch it.',
+          },
+        },
+      ],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-09-23T00:00:00.000Z',
+    });
+    const videos = document.sections.find((section) => section.id === 'videos');
+    const text = videos?.blocks.map((block) => block.text).join('\n') ?? '';
+    expect(text).toContain('https://www.youtube.com/watch?v=abc123XYZ00');
+    expect(text).toMatch(/cannot be transcribed automatically/i);
+    expect(
+      videos?.blocks.some(
+        (block) =>
+          block.link === 'https://www.youtube.com/watch?v=abc123XYZ00',
+      ),
+    ).toBe(true);
+  });
+
   it('prioritizes inconsistencies and compares membership claims when collected', () => {
     const document = buildEwiReportDocument({
       expertName: 'Jane Doe',

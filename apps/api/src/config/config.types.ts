@@ -223,6 +223,33 @@ export interface ResearchProviderSettings {
   /** Optional contact address OpenAlex asks API users to send. */
   openAlexMailto?: string;
   /**
+   * NCBI E-utilities key for EWI PubMed. Prefers PUBMED_API_KEY, then
+   * NCBI_API_KEY. The same key is used by MCA literature search.
+   */
+  pubmedApiKey?: string;
+  pubmedEmail?: string;
+  /** Optional YouTube Data API v3 key. Without it, video search stays on the web layer. */
+  youtubeApiKey?: string;
+  /** search.list page size (1–50). Each search costs 100 quota units. */
+  youtubeMaxResults: number;
+  /**
+   * Optional AssemblyAI key. Used only for direct public audio/video files
+   * (mp3, mp4, and similar). YouTube watch URLs are never submitted.
+   */
+  assemblyAiApiKey?: string;
+  /** Default on. AssemblyAI is still skipped when no key or no direct media. */
+  transcriptionEnabled: boolean;
+  /** Most direct media files to send to AssemblyAI in one investigation. */
+  transcriptionMaxFiles: number;
+  /** Skip a file whose estimated length is over this many minutes. */
+  transcriptionMaxMinutes: number;
+  /** PubMed ESearch / ESummary cap per investigation. */
+  pubmedMaxArticles: number;
+  /** CourtListener search pages to follow (`next` links). */
+  courtListenerMaxPages: number;
+  /** Combined CourtListener opinion + RECAP hits kept. */
+  courtListenerMaxHits: number;
+  /**
    * Optional polite contact for Crossref. When omitted, OpenAlex or PubMed
    * mailto is reused. This is not a paid key.
    */

@@ -113,12 +113,17 @@ Setting `REDIS_PASSWORD` for the first time: the next `docker compose up -d redi
 
 Paste AI keys into the server `.env` only. Do not commit them and do not put them in GitHub.
 
-EWI live research is optional. With `RESEARCH_PROVIDER=live`, the API calls four free public sources over HTTPS: `npiregistry.cms.hhs.gov`, `openpaymentsdata.cms.gov`, `api.openalex.org`, and `www.courtlistener.com`. Only the opposing expert's name, city, specialty, and NPI are sent; no case or patient data. A free `COURTLISTENER_API_TOKEN` is optional and lets the API read opinion text for Daubert/Frye rulings. See [docs/ewi-workflow.md](docs/ewi-workflow.md).
+EWI live research is optional. With `RESEARCH_PROVIDER=live`, the API calls public sources over HTTPS (NPI Registry, CMS Open Payments, OpenAlex, CourtListener, PubMed, NIH RePORTER, ORCID, Florida MQA when applicable, and YouTube Data API v3 when `YOUTUBE_API_KEY` is set). Only the opposing expert's name, city, specialty, and NPI are sent; no case or patient data. A free `COURTLISTENER_API_TOKEN` is optional and lets the API read opinion text for Daubert/Frye rulings. Optional `SERPER_API_KEY` adds Google results through serper.dev. `ASSEMBLYAI_API_KEY` is stored but not used. See [docs/ewi-workflow.md](docs/ewi-workflow.md).
 
 ```env
 RESEARCH_PROVIDER=live
 COURTLISTENER_API_TOKEN=
+YOUTUBE_API_KEY=
+SERPER_API_KEY=
+ASSEMBLYAI_API_KEY=
 ```
+
+Editing the laptop file `.env.live` does **not** change the droplet. Copy it up as the server `.env` and restart `mca-api` so Nest re-reads the file. There is no Laravel-style config cache.
 
 The laptop file `.env.live` is the ready-made production `.env` (same values, grouped and explained). Copy it up as `.env`:
 

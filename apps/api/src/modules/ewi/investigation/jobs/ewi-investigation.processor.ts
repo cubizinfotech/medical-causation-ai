@@ -9,7 +9,10 @@ import { Worker } from 'bullmq';
 import { RedisService } from '@redis/redis.service';
 import { describeAiFailure, describeError } from '@ai/utils';
 import { QUEUE_PREFIXES } from '@platform/jobs/job.types';
-import { workerConnection, workerOptions } from '@platform/jobs/worker-options';
+import {
+  workerConnection,
+  ewiWorkerOptions,
+} from '@platform/jobs/worker-options';
 import { EWI_INVESTIGATION_QUEUE_NAME } from './ewi-investigation-job.constants';
 import { EwiInvestigationJobService } from './ewi-investigation-job.service';
 import type { EwiInvestigationJobPayload } from './ewi-investigation-job.types';
@@ -53,7 +56,7 @@ export class EwiInvestigationProcessor
       {
         connection: workerConnection(this.redisService.getConnectionOptions()),
         prefix: QUEUE_PREFIXES.EWI,
-        ...workerOptions(this.config),
+        ...ewiWorkerOptions(this.config),
       },
     );
 
@@ -68,7 +71,8 @@ export class EwiInvestigationProcessor
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.worker?.close();
+    // Force-close so a watch restart does not leave the job locked for 30 minutes.
+    await this.worker?.close(true);
   }
 
   private async process(payload: EwiInvestigationJobPayload): Promise<void> {

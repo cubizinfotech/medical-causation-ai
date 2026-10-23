@@ -99,9 +99,11 @@ const STREET_ONLY =
 const EMPTY_RESULT =
   /returned no record|no matching record was found|live adapter is not connected|no request was sent|not searched\./i;
 
-const MAX_PER_RECORD = 1;
+const MAX_PER_RECORD = 3;
 const MAX_PER_HOST_THEME = 2;
 const QUOTE_MAX = 220;
+/** Evidence-based target. Never pad or invent facts to reach this count. */
+export const QUESTION_TARGET = 100;
 
 export interface QuestionSourceAttempt {
   sourceId: string;
@@ -134,8 +136,9 @@ interface WebRaw {
 
 /**
  * Specific, sourced questions. Every question names a fact from a collected
- * source (a quoted passage, a registry statement, a CV conflict) and says
- * where it came from. No count is targeted and nothing is padded.
+ * source (a quoted passage, a registry statement, a CV conflict) or a
+ * coverage gap, and says where it came from. The target is 100 when enough
+ * distinct facts exist. Nothing is padded and no facts are invented.
  */
 export function buildQuestionDrafts(input: {
   expertName: string;
@@ -157,6 +160,7 @@ export function buildQuestionDrafts(input: {
   }
   drafts.push(
     ...licenseGapDrafts(input.evidence, input.sourceStatuses ?? []),
+    ...coverageGapDrafts(input.sourceStatuses ?? []),
     ...cvClaimDrafts(input.cvCheck ?? null, drafts),
   );
   const limitationExcerpts = new Set(
@@ -908,6 +912,69 @@ function licenseGapDrafts(
       sourceName: source.name,
     }),
   ];
+}
+
+function coverageGapDrafts(
+  statuses: QuestionSourceAttempt[],
+): QuestionDraft[] {
+  const interesting: Array<{
+    sourceId: string;
+    label: string;
+    question: string;
+  }> = [
+    {
+      sourceId: 'state_license',
+      label: 'state license board',
+      question:
+        'The official state license board was not fully checked in this investigation. Can you produce the current license verification for every state in which you practice?',
+    },
+    {
+      sourceId: 'board_certification',
+      label: 'board certification directory',
+      question:
+        'The official board-certification directory was not fully checked. Are you currently board certified, and by which board?',
+    },
+    {
+      sourceId: 'social',
+      label: 'social-media search',
+      question:
+        'Public social-media pages could not be opened without a login. Which public profiles, if any, are yours?',
+    },
+    {
+      sourceId: 'courtlistener',
+      label: 'public court search',
+      question:
+        'Public court records were not fully searched or could not be read. Have you testified, been listed as an expert, or been named in a motion or order?',
+    },
+  ];
+  const drafts: QuestionDraft[] = [];
+  for (const row of interesting) {
+    const status = statuses.find((entry) => entry.sourceId === row.sourceId);
+    if (!status) continue;
+    const coverage = status.coverage ?? '';
+    if (
+      coverage !== 'not_configured' &&
+      coverage !== 'not_implemented' &&
+      coverage !== 'blocked_or_access_denied' &&
+      coverage !== 'failed'
+    ) {
+      continue;
+    }
+    drafts.push({
+      theme: 'Background and credentials',
+      question: row.question,
+      label: 'unresolved',
+      sources: [{ name: row.label }],
+      evidenceBasis: `${row.label}: ${status.message ?? coverage}. This is a coverage gap, not a finding that nothing exists.`,
+      anchors: [row.label],
+      evidenceIds: [`coverage:${row.sourceId}`],
+      basisKind: 'limitation',
+      relevance:
+        'A source that was blocked, unconfigured, or failed is not treated as an empty search.',
+      excerpt: status.message ?? coverage,
+    });
+  }
+  return drafts;
 }
 
 function cvClaimDrafts(

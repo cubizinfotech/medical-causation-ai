@@ -31,6 +31,14 @@ describe('classifyCourtDocument', () => {
     expect(
       classifyCourtDocument({
         searchKind: 'recap_document',
+        description:
+          'WITHDRAWN MOTION Daubert Motion to Exclude Testimony of Jane Smith, PhD',
+        snippet: 'The Court will enter an order after the hearing.',
+      }),
+    ).toBe('motion');
+    expect(
+      classifyCourtDocument({
+        searchKind: 'recap_document',
         description: 'Order Granting Motion in Limine',
       }),
     ).toBe('order');
@@ -58,6 +66,15 @@ describe('classifyCourtDocument', () => {
         description: 'Exhibit A',
       }),
     ).toBe('other');
+    expect(
+      classifyCourtDocument({
+        searchKind: 'recap_document',
+        title: 'Smith v. Jones',
+        description: '',
+        documentNumber: '12',
+        snippet: 'Defendant Motion to Strike Expert',
+      }),
+    ).toBe('motion');
   });
 
   it('maps filing classes onto legal document types', () => {

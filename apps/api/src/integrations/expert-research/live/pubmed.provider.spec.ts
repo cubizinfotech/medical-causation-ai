@@ -62,6 +62,8 @@ describe('PubMedResearchProvider', () => {
     expect(result.items[0]?.url).toBe('https://pubmed.ncbi.nlm.nih.gov/99/');
     expect(result.items[0]?.informationStatus).toBe('unverified');
     expect(result.items[0]?.summary).toMatch(/not proof/);
+    expect(result.items[0]?.raw?.authorPosition).toBe('first');
+    expect(result.items[0]?.raw?.authors).toEqual(['Demery JA', 'Other AB']);
   });
 });
 

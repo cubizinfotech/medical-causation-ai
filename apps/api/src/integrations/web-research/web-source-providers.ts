@@ -142,6 +142,36 @@ export function sourceIdForRecord(record: WebRecord): string {
   return catalogSourceFor(record.kind, record.directoryId).sourceId;
 }
 
+/** Presence-normalizer keys copied onto evidence `raw`, not nested under `web`. */
+export function presenceKindFor(record: WebRecord): string | undefined {
+  switch (record.kind) {
+    case 'social':
+      return 'social';
+    case 'video':
+      return record.platform === 'youtube' ? 'youtube' : 'video';
+    case 'presentation':
+      return 'presentation';
+    case 'expert_website':
+      return 'expert_website';
+    case 'review':
+      return 'patient_review';
+    case 'news':
+      return 'news';
+    case 'blog':
+      return 'blog';
+    case 'directory':
+      return 'directory';
+    case 'maps':
+      return 'google_maps';
+    case 'ime':
+      return 'ime_website';
+    case 'advertising':
+      return 'professional_website';
+    default:
+      return undefined;
+  }
+}
+
 function itemFor(
   definition: ProviderDefinition,
   record: WebRecord,
@@ -177,6 +207,8 @@ function itemFor(
       access: 'public',
     },
     raw: {
+      presenceKind: presenceKindFor(record),
+      platform: record.platform,
       identity: {
         name: query.expertName,
         verifiedBy: tied ? 'source_match' : undefined,
@@ -191,6 +223,7 @@ function itemFor(
         recordId: record.id,
         kind: record.kind,
         platform: record.platform,
+        presenceKind: presenceKindFor(record),
         match: record.match,
         read: record.read,
         readNote: record.readNote,
@@ -206,7 +239,7 @@ function itemFor(
 }
 
 export function describeSearchProviders(dossier: WebResearchDossier): string {
-  const used = dossier.providers.filter((p) => p.requests > 0);
+  const used = dossier.providers.filter((p) => p.hits > 0);
   return used.length > 0
     ? used.map((p) => p.name).join(', ')
     : 'no search provider';

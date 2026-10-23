@@ -9,9 +9,11 @@ import {
   buildQuestionDrafts,
   finalizeQuestions,
   isValidDraft,
+  QUESTION_TARGET,
   questionIsGrounded,
   type QuestionDraft,
 } from './ewi-report-questions';
+import { questionShortfallNote } from './ewi-report-input';
 
 function webItem(overrides: {
   level: 'strong' | 'possible' | 'other_person';
@@ -578,6 +580,66 @@ describe('evidence-based cross-examination questions', () => {
     expect(questions[0].basisKind).toBe('evidence_gap');
     expect(questions[0].evidenceIds?.[0]).toContain('page-2');
     expect(questions[0].sources?.[0].name).toMatch(/Uploaded CV/);
+  });
+
+  it('explains a shortfall instead of padding when fewer than 100 facts exist', () => {
+    expect(QUESTION_TARGET).toBe(100);
+    const questions = buildGroundedCrossExamQuestions({
+      expertName: 'Jane Doe',
+      evidence: [
+        webItem({
+          level: 'strong',
+          kind: 'news',
+          url: 'https://news.example/jane',
+          title: 'Jane Doe testified',
+          quote: 'Jane Doe, a neurologist in Boston, testified on Tuesday about concussion care.',
+        }),
+      ],
+    });
+    expect(questions.length).toBeGreaterThan(0);
+    expect(questions.length).toBeLessThan(QUESTION_TARGET);
+    expect(questionShortfallNote(questions.length)).toMatch(/facts were not invented/i);
+    expect(questionShortfallNote(100)).toMatch(/target 100/i);
+    expect(
+      questionShortfallNote(questions.length, {
+        evidence: [],
+        sourceStatuses: [
+          {
+            sourceId: 'board_certification',
+            coverage: 'not_implemented',
+          },
+        ],
+      }),
+    ).toMatch(/uploaded curriculum vitae/i);
+    expect(
+      questionShortfallNote(questions.length, {
+        evidence: [],
+        sourceStatuses: [
+          {
+            sourceId: 'board_certification',
+            coverage: 'not_implemented',
+          },
+        ],
+      }),
+    ).toMatch(/board-certification directory/i);
+  });
+
+  it('adds a coverage-gap question when a source was blocked, without inventing a fact', () => {
+    const drafts = buildQuestionDrafts({
+      expertName: 'Jane Doe',
+      evidence: [],
+      sourceStatuses: [
+        {
+          sourceId: 'social',
+          coverage: 'blocked_or_access_denied',
+          message: 'Login required',
+        },
+      ],
+    });
+    expect(drafts.some((draft) => /login/i.test(draft.question))).toBe(true);
+    expect(drafts.every((draft) => draft.basisKind === 'limitation')).toBe(
+      true,
+    );
   });
 });
 

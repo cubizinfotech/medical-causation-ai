@@ -432,10 +432,36 @@ describe('investigation workflow', () => {
         'report',
       ]),
     );
+    expect(progress[0]).toBe('identify-expert');
     expect(outcome.result.legalResearch).toBeDefined();
     expect(outcome.result.onlinePresence).toBeDefined();
     expect(outcome.result.professionalBackground).toBeDefined();
     expect(report.build).toHaveBeenCalled();
+  });
+
+  it('marks a research stage running before the providers finish', async () => {
+    const stages = EWI_WORKFLOW_STAGES.filter((stage) =>
+      ['identify-expert', 'profiles', 'questions', 'report'].includes(stage.id),
+    );
+    const steps: string[] = [];
+    let sawProfilesBeforeProvidersReturned = false;
+    await executeInvestigationWorkflow(
+      { expertName: 'Jane Smith', city: 'Boston', specialty: 'Orthopedics' },
+      {
+        stages,
+        report,
+        research: {
+          collectProviders: () => {
+            sawProfilesBeforeProvidersReturned = steps.includes('profiles');
+            return Promise.resolve([]);
+          },
+        },
+        onProgress: (update) => {
+          steps.push(update.step);
+        },
+      },
+    );
+    expect(sawProfilesBeforeProvidersReturned).toBe(true);
   });
 
   it('marks restricted providers without treating them as completed checks of public content', () => {

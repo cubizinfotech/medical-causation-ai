@@ -13,6 +13,7 @@ import {
 import { JustiaResearchProvider } from './justia.provider';
 import { createLiveSourceProviders } from './live-sources';
 import { OrcidResearchProvider } from './orcid.provider';
+import { YoutubeResearchProvider } from './youtube.provider';
 import {
   fakeFetch,
   nppesRoute,
@@ -510,7 +511,7 @@ describe('CourtListener live source', () => {
     ).toBe(true);
   });
 
-  it('marks a filing as a possible namesake when the specialty is not in the text', async () => {
+  it('does not drop a RECAP filing that lacks a specialty word once NPI identity is confirmed', async () => {
     const { get } = providers([
       nppesRoute([doctor]),
       {
@@ -539,6 +540,73 @@ describe('CourtListener live source', () => {
     ]);
     const result = await get('courtlistener').search(query);
     expect(result.items[0].raw?.documentClass).toBe('order');
+    expect(result.items[0].raw?.identity).toMatchObject({
+      ambiguous: true,
+    });
+  });
+
+  it('confirms NPI-backed RECAP identity when the filing also shows a credential or place', async () => {
+    const { get } = providers([
+      nppesRoute([doctor]),
+      {
+        match: (url) =>
+          url.pathname === '/api/rest/v4/search/' &&
+          url.searchParams.get('type') === 'rd',
+        respond: () => ({
+          count: 1,
+          results: [
+            {
+              id: 9,
+              caseName: 'People v. Roe',
+              description: 'Motion to Exclude Testimony of Jane Smith, Ph.D.',
+              snippet: 'Jane Smith, Ph.D., appeared as the defense expert in Phoenix',
+              docketNumber: '1:18-cv-3',
+              court: 'District Court, D. Arizona',
+              dateFiled: '2018-01-02',
+            },
+          ],
+        }),
+      },
+      {
+        match: (url) => url.pathname === '/api/rest/v4/search/',
+        respond: () => ({ count: 0, results: [] }),
+      },
+    ]);
+    const result = await get('courtlistener').search(query);
+    expect(result.items[0].raw?.identity).toMatchObject({
+      ambiguous: false,
+      verifiedBy: 'npi',
+    });
+  });
+
+  it('keeps a name-only RECAP filing ambiguous when NPI identity was not confirmed', async () => {
+    const { get } = providers([
+      nppesRoute([]),
+      {
+        match: (url) =>
+          url.pathname === '/api/rest/v4/search/' &&
+          url.searchParams.get('type') === 'rd',
+        respond: () => ({
+          count: 1,
+          results: [
+            {
+              id: 8,
+              caseName: 'People v. Smith',
+              description: 'Minute Order',
+              snippet: 'Jane Smith appeared as counsel',
+              docketNumber: '1:18-cv-2',
+              court: 'District Court, D. Arizona',
+              dateFiled: '2018-01-02',
+            },
+          ],
+        }),
+      },
+      {
+        match: (url) => url.pathname === '/api/rest/v4/search/',
+        respond: () => ({ count: 0, results: [] }),
+      },
+    ]);
+    const result = await get('courtlistener').search(query);
     expect(result.items[0].raw?.identity).toMatchObject({ ambiguous: true });
   });
 
@@ -680,8 +748,42 @@ describe('live source wiring', () => {
     });
     expect(map.get('justia')).toBeInstanceOf(JustiaResearchProvider);
     expect(map.get('orcid')).toBeInstanceOf(OrcidResearchProvider);
+    expect(map.get('youtube')).not.toBeInstanceOf(YoutubeResearchProvider);
     expect(map.get('state_license')).toBeDefined();
     expect(map.get('state_discipline')).toBeDefined();
+  });
+
+  it('registers the YouTube Data API adapter only when a key is set', () => {
+    const withoutKey = createLiveSourceProviders(EXPERT_RESEARCH_CATALOG, {
+      timeoutMs: 1000,
+      fetchImpl: fakeFetch([]).fetch,
+    });
+    expect(withoutKey.get('youtube')).toBeUndefined();
+
+    const withKey = createLiveSourceProviders(EXPERT_RESEARCH_CATALOG, {
+      timeoutMs: 1000,
+      fetchImpl: fakeFetch([]).fetch,
+      youtubeApiKey: 'test-youtube-key',
+      webEngine: {
+        research: () =>
+          Promise.resolve({
+            ranAt: '2026-10-21T00:00:00.000Z',
+            durationMs: 1,
+            partial: false,
+            partialNote: null,
+            queriesPlanned: 0,
+            queriesRun: 0,
+            providers: [],
+            pagesRead: 0,
+            pagesBlocked: [],
+            candidates: [],
+            records: [],
+            registries: [],
+            limitations: [],
+          }),
+      } as never,
+    });
+    expect(withKey.get('youtube')).toBeInstanceOf(YoutubeResearchProvider);
   });
 
   it('registers ORCID as callable and reports not_configured without credentials', async () => {

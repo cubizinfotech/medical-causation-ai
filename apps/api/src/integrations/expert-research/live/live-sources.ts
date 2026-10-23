@@ -21,6 +21,8 @@ import { createWebSourceProviders } from '../../web-research/web-source-provider
 import type { WebResearchEngine } from '../../web-research/web-research-engine';
 import { OrcidClient } from './orcid.client';
 import { OrcidResearchProvider } from './orcid.provider';
+import { YoutubeClient } from './youtube.client';
+import { YoutubeResearchProvider } from './youtube.provider';
 
 export interface LiveSourceSettings {
   timeoutMs: number;
@@ -32,6 +34,15 @@ export interface LiveSourceSettings {
   openPaymentsYears?: number;
   pubmedApiKey?: string;
   pubmedEmail?: string;
+  youtubeApiKey?: string;
+  youtubeMaxResults?: number;
+  pubmedMaxArticles?: number;
+  courtListenerMaxPages?: number;
+  courtListenerMaxHits?: number;
+  assemblyAiApiKey?: string;
+  transcriptionEnabled?: boolean;
+  transcriptionMaxFiles?: number;
+  transcriptionMaxMinutes?: number;
   orcidClientId?: string;
   orcidClientSecret?: string;
   fetchImpl?: typeof fetch;
@@ -107,6 +118,7 @@ export function createLiveSourceProviders(
         settings.timeoutMs,
         settings.pubmedApiKey,
         settings.pubmedEmail,
+        settings.pubmedMaxArticles,
       ),
     );
   }
@@ -132,6 +144,21 @@ export function createLiveSourceProviders(
       ),
     );
   }
+  const youtube = definition('youtube');
+  if (youtube && settings.youtubeApiKey) {
+    providers.set(
+      youtube.id,
+      new YoutubeResearchProvider(
+        youtube,
+        new YoutubeClient({
+          timeoutMs: settings.timeoutMs,
+          fetchImpl,
+          apiKey: settings.youtubeApiKey,
+          maxResults: settings.youtubeMaxResults,
+        }),
+      ),
+    );
+  }
   const courts = definition('courtlistener');
   if (courts) {
     providers.set(
@@ -143,7 +170,9 @@ export function createLiveSourceProviders(
           timeoutMs: settings.courtListenerTimeoutMs ?? 60000,
           fetchImpl,
           token: settings.courtListenerToken,
+          maxPages: settings.courtListenerMaxPages,
         }),
+        settings.courtListenerMaxHits,
       ),
     );
   }
@@ -168,7 +197,8 @@ export function createLiveSourceProviders(
     );
   }
   // Web-backed sources fill catalog ids that do not already have a dedicated
-  // adapter. Justia and CourtListener keep their own searches.
+  // adapter. Justia, CourtListener, and YouTube (when a key is set) keep
+  // their own searches.
   if (settings.webEngine) {
     for (const [id, provider] of createWebSourceProviders(
       definitions,

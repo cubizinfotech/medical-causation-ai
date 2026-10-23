@@ -9,6 +9,7 @@ import type { SearchRequest, WebClaimTopic } from './web-research.types';
 
 export type QueryTopic =
   | 'identity'
+  | 'portrait'
   | 'directories'
   | 'social'
   | 'reviews'
@@ -47,18 +48,54 @@ export interface PlannedQuery {
   except?: readonly string[];
   /** Official site or registry this query searches, when it is one. */
   official?: { label: string; topics: readonly WebClaimTopic[] };
+  /**
+   * Serper and Brave run a second page when the first page returned hits.
+   * Gemini grounding has no page parameter.
+   */
+  paginate?: boolean;
 }
+
+const DEFAULT_RESULT_COUNT = 20;
+const PAGINATE_TOPICS = new Set<QueryTopic>([
+  'identity',
+  'social',
+  'video',
+  'directories',
+  'litigation',
+  'court_documents',
+  'publications',
+]);
+
+const SOCIAL_SITES: ReadonlyArray<{ host: string; label: string }> = [
+  { host: 'linkedin.com', label: 'LinkedIn' },
+  { host: 'facebook.com', label: 'Facebook' },
+  { host: 'instagram.com', label: 'Instagram' },
+  { host: 'x.com', label: 'X' },
+  { host: 'twitter.com', label: 'X (Twitter)' },
+  { host: 'tiktok.com', label: 'TikTok' },
+  { host: 'bsky.app', label: 'Bluesky' },
+  { host: 'youtube.com', label: 'YouTube channel' },
+];
+
+const EXTRA_DIRECTORY_HOSTS = [
+  'hgexperts.com',
+  'experts.com',
+  'witness.net',
+  'freereferral.com',
+] as const;
 
 export interface FollowUpSignals {
   acronyms: readonly string[];
   state: string | null;
   programs?: readonly string[];
   institutions?: readonly string[];
+  /** Extra two-letter states from NPPES or the CV, besides the intake city. */
+  licenseStates?: readonly string[];
   searchNih?: boolean;
 }
 
 const NEWS_ONLY = ['google_news_rss', 'gdelt'] as const;
-const MAX_FOLLOW_UPS = 12;
+const MAX_FOLLOW_UPS = 16;
 
 function quote(value: string): string {
   return `"${value.replace(/"/g, '')}"`;
@@ -94,13 +131,18 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
   const add = (
     topic: QueryTopic,
     request: Omit<SearchRequest, 'kind'> & { kind?: SearchRequest['kind'] },
-    routing: Pick<PlannedQuery, 'only' | 'except'> = {},
+    routing: Pick<PlannedQuery, 'only' | 'except' | 'paginate'> = {},
   ) => {
     plans.push({
       id: `q${++counter}`,
       topic,
-      request: { kind: 'web', ...request },
+      request: {
+        kind: 'web',
+        num: DEFAULT_RESULT_COUNT,
+        ...request,
+      },
       ...routing,
+      paginate: routing.paginate ?? PAGINATE_TOPICS.has(topic),
     });
   };
 
@@ -110,6 +152,10 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${base}${where}`,
     prompt: `Find public web pages about ${subjectLine}: the person's own website, practice or company site, professional profiles, staff or faculty pages, and any biography.`,
   });
+  add('portrait', {
+    query: `${clause} ${profession} (headshot OR portrait OR "staff photo" OR "faculty photo" OR "profile photo" OR "physician photo" OR biography)${where}`,
+    prompt: `Find a public staff, faculty, practice or directory page that shows a photograph of ${subjectLine}. Prefer the person's own practice or university biography. Give the page URL that hosts the photo, not a search-engine thumbnail. A missing photo is not proof that none exists.`,
+  });
   add('certification', {
     query: `${clause} ("board certified" OR "board certification" OR ABPP OR diplomate OR "American Board of") ${profession}`,
     prompt: `Find which board certifications ${subjectLine} holds and which certifying organization issued each one (an American Board, ABPP, an ABMS member board or a specialty academy). Prefer the certifying body's own directory entry, then the person's own website, then court documents and directories. Give the page URL for each.`,
@@ -118,13 +164,25 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${clause} ("find a board certified" OR "verify certification" OR "member directory" OR "certified specialist" OR "American Board of") ${profession}`,
     prompt: `Find the official certification directory or verification entry that lists ${subjectLine}: for example the ABPP "Find a Board Certified Specialist" search, ABMS Certification Matters, or a specialty academy's member directory such as AACN. Give the directory page for this person.`,
   });
+  add('certification_org', {
+    query: `${clause} site:abpp.org`,
+    prompt: `Find the American Board of Professional Psychology (ABPP) directory page for ${subjectLine}, if one exists. A missing listing is not proof the person is not certified. Prefer the official ABPP page over a mention on another site.`,
+  });
   add('education', {
     query: `${clause} ${profession} (PhD OR "Ph.D." OR MD OR PsyD OR degree OR graduated OR fellowship OR residency OR internship OR "curriculum vitae") University`,
     prompt: `Find the education, degrees, training, internship, residency or fellowship of ${subjectLine}: university faculty pages, a curriculum vitae, directory profiles and biographies. Give the page URL for each statement.`,
   });
+  add('education', {
+    query: `${clause} (CV OR "curriculum vitae" OR resume OR "professional biography")`,
+    prompt: `Find a public curriculum vitae, resume or professional biography for ${subjectLine}. Give the page URL. A missing CV is not proof that none exists.`,
+  });
   add('license', {
     query: `${clause} ${profession} (license OR licensed OR "license verification" OR "license lookup" OR "licensure")${where}`,
     prompt: `Find the state license record for ${subjectLine}: license number, state, status and any public board action, from the state licensing board or health department lookup, or from pages that cite it.`,
+  });
+  add('license', {
+    query: `${clause} ${profession} ("license verification" OR "professional license" OR "state board" OR "licensing board")`,
+    prompt: `Find every public state license lookup that lists ${subjectLine}, including states other than the city on the intake form. A missing listing is not proof there is no license. Prefer the state board's own page.`,
   });
   add('memberships', {
     query: `${clause} ${profession} (member OR fellow OR "member directory" OR association OR society OR academy)`,
@@ -134,6 +192,10 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${clause} ${profession} publications OR "first author" OR research OR journal`,
     kind: 'scholar',
     prompt: `Find publications, research profiles (Google Scholar, ResearchGate, ORCID, PubMed, university pages) and presentations by ${subjectLine}.`,
+  });
+  add('publications', {
+    query: `${clause} ("first author" OR "first-authored" OR "lead author") ${profession}`,
+    prompt: `Find articles that list ${subjectLine} as an author, especially any that list this person first. Prefer the publisher page or PubMed. Give the article URL and the published author order when shown.`,
   });
   add('grants', {
     query: `${clause} ${profession} (grant OR "NIH" OR "principal investigator" OR "co-investigator" OR "funded by" OR "research funding" OR TRACK-TBI OR "Department of Defense")`,
@@ -168,6 +230,14 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     prompt: `Find a public Defense Research Institute (DRI) listing, biography, or presentation for ${subjectLine}, if one exists. Do not treat a missing listing as proof that none exists.`,
   });
   add('directories', {
+    query: `${clause} site:dri.org (speaker OR presentation OR conference OR webinar OR seminar OR "annual meeting" OR faculty)`,
+    prompt: `Find a public DRI conference, seminar, webinar or speaker listing for ${subjectLine}. Say whether the page lists this person as a speaker, author, attendee or only mentions the name. A mention is not proof the person spoke. Do not treat a missing listing as proof of no DRI role.`,
+  });
+  add('directories', {
+    query: `${clause} ("Defense Research Institute" OR "DRI") (speaker OR presentation OR conference OR webinar)`,
+    prompt: `Find public pages outside dri.org that list ${subjectLine} as a DRI speaker, presenter or author. Prefer the original conference or event page. Do not infer DRI membership from a missing listing.`,
+  });
+  add('directories', {
     query: `${clause} site:almexperts.com`,
     prompt: `Find a public ALM Experts listing for ${subjectLine}, if one exists. Do not treat a missing listing as proof that none exists.`,
   });
@@ -179,6 +249,12 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${clause} site:expertwitness.com`,
     prompt: `Find a public ExpertWitness.com listing for ${subjectLine}, if one exists. Do not treat a missing listing as proof that none exists.`,
   });
+  for (const host of EXTRA_DIRECTORY_HOSTS) {
+    add('directories', {
+      query: `${clause} site:${host}`,
+      prompt: `Find a public expert-directory listing for ${subjectLine} on ${host}, if one exists. Do not treat a missing listing as proof that none exists.`,
+    });
+  }
   add('court_documents', {
     query: `${clause} ("motion to compel" OR "order" OR "memorandum" OR "report and recommendation" OR "appointed" OR "competency") filetype:pdf`,
     prompt: `Find court orders, motions, pleadings and reports that name ${subjectLine} as an examining, appointed or testifying expert. Prefer the court's own PDF or docket page.`,
@@ -190,6 +266,10 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
   add('litigation', {
     query: `${clause} (testified OR testimony OR "expert witness" OR Daubert OR "motion to exclude" OR disqualified OR deposition OR court)`,
     prompt: `Find public court opinions, dockets, motions, orders or news about court proceedings where ${subjectLine} testified, was an expert witness, or was challenged (Daubert, Frye, motion to exclude, disqualification).`,
+  });
+  add('court_documents', {
+    query: `${clause} ("expert witness" AND (motion OR order OR pleading OR docket OR "case no"))`,
+    prompt: `Find public motions, orders, pleadings or docket pages that name ${subjectLine} as an expert witness. Prefer the court's own page or a public PDF. A paid PACER download is not retrieved; give the link and any listed fee instead.`,
   });
   add('depositions', {
     query: `${clause} (deposition OR "transcript" OR "cross-examination" OR "testimony transcript" OR "sworn testimony")`,
@@ -203,10 +283,12 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${clause} (disciplinary OR sanction OR "board action" OR revoked OR suspended OR malpractice OR lawsuit OR complaint)`,
     prompt: `Find public records or news reporting any disciplinary action, license restriction, malpractice claim, lawsuit or complaint involving ${subjectLine}. Only report pages that clearly concern this person.`,
   });
-  add('social', {
-    query: `${clause} ${profession} (site:linkedin.com OR site:facebook.com OR site:instagram.com OR site:x.com OR site:twitter.com OR site:tiktok.com)`,
-    prompt: `Find public social media profiles (LinkedIn, Facebook, Instagram, X/Twitter, TikTok, Threads, Bluesky) for ${subjectLine}. Give the https URL and visible handle. Include (1) personal profiles of this person and (2) official employer or institutional accounts named as channels for this person's work, labelled institutional not personal. If no personal profile is found, still list the institutional URLs the pages name.`,
-  });
+  for (const site of SOCIAL_SITES) {
+    add('social', {
+      query: `${clause} ${profession} site:${site.host}`,
+      prompt: `Find a public ${site.label} profile or page for ${subjectLine}. Give the https URL. A same-name profile is not this person unless the profession, place or employer also agrees. Do not open a page that requires a login; list the address and say it was not read. Include (1) a personal profile of this person and (2) an official employer or institutional account named as a channel for this person's work, labelled institutional not personal.`,
+    });
+  }
   add('business', {
     query: `${clause} ${profession} (LLC OR "P.A." OR PLLC OR Inc OR corporation OR "registered agent" OR sunbiz OR opencorporates)${where}`,
     prompt: `Find business registry or company records (Secretary of State, Sunbiz, OpenCorporates, Bizapedia) and company websites where ${subjectLine} is an officer, owner, registered agent or practice principal.`,
@@ -227,6 +309,10 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
   add('video', {
     query: `${clause} ${profession} (site:youtube.com OR site:vimeo.com OR podcast OR webinar OR lecture OR presentation)`,
     prompt: `Find public videos, podcasts, webinars, lectures or slide presentations featuring ${subjectLine}.`,
+  });
+  add('video', {
+    query: `${clause} (interview OR podcast OR transcript OR "grand rounds" OR webinar) ${profession}`,
+    prompt: `Find interviews, podcasts, grand rounds or webinars featuring ${subjectLine}, including any public transcript or a direct audio or video file (mp3, mp4) that can be opened without a login. Give the original URL.`,
   });
   add('reviews', {
     query: `${clause} ${profession} reviews OR ratings OR complaints (healthgrades OR vitals OR ratemds OR yelp OR google OR bbb OR avvo)`,
@@ -298,7 +384,7 @@ export function planFollowUps(
     plans.push({
       id: `f${++counter}`,
       topic,
-      request: { kind: 'web', ...request },
+      request: { kind: 'web', num: DEFAULT_RESULT_COUNT, ...request },
       ...(official ? { official } : {}),
     });
   };
@@ -340,24 +426,68 @@ export function planFollowUps(
       query: `${clause} ${quote(institution)} (faculty OR "conflict of interest" OR "outside activity" OR "consulting policy" OR "outside consulting")`,
       prompt: `Find the faculty or staff page for ${label} at ${institution}, and any public conflict-of-interest, outside-activity or consulting policy that would apply to that role. Do not report a generic course syllabus unless it names this person as the instructor.`,
     });
+    push(
+      'education',
+      {
+        query: `site:chea.org ${quote(institution)}`,
+        prompt: `Find whether ${institution} is listed in the Council for Higher Education Accreditation (CHEA) database. A missing listing is not proof the school was unaccredited.`,
+      },
+      { label: 'CHEA', topics: ['education'] },
+    );
+    push(
+      'education',
+      {
+        query: `site:ope.ed.gov ${quote(institution)}`,
+        prompt: `Find the U.S. Department of Education College Navigator or accreditation listing for ${institution}. A missing listing is not proof the school was unaccredited.`,
+      },
+      { label: 'U.S. Department of Education', topics: ['education'] },
+    );
   }
-  const florida = !signals.state || signals.state === 'FL';
-  push(
-    'license',
-    {
-      query: florida
-        ? `${clause} (site:mqa-internet.doh.state.fl.us OR site:flhealthsource.gov) ${profession}`
-        : `${clause} ${profession} "license verification"`,
-      prompt: florida
-        ? `Find the Florida Department of Health license verification record for ${label} (${profession}): license number, status, expiration and any public discipline.`
-        : `Find the state licensing board verification record for ${label} (${profession}) in ${signals.state}: license number, status and any public discipline.`,
-    },
-    {
-      label: florida
-        ? 'Florida Department of Health license lookup'
-        : `${signals.state} licensing board`,
-      topics: ['license', 'discipline'],
-    },
-  );
+  const licenseStates = uniqueStates([
+    signals.state,
+    ...(signals.licenseStates ?? []),
+  ]);
+  for (const state of licenseStates.slice(0, 4)) {
+    const florida = state === 'FL';
+    push(
+      'license',
+      {
+        query: florida
+          ? `${clause} (site:mqa-internet.doh.state.fl.us OR site:flhealthsource.gov) ${profession}`
+          : `${clause} ${profession} ${state} "license verification"`,
+        prompt: florida
+          ? `Find the Florida Department of Health license verification record for ${label} (${profession}): license number, status, expiration and any public discipline.`
+          : `Find the state licensing board verification record for ${label} (${profession}) in ${state}: license number, status and any public discipline.`,
+      },
+      {
+        label: florida
+          ? 'Florida Department of Health license lookup'
+          : `${state} licensing board`,
+        topics: ['license', 'discipline'],
+      },
+    );
+  }
+  if (licenseStates.length === 0) {
+    push(
+      'license',
+      {
+        query: `${clause} ${profession} "license verification"`,
+        prompt: `Find the state licensing board verification record for ${label} (${profession}): license number, status and any public discipline.`,
+      },
+      { label: 'state licensing board', topics: ['license', 'discipline'] },
+    );
+  }
   return plans;
+}
+
+function uniqueStates(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const state = value?.trim().toUpperCase();
+    if (!state || state.length !== 2 || seen.has(state)) continue;
+    seen.add(state);
+    out.push(state);
+  }
+  return out;
 }

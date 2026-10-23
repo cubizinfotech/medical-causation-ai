@@ -13,16 +13,16 @@ This audit does **not** infer runtime support from an enum, catalog row, `.env.e
 | Layer | What it does |
 |---|---|
 | Catalog | `EXPERT_RESEARCH_CATALOG` in `provider-catalog.ts`. `liveImplemented` is **not** proof of a dedicated API. |
-| Dedicated live adapters | `createLiveSourceProviders` in `live-sources.ts`. Ten adapters: NPI, Open Payments, OpenAlex, Justia, PubMed, NIH RePORTER, ORCID, CourtListener, Florida license, Florida discipline. |
+| Dedicated live adapters | `createLiveSourceProviders` in `live-sources.ts`. Ten always-on adapters (NPI, Open Payments, OpenAlex, Justia, PubMed, NIH RePORTER, ORCID, CourtListener, Florida license, Florida discipline) plus YouTube Data API v3 when `YOUTUBE_API_KEY` is set. |
 | Web-backed catalog IDs | `WEB_RESEARCH_SOURCE_IDS` in `source-kind.ts`. Twenty-five IDs share `WebResearchEngine`. `withWebResearch()` marks those catalog rows `liveImplemented: true` even when the named API key is unused. |
 | Search providers | `WEB_SEARCH_PROVIDERS` default `gemini_grounding,serper,brave,tavily,google_news_rss,gdelt`. Only configured keys are called. |
-| Query planner | `query-planner.ts`. Video search is `site:youtube.com OR site:vimeo.com OR podcast…`, not YouTube Data API. |
+| Query planner | `query-planner.ts`. Per-platform social `site:` queries, DRI speaker queries, CV/first-author, extra directories, CHEA/USDE follow-ups. Serper/Brave page 2 on high-value topics. The `youtube` catalog id uses YouTube Data API v3 when a key is set. |
 | Identity | Shared `ExpertIdentityResolver` via NPI. Name-only web hits stay possible matches. |
 | CV compare | `cv-comparison.ts` plus `publication-lookup.ts` (OpenAlex, Crossref, PubMed, ORCID). Missing catalogue hit is “not found,” not proof the CV is false. |
 | Questions | `ewi-report-questions.ts` plus stored drafts merged in `ewi-report-input.ts`. |
 | Report | Template 3.9.2 rebuilds the legal dossier from evidence; coverage notes distinguish `searched_no_results`, `not_implemented`, and `blocked_or_access_denied`. |
 
-Reserved keys that the API **does not read:** `YOUTUBE_API_KEY`, `USPTO_API_KEY`, `LEXISNEXIS_API_KEY`, `GOOGLE_MAPS_API_KEY`, `CRIMINAL_RECORDS_API_KEY`, `MALPRACTICE_RECORDS_API_KEY`, directory keys, `WEB_SEARCH_API_KEY`. Setting them does nothing.
+Reserved keys that the API **does not read:** `USPTO_API_KEY`, `LEXISNEXIS_API_KEY`, `GOOGLE_MAPS_API_KEY`, `CRIMINAL_RECORDS_API_KEY`, `MALPRACTICE_RECORDS_API_KEY`, directory keys, `WEB_SEARCH_API_KEY`. Setting them does nothing. `YOUTUBE_API_KEY` is read: when set, live mode uses YouTube Data API v3 for the `youtube` catalog id; without it, video discovery stays on the web layer. `ASSEMBLYAI_API_KEY` transcribes at most two direct public media files when `EWI_TRANSCRIPTION_ENABLED` is true (default). YouTube watch URLs are never submitted.
 
 ## Dedicated adapters (runtime)
 
@@ -31,10 +31,11 @@ Reserved keys that the API **does not read:** `YOUTUBE_API_KEY`, `USPTO_API_KEY`
 | `npi_registry` | Yes — `NpiRegistryResearchProvider` | Free public CMS API | NPI, taxonomy, self-reported licenses | Identity resolver uses this as the confirmed record | NPPES is self-report, not a license board |
 | `open_payments` | Yes — searched by confirmed NPI | Free CMS API | General payments by year/company/type | Tied to NPI, not name | Absence is not “no conflict” |
 | `openalex` | Yes | Free (optional key) | Author works when name + topics + institution fit | Possible vs confirmed | Not a degree or board check |
-| `pubmed` | Yes — NCBI E-utilities | Free; `PUBMED_API_KEY` raises 3→10 rps | Articles matching last name + initials | Affiliation not confirmed from summary alone | Not full-text; not retraction-complete |
+| `pubmed` | Yes — NCBI E-utilities | Free; `PUBMED_API_KEY` raises 3→10 rps | Articles matching last name + initials, author position, DOI/PMID | Affiliation not confirmed from summary alone | Not full-text; not retraction-complete |
 | `grants` | Yes — NIH RePORTER | Free public | Grants matching investigator name | Org must also fit | Other funders not searched |
 | `orcid` | Yes — Public API v3 | Free; client credentials optional | Public record when affiliation/specialty/iD agrees | Unconfirmed works not attributed | Missing ORCID ≠ missing publication |
-| `courtlistener` | Yes | Free; token adds excerpts | Opinions and public RECAP filings with full name + specialty | Role often undetermined; snippets vs extracted text | Not a complete docket; PACER fetch not used |
+| `courtlistener` | Yes | Free; token adds excerpts | Opinions and public RECAP filings; paginated `next`; NPI-confirmed RECAP may omit the specialty word | Role often undetermined; snippets vs extracted text | Not a complete docket; PACER fetch not used |
+| `youtube` | Yes when `YOUTUBE_API_KEY` is set | YouTube Data API v3 | Public video metadata (id, title, channel, date, URL, description, caption-exists flag) | First+last name plus specialty or place | Captions are not downloaded; without a key, web `site:youtube` is used |
 | `justia` | Yes — HTML search | Free public | Case search by full name; unread pages reported as not read | Name match only until identity rules agree | Often blocked; not board certification |
 | `state_license` | Yes — Florida MQA only | Official lookup; often bot-walled | Florida license when city or FL number on NPPES | Blocked page ≠ invalid license | Other states unimplemented |
 | `state_discipline` | Same Florida lookup | Same | Discipline flag if the page can be read | Empty flag ≠ no discipline | Other states unimplemented |
@@ -48,8 +49,9 @@ These IDs are answered by one web run. A “no matching record” line means the
 | Catalog ID | Runtime call | Typical result on Demery Word (9) | Gap |
 |---|---|---|---|
 | `web_search`, `news`, `blogs`, `other_public_websites` | Gemini grounding / Serper / Brave / Tavily / Google News RSS / GDELT if configured | Mixed snippets; ResearchGate; uscourts.gov | Grounding URLs are redirects; pages often unread |
-| `youtube`, `presentations`, `powerpoints` | `site:youtube.com` web query | “searched and returned no matching record” | No video ID store, no captions, no STT |
-| `social` | Search listing only; login-gated hosts are not fetched | Institutional/possible matches | No platform API |
+| `youtube` | YouTube Data API v3 when `YOUTUBE_API_KEY` is set; otherwise `site:youtube.com` web query | Depends on key | Caption-exists flag is stored; captions are not downloaded. AssemblyAI may transcribe at most two direct public media files, never YouTube watch URLs |
+| `presentations`, `powerpoints` | Web query | “searched and returned no matching record” | No file ingest |
+| `social` | Per-platform `site:` queries (LinkedIn, Facebook, Instagram, X, TikTok, Bluesky, YouTube); login-gated hosts are not fetched | Public URLs only | No platform API; Instagram/Facebook/LinkedIn pages are not opened |
 | `expert_website`, `ime_websites`, `advertising`, `ime_advertising` | Public pages the engine finds | ResearchGate as “expert website”; PACER snippet misfiled as IME | Court pages were routed here by claim topic (fixed in code; not yet in Word (9)) |
 | Directory IDs (`seak`, `dri`, `jurispro`, …) | Public-web hits; login/paywall not bypassed | “searched, no matching record” | Restricted directories remain unimplemented |
 | `google_maps` | Web/maps snippets if a search provider returns them | Not a Maps Platform call | `GOOGLE_MAPS_API_KEY` unused |
@@ -109,7 +111,7 @@ Inspected via text extract of `ewi-jason-a-demery-report (9).docx` (18:12 local,
 | Patents | USPTO ODP **not called** | Not implemented | None | Not checked | Patents | Needs USPTO.gov + ID.me key | $0 after key |
 | Legal opinions/filings | CourtListener, Justia, web | Ran; many snippets | Mixed text vs snippet | Role often unknown | Lawsuits, orders, pleadings, Daubert | No PACER purchase | $0 now; PACER later |
 | Depositions | None | Not implemented | None | Not implemented | Depositions | TrialSmith is quote + no public API | Quote |
-| Video / transcripts | Web `site:youtube` only | No match | None | Not implemented as transcript | Videos | Discovery ≠ captions | See cost doc |
+| Video / transcripts | YouTube Data API v3 when keyed; else web `site:youtube` | Depends on key | Metadata + caption flag; AssemblyAI on direct mp3/mp4 (cap 2) | YouTube watch URLs not transcribed | Videos | Captions.download owner-only; STT skipped for YouTube | $0 quota + ≤~$0.11 STT |
 | Social | Search listings; no fetch of gated hosts | Incomplete | Possible | Unverified | Social | No scraping | $0 |
 | Open Payments | CMS by NPI | Section present or empty | NPI-tied if present | Official CMS | Income/bias | Not all income | $0 |
 | Criminal | Never sent | Not implemented | None | Not implemented | Criminal | No vendor | Do not use cheap aggregators |

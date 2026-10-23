@@ -10,7 +10,10 @@ export const literatureConfig = (): LiteratureSearchSettings => ({
   europePmcBaseUrl:
     process.env.EUROPE_PMC_BASE_URL ??
     'https://www.ebi.ac.uk/europepmc/webservices/rest',
-  pubmedApiKey: process.env.PUBMED_API_KEY?.trim() || undefined,
+  pubmedApiKey:
+    process.env.PUBMED_API_KEY?.trim() ||
+    process.env.NCBI_API_KEY?.trim() ||
+    undefined,
   tool: process.env.PUBMED_TOOL?.trim() || 'medical-causation-ai',
   email: process.env.PUBMED_EMAIL?.trim() || undefined,
   maxResults: Number(process.env.LITERATURE_MAX_RESULTS ?? 8),

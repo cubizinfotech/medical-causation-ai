@@ -32,6 +32,10 @@ import {
   validateExpertResearchQuery,
   type ProviderRuntimeOptions,
 } from './providers/provider-runtime';
+import {
+  createTranscriptionEnricher,
+  MediaTranscriptionEnricher,
+} from './live/transcription.enricher';
 
 export function createExpertResearchRuntime(
   settings?: ResearchProviderSettings,
@@ -51,8 +55,17 @@ export function createExpertResearchRuntime(
       openAlexMailto: settings?.openAlexMailto,
       crossrefMailto: settings?.crossrefMailto,
       openPaymentsYears: settings?.openPaymentsYears,
-      pubmedApiKey: process.env.PUBMED_API_KEY?.trim() || undefined,
-      pubmedEmail: process.env.PUBMED_EMAIL?.trim() || undefined,
+      pubmedApiKey: settings?.pubmedApiKey,
+      pubmedEmail: settings?.pubmedEmail,
+      youtubeApiKey: settings?.youtubeApiKey,
+      youtubeMaxResults: settings?.youtubeMaxResults,
+      pubmedMaxArticles: settings?.pubmedMaxArticles,
+      courtListenerMaxPages: settings?.courtListenerMaxPages,
+      courtListenerMaxHits: settings?.courtListenerMaxHits,
+      assemblyAiApiKey: settings?.assemblyAiApiKey,
+      transcriptionEnabled: settings?.transcriptionEnabled,
+      transcriptionMaxFiles: settings?.transcriptionMaxFiles,
+      transcriptionMaxMinutes: settings?.transcriptionMaxMinutes,
       orcidClientId: settings?.orcidClientId,
       orcidClientSecret: settings?.orcidClientSecret,
       fetchImpl: options.fetchImpl,
@@ -125,12 +138,27 @@ export function createPublicationLookup(
   );
 }
 
+export function createTranscriptionEnricherFrom(
+  runtime: ProviderRuntimeOptions,
+): MediaTranscriptionEnricher | null {
+  const live = runtime.live;
+  return createTranscriptionEnricher({
+    enabled: live?.transcriptionEnabled !== false,
+    apiKey: live?.assemblyAiApiKey,
+    maxFiles: live?.transcriptionMaxFiles ?? 2,
+    maxMinutes: live?.transcriptionMaxMinutes ?? 30,
+    timeoutMs: live?.timeoutMs ?? runtime.timeoutMs,
+    fetchImpl: live?.fetchImpl,
+  });
+}
+
 @Injectable()
 export class ExpertResearchService {
   constructor(
     private readonly providers: IExpertResearchProvider[],
     private readonly publicationLookup: PublicationTitleLookup | null = null,
     private readonly webEngine: WebResearchEngine | null = null,
+    private readonly transcription: MediaTranscriptionEnricher | null = null,
   ) {}
 
   /**
@@ -257,9 +285,12 @@ export class ExpertResearchService {
         items: applyIdentityMatch(validated.value, result.items),
       }),
     );
-    const marked = markConflicts(identified.flatMap((result) => result.items));
+    const transcribed = this.transcription
+      ? await this.transcription.enrich(identified)
+      : identified;
+    const marked = markConflicts(transcribed.flatMap((result) => result.items));
     let offset = 0;
-    return identified.map((result) => {
+    return transcribed.map((result) => {
       const items = marked.slice(offset, offset + result.items.length);
       offset += result.items.length;
       const conflicting = items.some(

@@ -24,7 +24,7 @@
 ## Pending
 
 - [ ] Copy the local knowledge-base documents to the droplet and run `npm run index:kb` there (files are gitignored; steps are in `DEPLOYMENT.md` section 16). On the 2 GB server, split any book near 1 GB into parts under about 200 MB first.
-- [ ] Paid databases and other research sources for EWI (credentials, subscriptions, and legal access); four free public sources are live
+- [ ] Paid databases and other research sources for EWI (PACER purchase, Lexis/Westlaw, TrialSmith, FSMB, USPTO after ID.me); public-web coverage was deepened 23 Oct 2026 (pagination, capped AssemblyAI, CourtListener pages, first-author table) but was not deployed
 - [ ] EWI request and email screens (the API exists; the website does not)
 - [ ] Sharing cases inside one law firm (today each case is visible only to the user who created it)
 - [ ] Create the real users on the server with `npm run user:create` (never seed demo accounts there)

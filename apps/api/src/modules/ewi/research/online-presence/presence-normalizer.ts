@@ -112,7 +112,7 @@ function recordFromItem(
     evidenceReferences: evidenceRefs(item, raw),
     restricted,
     identityMatch: item.identityMatch,
-    platform: readPlatform(raw.platform),
+    platform: readPlatform(raw.platform) ?? readNestedPlatform(raw),
     description: restricted ? null : readString(raw.description),
     transcript,
     transcriptAvailable,
@@ -143,7 +143,10 @@ function resolveKind(
   item: ExpertEvidenceItem,
   raw: Record<string, unknown>,
 ): PresenceKind {
-  const stated = readString(raw.presenceKind)?.toLowerCase();
+  const stated =
+    readString(raw.presenceKind)?.toLowerCase() ??
+    readString((raw.web as { presenceKind?: unknown } | undefined)?.presenceKind)
+      ?.toLowerCase();
   if (stated && isPresenceKind(stated)) return stated;
 
   switch (item.sourceId) {
@@ -225,6 +228,11 @@ function readPlatform(value: unknown): SocialPlatform | null {
     return text as SocialPlatform;
   }
   return 'other';
+}
+
+function readNestedPlatform(raw: Record<string, unknown>): SocialPlatform | null {
+  const web = raw.web as { platform?: unknown } | undefined;
+  return web ? readPlatform(web.platform) : null;
 }
 
 function readLocationFlags(

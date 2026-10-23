@@ -7,7 +7,8 @@ import type { ProviderDefinition } from '../expert-research.types';
 /**
  * Independent research providers.
  * Live mode calls the connected public sources (NPI Registry, Open Payments,
- * OpenAlex, CourtListener, Justia, PubMed, NIH RePORTER, and ORCID). Mock mode uses fixtures only where a fixture
+ * OpenAlex, CourtListener, Justia, PubMed, NIH RePORTER, ORCID, and YouTube
+ * Data API when a key is set). Mock mode uses fixtures only where a fixture
  * exists. Other providers return unavailable and do not invent credentials,
  * publications, cases, or records. Restricted providers are never scraped.
  * LexisNexis is authorized access only.
@@ -47,6 +48,17 @@ function withWebResearch(
 ): readonly ProviderDefinition[] {
   return entries.map((entry) => {
     if (!WEB_SOURCE_ID_SET.has(entry.id)) return entry;
+    if (entry.id === 'youtube') {
+      return {
+        ...entry,
+        accessClass: 'public' as const,
+        requirement: 'account' as const,
+        credentialEnv: 'YOUTUBE_API_KEY',
+        liveImplemented: true,
+        summary:
+          'YouTube Data API v3 when YOUTUBE_API_KEY is set: public video title, channel, date, URL, description, and whether captions exist. Captions are not downloaded (captions.download is owner-only). AssemblyAI may transcribe at most two direct public media files (mp3/mp4); YouTube watch URLs are never submitted. Without a key, public web search for youtube.com and vimeo.com pages is used instead. A same-name video is not attributed unless the listing also supports the specialty or place.',
+      };
+    }
     const label = WEB_SOURCE_LABEL[entry.id] ?? 'public web pages';
     return {
       ...entry,
@@ -521,7 +533,7 @@ const BASE_CATALOG: readonly ProviderDefinition[] = [
     requirement: 'account',
     credentialEnv: 'YOUTUBE_API_KEY',
     summary:
-      'YouTube Data API. Public video metadata only. Transcripts are stored only when legally and technically permitted. Not called locally.',
+      'YouTube Data API v3. Public video metadata only. Transcripts are not retrieved.',
   }),
   source({
     id: 'presentations',
