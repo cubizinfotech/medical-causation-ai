@@ -52,12 +52,14 @@ describe('MediaTranscriptionEnricher', () => {
   });
 
   it('caps at two files and skips a duplicate URL', async () => {
-    const transcribeUrl = jest.fn(async (url: string) => ({
-      id: url,
-      text: `Transcript of ${url}`,
-      words: [{ text: 'Hello', start: 0, end: 400 }],
-      audioDuration: 12,
-    }));
+    const transcribeUrl = jest.fn((url: string) =>
+      Promise.resolve({
+        id: url,
+        text: `Transcript of ${url}`,
+        words: [{ text: 'Hello', start: 0, end: 400 }],
+        audioDuration: 12,
+      }),
+    );
     const fetchImpl = jest.fn(() =>
       Promise.resolve(
         new Response(null, {
@@ -81,10 +83,13 @@ describe('MediaTranscriptionEnricher', () => {
       { transcribeUrl } as unknown as AssemblyAiClient,
     );
     const duplicated = resultWith('https://media.example.edu/a.mp3');
-    duplicated.items.push({
-      ...duplicated.items[0]!,
-      title: 'Same file again',
-    });
+    const first = duplicated.items[0];
+    if (first) {
+      duplicated.items.push({
+        ...first,
+        title: 'Same file again',
+      });
+    }
     const third = resultWith('https://media.example.edu/b.mp3');
     const fourth = resultWith('https://media.example.edu/c.mp3');
     const out = await enricher.enrich([duplicated, third, fourth]);

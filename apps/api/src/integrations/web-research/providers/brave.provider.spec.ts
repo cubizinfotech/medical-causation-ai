@@ -4,7 +4,12 @@ describe('BraveSearchProvider', () => {
   it('sends offset as the zero-based page index, not count times page', async () => {
     let called = '';
     const fetchImpl = ((input: RequestInfo | URL) => {
-      called = String(input);
+      called =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
       return Promise.resolve(
         new Response(JSON.stringify({ web: { results: [] } }), {
           status: 200,

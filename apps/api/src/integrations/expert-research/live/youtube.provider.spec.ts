@@ -8,7 +8,6 @@ import {
   supportingEvidence,
   videoNamesMatch,
   YoutubeResearchProvider,
-  YOUTUBE_TRANSCRIPT_UNAVAILABLE,
 } from './youtube.provider';
 
 const definition = EXPERT_RESEARCH_CATALOG.find(

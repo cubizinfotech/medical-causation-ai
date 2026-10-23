@@ -88,21 +88,24 @@ export class CourtListenerClient {
     let next: string | null = null;
     const maxPages = Math.min(8, Math.max(1, this.options.maxPages ?? 3));
     for (let page = 0; page < maxPages; page++) {
-      const url = next
+      const requestUrl: URL = next
         ? new URL(next, `${this.baseUrl}/`)
         : new URL(`${this.baseUrl}/search/`);
       if (!next) {
-        url.searchParams.set('q', query);
-        url.searchParams.set('type', type);
-        url.searchParams.set('highlight', 'on');
-        url.searchParams.set('order_by', 'score desc');
+        requestUrl.searchParams.set('q', query);
+        requestUrl.searchParams.set('type', type);
+        requestUrl.searchParams.set('highlight', 'on');
+        requestUrl.searchParams.set('order_by', 'score desc');
       }
-      const body = await fetchJson<SearchResponse>(url, {
-        timeoutMs: this.options.timeoutMs,
-        fetchImpl: this.options.fetchImpl,
-        headers: this.headers,
-      });
-      for (const hit of body.results ?? []) {
+      const body = readSearchResponse(
+        await fetchJson<unknown>(requestUrl, {
+          timeoutMs: this.options.timeoutMs,
+          fetchImpl: this.options.fetchImpl,
+          headers: this.headers,
+        }),
+      );
+      const results = body.results ?? [];
+      for (const hit of results) {
         const key =
           type === 'rd'
             ? `rd:${hit.id ?? hit.absolute_url ?? JSON.stringify(hit)}`
@@ -112,7 +115,7 @@ export class CourtListenerClient {
         hits.push(hit);
       }
       next = body.next?.trim() || null;
-      if (!next || (body.results ?? []).length === 0) break;
+      if (!next || results.length === 0) break;
     }
     return { hits, count: hits.length };
   }
@@ -169,6 +172,28 @@ export class CourtListenerClient {
   private get baseUrl(): string {
     return (this.options.baseUrl ?? COURTLISTENER_API).replace(/\/$/, '');
   }
+}
+
+function readSearchResponse(value: unknown): SearchResponse {
+  if (!value || typeof value !== 'object') return {};
+  const rec = value as Record<string, unknown>;
+  const next =
+    typeof rec.next === 'string'
+      ? rec.next
+      : rec.next === null
+        ? null
+        : undefined;
+  const results = Array.isArray(rec.results)
+    ? rec.results.filter(
+        (item): item is CourtListenerSearchHit =>
+          Boolean(item) && typeof item === 'object',
+      )
+    : undefined;
+  return {
+    ...(typeof rec.count === 'number' ? { count: rec.count } : {}),
+    ...(next !== undefined ? { next } : {}),
+    ...(results ? { results } : {}),
+  };
 }
 
 export function htmlToText(markup: string): string {

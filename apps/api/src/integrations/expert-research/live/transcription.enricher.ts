@@ -76,8 +76,7 @@ export class MediaTranscriptionEnricher {
             withTranscriptMeta(item, {
               transcriptAvailable: false,
               transcriptUnavailableReason:
-                probe.skipReason ??
-                'This file was not sent for transcription.',
+                probe.skipReason ?? 'This file was not sent for transcription.',
             }),
           );
           continue;
@@ -99,9 +98,7 @@ export class MediaTranscriptionEnricher {
           );
         } catch (error) {
           const message =
-            error instanceof Error
-              ? error.message
-              : 'Transcription failed.';
+            error instanceof Error ? error.message : 'Transcription failed.';
           items.push(
             withTranscriptMeta(item, {
               transcriptAvailable: false,
@@ -118,7 +115,10 @@ export class MediaTranscriptionEnricher {
 
 function isTranscriptCandidate(item: ExpertEvidenceItem, url: string): boolean {
   if (looksLikeDirectMediaUrl(url)) return true;
-  const kind = String(item.raw?.presenceKind ?? item.category ?? '');
+  const kind =
+    typeof item.raw?.presenceKind === 'string'
+      ? item.raw.presenceKind
+      : (item.category ?? '');
   return (
     kind === 'video' ||
     kind === 'presentation' ||

@@ -471,12 +471,7 @@ export function buildEwiReportDocument(input: {
         );
       case 'publications':
         return withCvStatements(
-          publicationsSection(
-            spec,
-            tracker,
-            input.expertName,
-            input.cvCheck,
-          ),
+          publicationsSection(spec, tracker, input.expertName, input.cvCheck),
           input.cvCheck,
           ['publication'],
         );
@@ -774,7 +769,13 @@ const SECTION_SOURCES: Partial<Record<RoutedSectionId, string[]>> = {
   patents: ['patents', 'trademarks'],
   'awards-military': ['awards', 'military_claims'],
   orders: ['orders', 'courtlistener', 'justia', 'state_court_records'],
-  pleadings: ['motions', 'pleadings', 'courtlistener', 'justia', 'state_court_records'],
+  pleadings: [
+    'motions',
+    'pleadings',
+    'courtlistener',
+    'justia',
+    'state_court_records',
+  ],
   depositions: ['depositions'],
   'testimony-inconsistencies': ['expert_testimony'],
   lawsuits: [
@@ -1636,7 +1637,7 @@ function publicationsSection(
       'orcid',
     ],
   });
-  const comparisonBlocks = firstAuthorComparisonBlocks(cvCheck, expertName);
+  const comparisonBlocks = firstAuthorComparisonBlocks(cvCheck);
   if (items.length === 0 && comparisonBlocks.length === 0) {
     return {
       id: spec.id,
@@ -3008,7 +3009,6 @@ function authorListFromRaw(raw: Record<string, unknown>): string[] {
 
 function firstAuthorComparisonBlocks(
   check: CvCheck | null | undefined,
-  _expertName: string,
 ): ReportBlock[] {
   const rows = (check?.comparisons ?? []).filter(
     (row) => row.topic === 'publication',
