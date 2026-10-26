@@ -189,6 +189,24 @@ describe('online presence research', () => {
     );
   });
 
+  it('reads a rating stored on the web record when raw.rating is absent', () => {
+    const dossier = buildOnlinePresenceDossier({
+      evidence: [
+        item({
+          sourceId: 'patient_reviews',
+          category: 'patient_review',
+          title: 'Healthgrades',
+          url: 'https://www.healthgrades.com/x',
+          raw: {
+            presenceKind: 'patient_review',
+            web: { rating: '4.8 of 5 from 12 reviews' },
+          },
+        }),
+      ],
+    });
+    expect(dossier.patientReviews[0]?.rating).toBe('4.8 of 5 from 12 reviews');
+  });
+
   it('does not merge uncertain identity presence hits', () => {
     const dossier = buildOnlinePresenceDossier({
       evidence: [

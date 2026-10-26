@@ -90,12 +90,19 @@ export function evidenceStatusLine(item: ExpertEvidenceItem): string {
   return `Status: ${status}. Source: ${item.sourceId}.`;
 }
 
-/** The status part of a source index entry. */
+/** The status part of a source index entry. Access/read, not “verified.” */
 export function sourceIndexStatus(item: ExpertEvidenceItem): string {
-  if (item.access === 'restricted') return '; status: inaccessible';
-  const status = item.informationStatus;
-  if (status === 'verified') return '; status: verified';
-  if (status === 'conflicting') return '; status: discrepancy found';
-  if (status === 'unavailable') return '; status: not found';
-  return '; status: not independently verified';
+  if (item.access === 'restricted') {
+    return '; access: not read (restricted)';
+  }
+  const web = item.raw?.web as { read?: string } | undefined;
+  if (web?.read === 'read') return '; access: page was read';
+  if (web?.read === 'snippet_only') return '; access: listing or snippet only';
+  if (web?.read === 'restricted' || web?.read === 'failed') {
+    return '; access: not read (login or bot protection)';
+  }
+  if (item.informationStatus === 'unavailable') {
+    return '; access: not retrieved';
+  }
+  return '; access: retrieved';
 }

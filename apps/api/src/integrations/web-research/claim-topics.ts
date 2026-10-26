@@ -7,7 +7,11 @@
  * verbatim on the page and (unless the page is the person's own profile) names
  * the subject. Nothing is inferred beyond what the sentence says.
  */
-import type { IdentitySubject } from './identity-assess';
+import {
+  quoteNamesOtherPerson,
+  quoteNamesSubject,
+  type IdentitySubject,
+} from './identity-assess';
 import type {
   WebClaim,
   WebClaimBasis,
@@ -431,10 +435,6 @@ const RULES: readonly TopicRule[] = [
   },
 ];
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 /** Sentence-sized pieces of a text, each at most `max` characters. */
 export function sentencesOf(text: string, max = 420): string[] {
   const raw = text
@@ -536,11 +536,6 @@ const PROFILE_KINDS: ReadonlySet<WebSourceKind> = new Set([
   'advertising',
   'ime',
   'profile',
-  'directory',
-  'university',
-  'review',
-  'maps',
-  'other',
 ]);
 
 const MAX_PER_TOPIC = 3;
@@ -548,18 +543,20 @@ const MAX_FACTS = 16;
 
 /**
  * Statements on a page that fall under a report topic. Each quote is a
- * substring of the page text. On multi-person pages (court documents, news,
- * journals) a sentence counts only if it names the subject; on the subject's
- * own profile pages a sentence counts without the name.
+ * substring of the page text. On multi-person, directory, news, or court
+ * pages a sentence counts only if it names the subject’s first and last
+ * name (or a compatible initial). Own-profile pages may count a sentence
+ * without repeating the name unless that sentence names someone else.
  */
 export function extractFacts(input: FactInput): WebClaim[] {
-  const surname = input.subject.name.last.toLowerCase();
-  const surnameRe = new RegExp(`\\b${escapeRegExp(surname)}\\b`, 'i');
-  const titleNamesSubject = Boolean(input.title && surnameRe.test(input.title));
-  const profilePage =
-    input.ownPage ||
-    (PROFILE_KINDS.has(input.kind) &&
-      (titleNamesSubject || surnameRe.test(input.url)));
+  const directoryLike =
+    input.kind === 'directory' ||
+    input.kind === 'news' ||
+    input.kind === 'review' ||
+    input.kind === 'court' ||
+    input.kind === 'justia';
+  const ownProfile =
+    (input.ownPage || PROFILE_KINDS.has(input.kind)) && !directoryLike;
 
   const claims: WebClaim[] = [];
   const perTopic = new Map<WebClaimTopic, number>();
@@ -569,10 +566,10 @@ export function extractFacts(input: FactInput): WebClaim[] {
   for (let i = 0; i < pieces.length; i++) {
     if (claims.length >= MAX_FACTS) break;
     const piece = pieces[i];
-    const near = `${pieces[i - 1] ?? ''} ${piece}`;
-    const named =
-      surnameRe.test(piece) || (profilePage && surnameRe.test(near));
-    if (!profilePage && !named) continue;
+    const namesSubject = quoteNamesSubject(piece, input.subject.name);
+    const namesOther = quoteNamesOtherPerson(piece, input.subject.name);
+    if (namesOther && !namesSubject) continue;
+    if (!ownProfile && !namesSubject) continue;
     for (const rule of RULES) {
       if (rule.kinds && !rule.kinds.includes(input.kind)) continue;
       if ((perTopic.get(rule.topic) ?? 0) >= MAX_PER_TOPIC) continue;
@@ -582,8 +579,7 @@ export function extractFacts(input: FactInput): WebClaim[] {
       if (!hit) continue;
       if (rule.and && !rule.and.test(piece)) continue;
       if (rule.unless && rule.unless.test(piece)) continue;
-      // Multi-person pages: the credential sentence must name the subject.
-      if (!profilePage && !surnameRe.test(piece)) continue;
+      if (!ownProfile && !namesSubject) continue;
       if (
         rule.topic === 'university_rules' &&
         /cell phones?|times new roman|late work|food and drinks/i.test(piece) &&
@@ -681,14 +677,16 @@ export function factsFromSnippet(input: {
   snippet: string;
   subject: IdentitySubject;
 }): WebClaim[] {
-  const surnameRe = new RegExp(
-    `\\b${escapeRegExp(input.subject.name.last.toLowerCase())}\\b`,
-    'i',
-  );
   const out: WebClaim[] = [];
   const seen = new Set<string>();
   for (const piece of sentencesOf(input.snippet, 420)) {
-    if (!surnameRe.test(piece)) continue;
+    if (!quoteNamesSubject(piece, input.subject.name)) continue;
+    if (
+      quoteNamesOtherPerson(piece, input.subject.name) &&
+      !quoteNamesSubject(piece, input.subject.name)
+    ) {
+      continue;
+    }
     for (const rule of RULES) {
       if (rule.kinds && !rule.kinds.includes(input.kind)) continue;
       if (rule.topic === 'office') continue;

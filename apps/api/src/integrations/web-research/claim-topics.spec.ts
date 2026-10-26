@@ -246,6 +246,42 @@ describe('extractFacts', () => {
     );
   });
 
+  it('does not take Leila Glass credentials from a Leah Ellenberg directory page', () => {
+    const leah = subjectFromQuery({
+      expertName: 'Leah Ellenberg',
+      city: 'Los Angeles, CA',
+      specialty: 'Neuropsychology',
+    });
+    if (!leah) throw new Error('subject');
+    const facts = extractFacts({
+      url: 'https://directory.example/los-angeles-neuropsychologists',
+      kind: 'directory',
+      title: 'Los Angeles Neuropsychologists — Leah Ellenberg, Leila Glass',
+      text: 'Leah Ellenberg, PhD, practices pediatric neuropsychology in Los Angeles. Leila Glass, PhD, earned her doctorate from UCLA and completed a fellowship at Boston Children’s Hospital.',
+      subject: leah,
+      ownPage: false,
+    });
+    const education = facts.filter((fact) => fact.topic === 'education');
+    expect(education.every((fact) => !/Leila Glass/i.test(fact.quote))).toBe(
+      true,
+    );
+    expect(education.every((fact) => !/UCLA/i.test(fact.quote))).toBe(true);
+  });
+
+  it('drops a credential quote that names another person', () => {
+    const facts = extractFacts({
+      url: 'https://news.example/awards',
+      kind: 'news',
+      title: 'Awards',
+      text: 'Mark Demery received the Dean’s scholarship. Jason Demery testified in Gainesville.',
+      subject,
+      ownPage: false,
+    });
+    expect(
+      facts.some((fact) => fact.topic === 'award' && /Dean/i.test(fact.quote)),
+    ).toBe(false);
+  });
+
   it('labels snippet-only statements as snippets', () => {
     const facts = factsFromSnippet({
       url: 'https://example.com/x',

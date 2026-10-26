@@ -87,7 +87,7 @@ export class ExpertIdentityResolver {
           city: location.city,
           state: location.state,
         });
-        pool = merge(pool, inCityRecords);
+        pool = merge(pool, inCityRecords).filter((record) => record.individual);
         confirmed = pool.filter((record) => named(record) && fits(record));
         if (confirmed.length > 0) break;
       }
@@ -98,7 +98,7 @@ export class ExpertIdentityResolver {
         lastName: variant.last,
         state: location.state,
       });
-      pool = merge(pool, byName);
+      pool = merge(pool, byName).filter((record) => record.individual);
       confirmed = pool.filter((record) => named(record) && fits(record));
       if (confirmed.length > 0 || pool.some(named)) break;
     }
@@ -157,7 +157,7 @@ export class ExpertIdentityResolver {
         .join('; ');
       return ambiguous(
         sameSpecialty,
-        `No NPI Registry record matches the name and specialty${inPlace}. ${sameSpecialty.length} record(s) match the name and specialty in another city (${listed}). The city entered for this investigation is not the registry practice city, so the record was not used as a confirmed identity and was not merged into other findings. Public sources were still searched. An NPI number would confirm whether this is the same person; it is not required to keep searching public records.`,
+        `Identity is not confirmed. ${sameSpecialty.length} possible NPI record(s) match the name and specialty in another city (${listed}). No record matches the name and specialty${inPlace}. The city entered for this investigation is not the registry practice city, so the record was not used as a confirmed identity and was not merged into other findings. Public sources were still searched. An NPI number would confirm whether this is the same person; it is not required to keep searching public records.`,
       );
     }
     const sameCity = hasCity

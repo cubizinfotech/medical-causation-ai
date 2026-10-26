@@ -289,16 +289,15 @@ function itemFor(
   query: ExpertResearchQuery,
   retrievedAt: string,
 ): ExpertEvidenceItem {
-  const tied =
-    record.match.level === 'strong' || record.match.level === 'possible';
+  const strong = record.match.level === 'strong';
   const mapped = catalogSourceFor(record.kind, record.directoryId);
-  const caveat = !tied
+  const caveat = !strong
     ? record.match.level === 'other_person'
       ? 'This page appears to concern a different person with a similar name. It is not attributed to the subject. '
-      : 'This page names the same name, but nothing ties it to this person. It is not attributed to the subject. '
-    : record.match.level === 'possible'
-      ? 'Possible match: the profession, place or note details only partly agree. '
-      : '';
+      : record.match.level === 'possible'
+        ? 'Possible match: the profession, place or note details only partly agree. This page is not treated as the subject’s credentials. '
+        : 'This page names the same name, but nothing ties it to this person. It is not attributed to the subject. '
+    : '';
   return {
     sourceId: definition.id,
     category:
@@ -323,9 +322,9 @@ function itemFor(
       presenceKind: presenceKindFor(record),
       platform: record.platform,
       identity: {
-        name: query.expertName,
-        verifiedBy: tied ? 'source_match' : undefined,
-        ambiguous: !tied,
+        name: strong ? query.expertName : undefined,
+        verifiedBy: strong ? 'source_match' : undefined,
+        ambiguous: !strong,
         basis: record.match.basis,
         matchLevel: record.match.level,
       },

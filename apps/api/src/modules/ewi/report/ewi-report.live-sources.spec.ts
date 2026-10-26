@@ -130,9 +130,9 @@ describe('EWI report CV comparison', () => {
     });
     const text = sectionText(document, 'cv-comparison');
     expect(text).toMatch(/Uploaded CV: smith-cv\.pdf \(4 pages\)/);
-    expect(text).toMatch(/Discrepancy found: 1; Not searched: 1/);
-    expect(text.indexOf('[Discrepancy found]')).toBeLessThan(
-      text.indexOf('[Not searched]'),
+    expect(text).toMatch(/Discrepancy identified: 1; Unable to verify: 1/);
+    expect(text.indexOf('[Discrepancy identified]')).toBeLessThan(
+      text.indexOf('[Unable to verify]'),
     );
     expect(text).toContain('CV (page 3): “Spine study. Spine 2012.”');
     expect(text).toContain('OpenAlex: Spine study (2012). Authors: Ann Lee.');
@@ -308,10 +308,9 @@ describe('EWI report with live sources', () => {
     expect(text).toMatch(
       /Excluded — the court’s words: “the motion to exclude Dr\. Smith is GRANTED”/,
     );
-    // The challenge opinion is not repeated under lawsuits.
+    // Challenge opinions and ordinary case captions are not malpractice files.
     const lawsuits = sectionText(document, 'lawsuits');
-    expect(lawsuits).toMatch(/complete case docket/);
-    expect(lawsuits).toMatch(/Poe v\. Hospital/);
+    expect(lawsuits).not.toMatch(/Poe v\. Hospital/);
     expect(lawsuits).not.toMatch(/Doe v\. Roe/);
   });
 

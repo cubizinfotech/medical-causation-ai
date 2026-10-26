@@ -1,5 +1,6 @@
 import {
   coverageLine,
+  findingsCoverageNote,
   institutionsIn,
   routeWebFindings,
 } from './section-router';
@@ -166,6 +167,65 @@ describe('routeWebFindings', () => {
     expect(
       social.some((item) => /not a personal profile/i.test(item.statement)),
     ).toBe(true);
+  });
+
+  it('does not file a court opinion as IME after the model retags kind to ime', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'retag',
+          'https://www.courtlistener.com/opinion/123/smith-v-jones/',
+          'ime',
+          [
+            claim(
+              'ime',
+              'The court granted a compulsory medical examination of the plaintiff',
+            ),
+            claim(
+              'education',
+              'Jason Demery earned a Ph.D. from the University of Florida',
+            ),
+          ],
+          'strong',
+          'Memorandum opinion',
+        ),
+      ]),
+    );
+    expect(routed.get('ime')).toBeUndefined();
+    expect(routed.get('education')).toBeUndefined();
+    expect(routed.get('orders')?.length).toBeGreaterThan(0);
+  });
+
+  it('does not file possible-match pages as the subject’s education', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'dir',
+          'https://directory.example/leila',
+          'directory',
+          [claim('education', 'Leila Glass, PhD, UCLA')],
+          'possible',
+          'Leila Glass',
+        ),
+      ]),
+    );
+    expect(routed.get('education')).toBeUndefined();
+  });
+
+  it('keeps a conflicting-name directory page out of the subject’s directories', () => {
+    const page = record(
+      'dir',
+      'https://directory.example/los-angeles-neuropsychologists',
+      'directory',
+      [claim('education', 'Leila Glass, PhD, earned her doctorate from UCLA')],
+      'possible',
+      'Los Angeles Neuropsychologists — Leah Ellenberg, Leila Glass',
+    );
+    page.match.conflicts = ['Leila Glass'];
+    page.match.quote = 'Leila Glass, PhD, UCLA';
+    const routed = routeWebFindings(dossier([page]));
+    expect(routed.get('directories')).toBeUndefined();
+    expect(routed.get('education')).toBeUndefined();
   });
 
   it('does not file a Justia or PACER page as board-certification or IME verification', () => {
@@ -598,5 +658,21 @@ describe('coverageLine', () => {
         'News is not implemented in this investigation.',
       ]),
     ).not.toMatch(/not implemented/i);
+  });
+
+  it('keeps not-searched only when the topic was not queried', () => {
+    const globalOnly = dossier([], {
+      topics: [{ topic: 'identity', queries: 2, hits: 1 }],
+    });
+    expect(coverageLine(globalOnly, 'education')).toMatch(/was not searched/);
+    expect(findingsCoverageNote(globalOnly, 'education')).toMatch(
+      /general web search/,
+    );
+    expect(
+      findingsCoverageNote(
+        dossier([], { topics: [{ topic: 'education', queries: 1, hits: 0 }] }),
+        'education',
+      ),
+    ).toBeNull();
   });
 });

@@ -89,9 +89,114 @@ async function main() {
         },
       ],
     },
-    publications: [{ title: 'Memory after pediatric TBI', status: 'not_found' }],
+    publications: [
+      { title: 'Memory after pediatric TBI', status: 'not_found' },
+    ],
     expertName: 'Leah Ellenberg',
   });
+  const glassDirectory = {
+    id: 'glass-dir',
+    url: 'https://directory.example/los-angeles-neuropsychologists',
+    title: 'Los Angeles Neuropsychologists — Leah Ellenberg, Leila Glass',
+    kind: 'directory' as const,
+    snippet: null,
+    summary: 'Directory listing several pediatric neuropsychologists.',
+    publishedAt: null,
+    retrievedAt: '2026-10-26T12:00:00.000Z',
+    searchProviders: ['gemini_grounding'],
+    queries: ['Leah Ellenberg neuropsychology'],
+    read: 'read' as const,
+    readNote: null,
+    match: {
+      level: 'possible' as const,
+      confidence: 'medium' as const,
+      basis: ['surname', 'specialty'],
+      conflicts: ['Leila Glass'],
+      quote: 'Leila Glass, PhD, UCLA',
+      quoteVerified: true,
+      classifiedBy: 'rules' as const,
+    },
+    candidateId: 'cand-possible',
+    claims: [
+      {
+        type: 'credential' as const,
+        text: 'Education: Leila Glass, PhD, earned her doctorate from UCLA',
+        quote: 'Leila Glass, PhD, earned her doctorate from UCLA',
+        topic: 'education' as const,
+        basis: 'third_party' as const,
+        from: 'page' as const,
+      },
+    ],
+  };
+  const courtRetag = {
+    id: 'court-ime',
+    url: 'https://www.courtlistener.com/opinion/123/smith-v-jones/',
+    title: 'Memorandum opinion',
+    kind: 'ime' as const,
+    snippet: null,
+    summary: 'The court granted a compulsory medical examination.',
+    publishedAt: null,
+    retrievedAt: '2026-10-26T12:00:00.000Z',
+    searchProviders: ['gemini_grounding'],
+    queries: [],
+    read: 'read' as const,
+    readNote: null,
+    match: {
+      level: 'strong' as const,
+      confidence: 'high' as const,
+      basis: ['name'],
+      conflicts: [],
+      quote: 'Leah Ellenberg',
+      quoteVerified: true,
+      classifiedBy: 'model' as const,
+    },
+    candidateId: 'cand-subject',
+    claims: [
+      {
+        type: 'advertising' as const,
+        text: 'IME: compulsory medical examination',
+        quote: 'compulsory medical examination of the plaintiff',
+        topic: 'ime' as const,
+        basis: 'third_party' as const,
+        from: 'page' as const,
+      },
+    ],
+  };
+  const unratedReview = {
+    id: 'review-1',
+    url: 'https://www.healthgrades.com/physician/leah-ellenberg',
+    title: 'Patient reviews',
+    kind: 'review' as const,
+    snippet: null,
+    summary: 'A review listing.',
+    publishedAt: null,
+    retrievedAt: '2026-10-26T12:00:00.000Z',
+    searchProviders: ['gemini_grounding'],
+    queries: [],
+    read: 'read' as const,
+    readNote: null,
+    match: {
+      level: 'strong' as const,
+      confidence: 'high' as const,
+      basis: ['name'],
+      conflicts: [],
+      quote: 'Leah Ellenberg',
+      quoteVerified: true,
+      classifiedBy: 'rules' as const,
+    },
+    candidateId: 'cand-subject',
+    claims: [
+      {
+        type: 'rating' as const,
+        text: 'Review: wait times mentioned',
+        quote: 'wait times mentioned',
+        topic: 'review' as const,
+        basis: 'third_party' as const,
+        from: 'page' as const,
+      },
+    ],
+    rating: null,
+  };
   const reportInput = {
     expertName: 'Leah Ellenberg',
     city: 'Los Angeles',
@@ -104,7 +209,7 @@ async function main() {
       status: 'ambiguous' as const,
       identity: null,
       basis: [],
-      note: 'No NPI Registry record matches the name and specialty in Los Angeles. 1 record(s) match the name and specialty in another city (NPI 1234567893 in BEVERLY HILLS, CA). The city entered for this investigation is not the registry practice city, so the record was not used as a confirmed identity. Public sources were still searched.',
+      note: 'Identity is not confirmed. 1 possible NPI record(s) match the name and specialty in another city (NPI 1234567893 in BEVERLY HILLS, CA). No record matches the name and specialty in Los Angeles. The city entered for this investigation is not the registry practice city, so the record was not used as a confirmed identity. Public sources were still searched.',
       notes: [],
       candidates: [
         {
@@ -119,6 +224,44 @@ async function main() {
       ],
     },
     cvCheck,
+    webResearch: {
+      ranAt: '2026-10-26T12:00:00.000Z',
+      durationMs: 1,
+      partial: false,
+      partialNote: null,
+      queriesPlanned: 6,
+      queriesRun: 6,
+      providers: [
+        {
+          providerId: 'gemini_grounding',
+          name: 'Gemini',
+          configured: true,
+          requests: 6,
+          failedRequests: 0,
+          hits: 3,
+          failures: [],
+        },
+      ],
+      pagesRead: 3,
+      pagesBlocked: [],
+      candidates: [
+        {
+          id: 'cand-possible',
+          label: 'Possible match pages for Leah Ellenberg',
+          role: 'other' as const,
+          confidence: 'medium' as const,
+          basis: ['possible only'],
+          recordIds: ['glass-dir'],
+        },
+      ],
+      records: [glassDirectory, courtRetag, unratedReview],
+      registries: [],
+      limitations: [],
+      topics: [
+        { topic: 'reviews', queries: 1, hits: 1 },
+        { topic: 'directories', queries: 1, hits: 1 },
+      ],
+    },
   };
   const pdfReport = new EwiPdfReportService(new PdfReportRenderer());
   const wordReport = new EwiWordReportService(new DocxReportRenderer());
@@ -169,22 +312,40 @@ async function main() {
         templateVersion: pdf.templateVersion,
         expectedVersion: EWI_REPORT_TEMPLATE_VERSION,
         pageCount: pages.length,
+        coverHas3106: /3\.10\.6/.test(pages[0] ?? ''),
         coverHas3105: /3\.10\.5/.test(pages[0] ?? ''),
         coverHas3104: /3\.10\.4/.test(pages[0] ?? ''),
         coverHas3101: /3\.10\.1/.test(pages[0] ?? ''),
+        glassEducationGone:
+          !/9\. Education and Degrees[\s\S]{0,400}Leila Glass/i.test(allPdf) &&
+          !/Leila Glass[\s\S]{0,80}UCLA/i.test(allPdf),
+        glassNotInEducation: !/earned her doctorate from UCLA/i.test(allPdf),
+        glassNotInDirectories:
+          !/22\. Expert Directories[\s\S]{0,800}Leila Glass, PhD, UCLA/i.test(
+            allPdf,
+          ),
+        courtNotIme: !/compulsory medical examination of the plaintiff/i.test(
+          allPdf,
+        ),
+        ratingNotShown: /Rating not shown on the retrieved page/.test(allPdf),
+        npiPossibleHeading:
+          /Identity not confirmed — one possible NPI record/.test(firstSix),
+        uniqueClaimCounts: /unique CV claim\(s\) were read/.test(firstSix),
+        fapeAbbrev: /FAPE \(Free Appropriate Public Education\)/.test(allPdf),
         typeUnverifiedGone: !/Type:\s*unverified/i.test(allPdf),
         firstAuthorOrder: /Ellenberg L, Smith J/.test(allPdf),
         npiPossibleOnly: /Identity not confirmed/.test(firstSix),
         pubmedUrlOnceInLinks:
           (linksText.match(/pubmed\.ncbi\.nlm\.nih\.gov\/11111111/g) ?? [])
             .length === 1,
-        pubmedMatchInCv: /Verified match[\s\S]*Memory after pediatric TBI/i.test(
+        pubmedMatchInCv: /Consistent[\s\S]*Memory after pediatric TBI/i.test(
           firstSix,
         ),
-        catalogMissGone: !/not confirmed in the catalogs searched: Memory after pediatric TBI/i.test(
-          firstSix,
-        ),
-        claimCounts: /3 claim\(s\) were read/.test(firstSix),
+        catalogMissGone:
+          !/not confirmed in the catalogs searched: Memory after pediatric TBI/i.test(
+            firstSix,
+          ),
+        claimCounts: /3 unique CV claim\(s\) were read/.test(firstSix),
         possibleNpi: /Identity not confirmed/.test(firstSix),
         beverlyHillsPossible: /BEVERLY HILLS/.test(firstSix),
         notVerifiedIdentity: !/Status: Verified/.test(firstSix),
@@ -201,9 +362,10 @@ async function main() {
         ),
         abbreviations: /NPI \(National Provider Identifier\)/.test(allPdf),
         linksTemplate: links.templateId,
-        linksClickablePubmed: /\/URI\s*\(https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/11111111\/?\)/.test(
-          linksRaw,
-        ),
+        linksClickablePubmed:
+          /\/URI\s*\(https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/11111111\/?\)/.test(
+            linksRaw,
+          ),
         linksHasNpi: linksText.includes(
           'https://npiregistry.cms.hhs.gov/provider-view/1234567893',
         ),

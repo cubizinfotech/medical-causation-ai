@@ -54,7 +54,41 @@ describe('assessIdentity', () => {
       subject(),
     );
     expect(result.nameMatch).toBe('none');
-    expect(result.level).toBe('none');
+    expect(result.level).toBe('other_person');
+  });
+
+  it('keeps a surname-only page weak even when specialty and city match', () => {
+    const result = assessIdentity(
+      {
+        text: 'Ellenberg offers pediatric neuropsychology in Los Angeles.',
+      },
+      {
+        name: parsePersonName('Leah Ellenberg') as NonNullable<
+          ReturnType<typeof parsePersonName>
+        >,
+        city: 'Los Angeles, CA',
+        specialty: 'Neuropsychology',
+      },
+    );
+    expect(result.nameMatch).toBe('surname_only');
+    expect(result.level).toBe('weak');
+  });
+
+  it('treats Leila vs Leah as another person, not a possible match', () => {
+    const result = assessIdentity(
+      {
+        text: 'Leila Ellenberg, PhD is a pediatric neuropsychologist in Los Angeles.',
+      },
+      {
+        name: parsePersonName('Leah Ellenberg') as NonNullable<
+          ReturnType<typeof parsePersonName>
+        >,
+        city: 'Los Angeles, CA',
+        specialty: 'Neuropsychology',
+      },
+    );
+    expect(result.level).toBe('other_person');
+    expect(result.conflicts[0]).toMatch(/Leila/i);
   });
 
   it('accepts last-name-first and initial forms', () => {

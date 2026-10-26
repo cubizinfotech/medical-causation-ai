@@ -13,7 +13,12 @@ import {
   splitPageText,
   validateCvClaims,
 } from './cv-claims';
-import { compareCv, cvDiscrepancies } from './cv-comparison';
+import {
+  compareCv,
+  CV_LABEL_TEXT,
+  cvComparisonCountSummary,
+  cvDiscrepancies,
+} from './cv-comparison';
 import type { CvClaim, CvExtraction } from './cv.types';
 
 const page1 =
@@ -266,7 +271,7 @@ describe('CV comparison', () => {
       severity: 'high',
     });
     expect(byTitle('not confirmed in the catalogs searched')?.label).toBe(
-      'not_verified',
+      'unable_to_verify',
     );
   });
 
@@ -491,7 +496,7 @@ describe('CV comparison', () => {
     const row = check.comparisons.find((item) =>
       item.title.includes('Axial movements'),
     );
-    expect(row?.label).toBe('verified');
+    expect(row?.label).toBe('partially_verified');
     expect(row?.title).toMatch(/author position not verifiable/i);
     expect(row?.source?.url).toBe('https://doi.org/10.1000/axial');
     expect(row?.note).toMatch(/Author position not verifiable/);
@@ -525,8 +530,8 @@ describe('CV comparison', () => {
     const row = check.comparisons.find((item) =>
       item.title.includes('Neuropsychology of traumatic brain injury'),
     );
-    expect(row?.label).toBe('not_verified');
-    expect(row?.title).toMatch(/Not confirmed by available sources/);
+    expect(row?.label).toBe('unable_to_verify');
+    expect(row?.title).toMatch(/Unable to verify/);
     expect(row?.note).toMatch(
       /often not indexed as a peer-reviewed journal article/,
     );
@@ -649,10 +654,20 @@ describe('CV comparison', () => {
     expect([...compared].sort()).toEqual(['cv-a', 'cv-m', 'cv-p']);
     expect(
       check.comparisons.filter((row) => row.cv?.claimId === 'cv-p')[0]?.label,
-    ).toBe('not_verified');
+    ).toBe('unable_to_verify');
     expect(
       check.comparisons.filter((row) => row.label === 'unable_to_verify'),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
+    const summary = cvComparisonCountSummary(check);
+    expect(summary).toMatch(/3 unique CV claim\(s\) were read/);
+    expect(summary).toMatch(
+      /Unique CV claims \(3\) = compared \(3\) \+ uncompared \(0\)/,
+    );
+    expect(summary).toMatch(/Unable to verify: 3/);
+    expect(CV_LABEL_TEXT.verified).toBe('Consistent');
+    expect(CV_LABEL_TEXT.conflicting).toBe('Discrepancy identified');
+    expect(CV_LABEL_TEXT.partially_verified).toBe('Possible match');
+    expect(CV_LABEL_TEXT.unable_to_verify).toBe('Unable to verify');
   });
 });
 

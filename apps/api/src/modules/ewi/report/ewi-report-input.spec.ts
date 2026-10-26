@@ -854,7 +854,7 @@ describe('prepareEwiReportInput', () => {
     expect(lawsuits).not.toMatch(/LexisNexis could not be accessed/i);
     expect(lawsuits).toMatch(/Justia could not be accessed/i);
     expect(lawsuits).not.toMatch(/Justia has not been searched yet/i);
-    expect(lawsuits).toMatch(/Roberts v\. USAA General Indemnity Company/);
+    expect(lawsuits).not.toMatch(/Roberts v\. USAA General Indemnity Company/);
   });
 });
 

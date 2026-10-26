@@ -7,7 +7,8 @@ These notes are the Phase A–H deliverables for Dorothy Clay Sims’s Expert Wi
 | Document | Contents |
 |---|---|
 | [capability-audit.md](./capability-audit.md) | Runtime vs catalog; Jason A. Demery Word report (9) baseline; coverage matrix |
-| [provider-register.md](./provider-register.md) | Provider/API register, free vs paid matrix, terms |
+| [provider-register.md](./provider-register.md) | Provider/API register, free vs paid matrix, terms (prices dated **22 Oct 2026 — re-verify**) |
+| [client-provider-assessment.md](./client-provider-assessment.md) | Client-ready table from **code paths** (26 Oct 2026): adapter vs live path, credential **names**, depth, approval-gated services |
 | [investigation-cost-estimate.md](./investigation-cost-estimate.md) | Three cost scenarios for one expert investigation |
 | [integration-plan.md](./integration-plan.md) | Implementation order, account checklist, security checklist, draft client email |
 

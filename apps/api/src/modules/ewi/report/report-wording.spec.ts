@@ -95,11 +95,17 @@ describe('report wording', () => {
     expect(evidenceStatusLine(item({ informationStatus: 'unavailable' }))).toBe(
       'Status: Not found. Source: npi_registry.',
     );
-    expect(sourceIndexStatus(item())).toBe(
-      '; status: not independently verified',
-    );
+    expect(sourceIndexStatus(item())).toBe('; access: retrieved');
     expect(sourceIndexStatus(item({ informationStatus: 'verified' }))).toBe(
-      '; status: verified',
+      '; access: retrieved',
     );
+    expect(
+      sourceIndexStatus(
+        item({
+          informationStatus: 'verified',
+          raw: { web: { read: 'read' } },
+        }),
+      ),
+    ).toBe('; access: page was read');
   });
 });

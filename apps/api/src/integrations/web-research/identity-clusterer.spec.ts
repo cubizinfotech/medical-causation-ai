@@ -121,6 +121,31 @@ describe('clusterRecords', () => {
     ).toHaveLength(2);
   });
 
+  it('does not merge possible pages into the subject candidate', () => {
+    const { candidates, records } = clusterRecords(
+      [
+        record('r1', 'strong' as MatchLevel),
+        record('r2', 'possible' as MatchLevel),
+      ],
+      new Map([
+        ['r1', { written: 'Jason A. Demery', credential: 'PhD', state: 'FL' }],
+        ['r2', { written: 'Jason Demery', credential: null, state: null }],
+      ]),
+      subject,
+      'Jason A. Demery, Neuropsychology, Gainesville, FL',
+    );
+    expect(
+      candidates.find((candidate) => candidate.role === 'subject')?.recordIds,
+    ).toEqual(['r1']);
+    expect(
+      candidates.find((candidate) => candidate.id === 'cand-possible')
+        ?.recordIds,
+    ).toEqual(['r2']);
+    expect(records.find((item) => item.id === 'r2')?.candidateId).toBe(
+      'cand-possible',
+    );
+  });
+
   it('drops pages with no match at all', () => {
     const { candidates, records } = clusterRecords(
       [record('z', 'none' as MatchLevel)],

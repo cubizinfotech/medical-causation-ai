@@ -66,6 +66,7 @@ import type {
 import {
   coverageLine,
   displayStructuredCoverage,
+  findingsCoverageNote,
   isRoutedSection,
   isWebCoverageSummary,
   publicSearchNote,
@@ -535,8 +536,7 @@ export function buildEwiReportDocument(input: {
           (matter) =>
             matter.challenge === null &&
             (matter.documentType === 'malpractice' ||
-              matter.documentType === 'case' ||
-              matter.documentType === 'expert_witness_case'),
+              (matter.documentType === 'case' && claimAgainstExpert(matter))),
         );
       case 'criminal':
         return legalMattersSection(
@@ -665,7 +665,7 @@ export function buildEwiReportDocument(input: {
         'collected items',
       ),
       countLabel(
-        input.discrepancies.length + (input.analysis?.conflicts.length ?? 0),
+        confirmedInconsistencyCount(input),
         'inconsistency',
         'inconsistencies',
       ),
@@ -889,13 +889,38 @@ function webFindingBlocks(finding: RoutedFinding): ReportBlock[] {
   if (quote && quote !== finding.title) {
     blocks.push({ text: `“${quote}”`, noProof: true });
   }
+  if (finding.sectionId === 'patient-reviews') {
+    blocks.push({
+      text: finding.rating
+        ? `Rating shown on the retrieved page: ${finding.rating}.`
+        : 'Rating not shown on the retrieved page.',
+      style: 'note',
+      noProof: true,
+    });
+  }
   const published = webDate(finding.publishedAt);
+  const fromNewsIndex = (finding.searchProviders ?? []).every((id) =>
+    ['google_news_rss', 'gdelt'].includes(id),
+  );
   const notes = [
     finding.from === 'snippet'
-      ? 'Taken from a search result; the page itself was not read.'
-      : null,
+      ? finding.kind === 'news' || finding.kind === 'blog' || fromNewsIndex
+        ? 'RSS/GDELT listing; article text was not read.'
+        : finding.kind === 'social'
+          ? 'Profile URL found; the page was not read.'
+          : 'Taken from a search result; the page itself was not read.'
+      : finding.read === 'read'
+        ? finding.kind === 'news' || finding.kind === 'blog'
+          ? 'Article text was read.'
+          : finding.kind === 'social'
+            ? 'Page was read.'
+            : null
+        : null,
     finding.matchLevel === 'possible'
       ? 'The page only partly agrees with the subject, so this is a possible match.'
+      : null,
+    finding.basisLabel && finding.basis !== 'record'
+      ? finding.basisLabel
       : null,
     published ? `Published ${published}.` : null,
   ].filter(Boolean);
@@ -951,9 +976,14 @@ function withWebFindings(
     .map((block) => `${block.text}\n${block.link ?? ''}`)
     .join('\n')
     .toLowerCase();
-  const findings = (routed.get(section.id) ?? []).filter(
-    (finding) => !existing.includes(finding.url.toLowerCase()),
-  );
+  const seenFinding = new Set<string>();
+  const findings = (routed.get(section.id) ?? []).filter((finding) => {
+    if (existing.includes(finding.url.toLowerCase())) return false;
+    const key = `${finding.url}|${(finding.quote ?? finding.statement).toLowerCase().slice(0, 160)}`;
+    if (seenFinding.has(key)) return false;
+    seenFinding.add(key);
+    return true;
+  });
   const blocks: ReportBlock[] = [...own];
   for (const finding of findings) blocks.push(...webFindingBlocks(finding));
   const verification = sectionVerification(dossier, section.id);
@@ -970,6 +1000,8 @@ function withWebFindings(
       style: 'note',
     });
   } else {
+    const fromGeneral = findingsCoverageNote(dossier, section.id);
+    if (fromGeneral) blocks.push({ text: fromGeneral, style: 'note' });
     const limit = publicSearchNote(dossier, section.id);
     if (limit) blocks.push({ text: limit, style: 'note' });
     for (const line of displayStructuredCoverage(
@@ -986,6 +1018,25 @@ function withWebFindings(
 
 function countLabel(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
+}
+
+function confirmedInconsistencyCount(input: {
+  discrepancies: ExpertDiscrepancy[];
+  analysis?: EwiAnalysisDocument;
+  cvCheck?: CvCheck | null;
+}): number {
+  const cvAlreadyCounted = input.discrepancies.some((item) =>
+    item.id.startsWith('cv-check-'),
+  );
+  const fromCv = cvAlreadyCounted
+    ? 0
+    : (input.cvCheck?.comparisons.filter((row) => row.label === 'conflicting')
+        .length ?? 0);
+  return (
+    input.discrepancies.length +
+    (input.analysis?.conflicts.length ?? 0) +
+    fromCv
+  );
 }
 
 /** Findings about the expert. The web coverage summary is an audit line. */
@@ -1225,13 +1276,12 @@ function summarySection(
       style: 'note',
     });
   }
-  const conflictCount =
-    input.discrepancies.length + (input.analysis?.conflicts.length ?? 0);
+  const conflictCount = confirmedInconsistencyCount(input);
   blocks.push({
     text:
       conflictCount === 0
         ? `${findings} collected item(s). No confirmed inconsistency was identified. Unchecked CV claims and catalog misses are listed under CV Comparison; they are not counted as inconsistencies.`
-        : `${findings} collected item(s). ${conflictCount} confirmed inconsistency(ies) are listed under Inconsistencies in Background.`,
+        : `${findings} collected item(s). ${conflictCount} confirmed inconsistency(ies) are listed under Inconsistencies in Background and CV Comparison.`,
     style: 'note',
   });
   const webLines = input.webLines ?? [];
@@ -1487,6 +1537,12 @@ function cvComparisonBlocks(row: CvComparison): ReportBlock[] {
     blocks.push({
       text: `CV${row.cv.page ? ` (page ${row.cv.page})` : ''}: “${quote}”`,
     });
+    if (row.topic === 'publication') {
+      const normalized = articleTitle(row.cv.statement);
+      if (normalized && normalized !== quote) {
+        blocks.push({ text: `Normalized title: ${normalized}`, style: 'note' });
+      }
+    }
   }
   if (row.source) {
     blocks.push({ text: `${row.source.name}: ${row.source.statement}` });
@@ -1993,6 +2049,20 @@ function testimonyInconsistenciesSection(
   return { id: spec.id, title: spec.title, blocks };
 }
 
+/** Ordinary opinions are not malpractice unless the text is a claim against the expert. */
+function claimAgainstExpert(matter: LegalMatter): boolean {
+  const hay =
+    `${matter.caseName ?? ''} ${matter.title} ${matter.summary ?? ''} ${matter.findingsRegardingExpert ?? ''} ${matter.shortDescription ?? ''}`.toLowerCase();
+  if (
+    /\b(malpractice|sued|named as (a )?defendant|complaint against|liability of (the )?expert|against the (expert|witness))\b/.test(
+      hay,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function legalMattersSection(
   spec: EwiReportSectionSpec,
   dossier: LegalResearchDossier,
@@ -2309,7 +2379,7 @@ function sourceIndexSection(
       style: 'note',
     },
     {
-      text: 'Abbreviations: NPI (National Provider Identifier); NPPES (National Plan and Provider Enumeration System); PMID (PubMed identifier); DOI (Digital Object Identifier); CV (curriculum vitae); IME (independent medical examination); AACN (American Academy of Clinical Neuropsychology); ABPP (American Board of Professional Psychology); ABMS (American Board of Medical Specialties); CHEA (Council for Higher Education Accreditation); USPTO (United States Patent and Trademark Office); NIH (National Institutes of Health); PACER (Public Access to Court Electronic Records); DRI (Defense Research Institute); SEAK (expert-directory publisher).',
+      text: 'Abbreviations: NPI (National Provider Identifier); NPPES (National Plan and Provider Enumeration System); PMID (PubMed identifier); DOI (Digital Object Identifier); CV (curriculum vitae); IME (independent medical examination); FAPE (Free Appropriate Public Education); AACN (American Academy of Clinical Neuropsychology); ABPP (American Board of Professional Psychology); ABMS (American Board of Medical Specialties); CHEA (Council for Higher Education Accreditation); USPTO (United States Patent and Trademark Office); NIH (National Institutes of Health); PACER (Public Access to Court Electronic Records); DRI (Defense Research Institute); SEAK (expert-directory publisher).',
       style: 'note',
     },
   ];
@@ -2317,19 +2387,27 @@ function sourceIndexSection(
     blocks.push({ text: 'No source links were collected.', style: 'note' });
     return { id: spec.id, title: spec.title, blocks };
   }
-  evidence.forEach((item, index) => {
+  const seenUrl = new Set<string>();
+  let index = 0;
+  for (const item of evidence) {
+    const urlKey = (item.url ?? '').trim().toLowerCase();
+    if (urlKey) {
+      if (seenUrl.has(urlKey)) continue;
+      seenUrl.add(urlKey);
+    }
+    index += 1;
     const access =
       item.access === 'restricted'
         ? 'restricted (body not stored; PDF not saved)'
         : (item.access ?? 'public');
     blocks.push({
-      text: `${index + 1}. [${item.sourceId}] ${item.title} — access: ${access}${sourceIndexStatus(item)}`,
+      text: `${index}. [${item.sourceId}] ${item.title} — access: ${access}${sourceIndexStatus(item)}`,
       style: 'item',
     });
     if (item.url) {
       blocks.push({ text: item.url, link: item.url, style: 'citation' });
     }
-  });
+  }
   return { id: spec.id, title: spec.title, blocks };
 }
 
@@ -2576,7 +2654,11 @@ function presenceRecordBlocks(record: PresenceRecord): ReportBlock[] {
     record.platform ? `Platform: ${record.platform}` : null,
     record.businessName ? `Business: ${record.businessName}` : null,
     record.address ? `Address: ${record.address}` : null,
-    record.rating ? `Rating: ${record.rating}` : null,
+    record.rating
+      ? `Rating shown on the retrieved page: ${record.rating}`
+      : record.kind === 'patient_review'
+        ? 'Rating not shown on the retrieved page.'
+        : null,
     record.reviewDate ? `Review date: ${record.reviewDate}` : null,
   ].filter((line): line is string => Boolean(line));
   for (const line of fields) blocks.push({ text: line });
@@ -3027,7 +3109,7 @@ function firstAuthorComparisonBlocks(
     }
     if (row.source?.statement) {
       const catalogLabel =
-        row.label === 'verified' ? 'Verified citation' : 'Catalog record';
+        row.label === 'verified' ? 'Consistent citation' : 'Catalog record';
       blocks.push({ text: `${catalogLabel}: ${row.source.statement}` });
     }
     if (row.source?.url) {

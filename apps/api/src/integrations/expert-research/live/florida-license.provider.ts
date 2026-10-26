@@ -57,7 +57,7 @@ export class FloridaLicenseResearchProvider extends LiveResearchProvider {
         items: [],
         status: 'unavailable',
         message:
-          'Not searched. The official Florida Department of Health license lookup is used when the expert’s city is in Florida or NPPES lists a Florida license number. Other states are not searched by this adapter. This is not a finding that no license exists.',
+          'Official board not accessed. The official Florida Department of Health license lookup is used when the expert’s city is in Florida or NPPES lists a Florida license number. Other states are not searched by this adapter. This is not a finding that a license was checked.',
       };
     }
 
