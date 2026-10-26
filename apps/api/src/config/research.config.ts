@@ -47,9 +47,7 @@ export const researchConfig = (): ResearchProviderSettings => {
       process.env.EWI_TRANSCRIPTION_MAX_MINUTES ?? 30,
     ),
     pubmedMaxArticles: Number(process.env.PUBMED_MAX_ARTICLES ?? 40),
-    courtListenerMaxPages: Number(
-      process.env.COURTLISTENER_MAX_PAGES ?? 3,
-    ),
+    courtListenerMaxPages: Number(process.env.COURTLISTENER_MAX_PAGES ?? 3),
     courtListenerMaxHits: Number(process.env.COURTLISTENER_MAX_HITS ?? 80),
     openPaymentsYears: Number(process.env.OPEN_PAYMENTS_YEARS ?? 7),
     web: {

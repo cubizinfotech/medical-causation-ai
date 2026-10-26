@@ -31,10 +31,7 @@ import {
   selectQueriesForBudget,
   type PlannedQuery,
 } from './query-planner';
-import {
-  extractResearchLeads,
-  licenseStatesFromText,
-} from './research-leads';
+import { extractResearchLeads, licenseStatesFromText } from './research-leads';
 import { extractSocialLeads } from './social-leads';
 import { verifyClaims, type SearchedSource } from './verify-claims';
 import { parseCityState } from '../expert-research/live/location';
@@ -336,7 +333,9 @@ export class WebResearchEngine {
     const usable = (provider: SearchProvider): boolean => {
       const report = reports.get(provider.id);
       if (!report) return true;
-      if (report.failures.some((f) => f.kind === 'quota' || f.kind === 'auth')) {
+      if (
+        report.failures.some((f) => f.kind === 'quota' || f.kind === 'auth')
+      ) {
         return false;
       }
       return report.hits > 0 || report.failedRequests === 0;
@@ -344,11 +343,8 @@ export class WebResearchEngine {
     const resolver =
       providers.find(
         (p) =>
-          p.kinds.includes('web') &&
-          p.id !== 'gemini_grounding' &&
-          usable(p),
-      ) ??
-      providers.find((p) => p.kinds.includes('web') && usable(p));
+          p.kinds.includes('web') && p.id !== 'gemini_grounding' && usable(p),
+      ) ?? providers.find((p) => p.kinds.includes('web') && usable(p));
     if (!resolver) return;
     const report = reports.get(resolver.id) as WebProviderReport;
     const leads = [...pool.entries()]
@@ -410,8 +406,7 @@ export class WebResearchEngine {
           kind: 'news',
         });
       } catch (error) {
-        const kind =
-          error instanceof SearchProviderError ? error.kind : 'http';
+        const kind = error instanceof SearchProviderError ? error.kind : 'http';
         const message =
           error instanceof Error ? error.message : 'Search failed.';
         report.failedRequests += 1;

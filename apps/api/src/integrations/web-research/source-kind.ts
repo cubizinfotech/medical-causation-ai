@@ -287,7 +287,7 @@ export function catalogSourceFor(
     case 'university':
       return { sourceId: 'university', category: 'profile' };
     case 'publication':
-      return { sourceId: 'other_public_websites', category: 'website' };
+      return { sourceId: 'other_public_websites', category: 'publication' };
     case 'profile':
       return { sourceId: 'web_search', category: 'profile' };
     default:
@@ -327,6 +327,12 @@ export const WEB_RESEARCH_SOURCE_IDS = [
   'trademarks',
   'awards',
   'military_claims',
+  'university_accreditation',
+  'depositions',
+  'expert_testimony',
+  'motions',
+  'orders',
+  'pleadings',
 ] as const;
 
 export type WebResearchSourceId = (typeof WEB_RESEARCH_SOURCE_IDS)[number];
@@ -364,4 +370,10 @@ export const WEB_SOURCE_LABEL: Record<string, string> = {
   trademarks: 'trademarks',
   awards: 'awards and honors',
   military_claims: 'military-service claims',
+  university_accreditation: 'university accreditation listings',
+  depositions: 'deposition or testimony mentions',
+  expert_testimony: 'expert-testimony mentions',
+  motions: 'motions naming the expert',
+  orders: 'court orders naming the expert',
+  pleadings: 'pleadings naming the expert',
 };

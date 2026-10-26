@@ -3,6 +3,7 @@ import {
   normalizeDoi,
   parsePmid,
   parseYear,
+  scholarlyTypeLabel,
   toPublicationQuery,
 } from './publication-citation';
 import { sameTitle as sameLookupTitle } from './publication-lookup';
@@ -42,6 +43,14 @@ describe('publication citation fields', () => {
         'OTHER PRESENTATIONS',
       ),
     ).toBe('presentation');
+  });
+
+  it('prints a catalog type only when the work was classified', () => {
+    expect(scholarlyTypeLabel('article')).toBe('journal article');
+    expect(scholarlyTypeLabel('chapter')).toBe('book chapter');
+    expect(scholarlyTypeLabel('unverified')).toBeNull();
+    expect(scholarlyTypeLabel(undefined)).toBeNull();
+    expect(scholarlyTypeLabel('not-a-type')).toBeNull();
   });
 
   it('fills a query from a citation string without inventing identifiers', () => {

@@ -31,20 +31,29 @@ describe('InvestigationHistoryService reports', () => {
   const updateReportFile = jest.fn().mockResolvedValue(undefined);
   const markCompleted = jest.fn().mockResolvedValue(null);
   const build = jest.fn();
+  const buildSourceLinks = jest.fn();
   const buildWord = jest.fn();
 
-  function service(row: Partial<InvestigationView> = {}) {
+  function service(
+    row: Partial<InvestigationView> = {},
+    options: { owned?: boolean } = {},
+  ) {
+    const owned = options.owned !== false;
     return new InvestigationHistoryService(
       {
         findOwned: () =>
-          Promise.resolve({
-            id: 'inv-1',
-            reportFileName: 'ewi-report.docx',
-            reportMimeType: WORD_MIME,
-            reportStorageKey: wordFile,
-            result: { expertName: 'Jane Doe' } as EwiInvestigationResult,
-            ...row,
-          }),
+          Promise.resolve(
+            owned
+              ? {
+                  id: 'inv-1',
+                  reportFileName: 'ewi-report.docx',
+                  reportMimeType: WORD_MIME,
+                  reportStorageKey: wordFile,
+                  result: { expertName: 'Jane Doe' } as EwiInvestigationResult,
+                  ...row,
+                }
+              : null,
+          ),
         findByJobId: () => Promise.resolve({ id: 'inv-2' }),
         updateReportFile,
         markCompleted,
@@ -54,7 +63,7 @@ describe('InvestigationHistoryService reports', () => {
       } as unknown as ConfigService,
       {} as EwiRequestWorkflowService,
       {} as ExpertDocumentsService,
-      { build } as unknown as EwiPdfReportService,
+      { build, buildSourceLinks } as unknown as EwiPdfReportService,
       { build: buildWord } as unknown as EwiWordReportService,
     );
   }
@@ -79,6 +88,7 @@ describe('InvestigationHistoryService reports', () => {
     updateReportFile.mockClear();
     markCompleted.mockClear();
     build.mockReset();
+    buildSourceLinks.mockReset();
     buildWord.mockReset();
   });
 
@@ -330,5 +340,53 @@ describe('InvestigationHistoryService reports', () => {
       ),
     ).rejects.toThrow(/no finished report/);
     expect(buildWord).not.toHaveBeenCalled();
+  });
+
+  it('exports unique source links as a PDF without writing the stored report', async () => {
+    buildSourceLinks.mockResolvedValue({
+      fileName: 'ewi-jane-doe-source-links.pdf',
+      mimeType: 'application/pdf',
+      format: 'pdf',
+      buffer: Buffer.from('links pdf'),
+      templateId: 'ewi/source-links',
+      templateVersion: EWI_REPORT_TEMPLATE_VERSION,
+    });
+
+    const report = await service({ status: 'completed' }).getLinksReport(
+      'inv-1',
+      'user-1',
+    );
+
+    expect(buildSourceLinks).toHaveBeenCalledWith(
+      expect.objectContaining({ expertName: 'Jane Doe' }),
+    );
+    expect(report).toEqual({
+      fileName: 'ewi-jane-doe-source-links.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('links pdf'),
+    });
+    expect(updateReportFile).not.toHaveBeenCalled();
+    expect(build).not.toHaveBeenCalled();
+    expect(buildWord).not.toHaveBeenCalled();
+  });
+
+  it('does not export source links for an investigation that has not finished', async () => {
+    await expect(
+      service({ status: 'running', result: null }).getLinksReport(
+        'inv-1',
+        'user-1',
+      ),
+    ).rejects.toThrow(/no finished report/);
+    expect(buildSourceLinks).not.toHaveBeenCalled();
+  });
+
+  it('does not export source links for an investigation the caller does not own', async () => {
+    await expect(
+      service({ status: 'completed' }, { owned: false }).getLinksReport(
+        'inv-1',
+        'user-2',
+      ),
+    ).rejects.toThrow(/not found/);
+    expect(buildSourceLinks).not.toHaveBeenCalled();
   });
 });

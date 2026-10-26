@@ -592,13 +592,16 @@ describe('evidence-based cross-examination questions', () => {
           kind: 'news',
           url: 'https://news.example/jane',
           title: 'Jane Doe testified',
-          quote: 'Jane Doe, a neurologist in Boston, testified on Tuesday about concussion care.',
+          quote:
+            'Jane Doe, a neurologist in Boston, testified on Tuesday about concussion care.',
         }),
       ],
     });
     expect(questions.length).toBeGreaterThan(0);
     expect(questions.length).toBeLessThan(QUESTION_TARGET);
-    expect(questionShortfallNote(questions.length)).toMatch(/facts were not invented/i);
+    expect(questionShortfallNote(questions.length)).toMatch(
+      /facts were not invented/i,
+    );
     expect(questionShortfallNote(100)).toMatch(/target 100/i);
     expect(
       questionShortfallNote(questions.length, {

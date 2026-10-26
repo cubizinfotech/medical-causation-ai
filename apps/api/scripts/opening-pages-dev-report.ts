@@ -8,8 +8,11 @@ import { PdfParser } from '../src/modules/document-processing/parsers/pdf.parser
 import { compareCv } from '../src/modules/ewi/cv/cv-comparison';
 import type { CvClaim, CvExtraction } from '../src/modules/ewi/cv/cv.types';
 import { EwiPdfReportService } from '../src/modules/ewi/report/ewi-pdf-report.service';
+import { EwiWordReportService } from '../src/modules/ewi/report/ewi-word-report.service';
 import { EWI_REPORT_TEMPLATE_VERSION } from '../src/modules/ewi/report/ewi-report.version';
 import { PdfReportRenderer } from '../src/platform/report/pdf/pdf-report.renderer';
+import { DocxReportRenderer } from '../src/platform/report/docx/docx-report.renderer';
+import mammoth from 'mammoth';
 
 function claim(
   id: string,
@@ -69,7 +72,7 @@ async function main() {
     evidence,
     sourceResults: [],
     identity: {
-      status: 'ambiguous',
+      status: 'ambiguous' as const,
       identity: null,
       basis: [],
       note: 'No NPI Registry record matches the name and specialty in Los Angeles. 1 record(s) match the name and specialty in another city (NPI 1234567893 in BEVERLY HILLS, CA).',
@@ -89,8 +92,7 @@ async function main() {
     publications: [{ title: 'Memory after pediatric TBI', status: 'not_found' }],
     expertName: 'Leah Ellenberg',
   });
-  const pdfReport = new EwiPdfReportService(new PdfReportRenderer());
-  const pdf = await pdfReport.build({
+  const reportInput = {
     expertName: 'Leah Ellenberg',
     city: 'Los Angeles',
     specialty: 'Neuropsychology',
@@ -99,7 +101,7 @@ async function main() {
     questions: [],
     generatedAt: '2026-10-26T12:00:00.000Z',
     identity: {
-      status: 'ambiguous',
+      status: 'ambiguous' as const,
       identity: null,
       basis: [],
       note: 'No NPI Registry record matches the name and specialty in Los Angeles. 1 record(s) match the name and specialty in another city (NPI 1234567893 in BEVERLY HILLS, CA). The city entered for this investigation is not the registry practice city, so the record was not used as a confirmed identity. Public sources were still searched.',
@@ -117,7 +119,12 @@ async function main() {
       ],
     },
     cvCheck,
-  });
+  };
+  const pdfReport = new EwiPdfReportService(new PdfReportRenderer());
+  const wordReport = new EwiWordReportService(new DocxReportRenderer());
+  const pdf = await pdfReport.build(reportInput);
+  const word = await wordReport.build(reportInput);
+  const links = await pdfReport.buildSourceLinks(reportInput);
   const parsed = await new PdfParser().parse({
     filePath: 'opening-pages.pdf',
     buffer: pdf.buffer,
@@ -129,20 +136,48 @@ async function main() {
   });
   const pages = parsed.pages.map((page) => page.text);
   const firstSix = pages.slice(0, 6).join('\n\n');
+  const allPdf = pages.join('\n');
+  const { value: wordText } = await mammoth.extractRawText({
+    buffer: word.buffer,
+  });
   const dir = join(tmpdir(), 'ewi-opening-pages-dev');
   mkdirSync(dir, { recursive: true });
   const pdfFile = join(dir, pdf.fileName);
+  const wordFile = join(dir, word.fileName);
+  const linksFile = join(dir, links.fileName);
   writeFileSync(pdfFile, pdf.buffer);
+  writeFileSync(wordFile, word.buffer);
+  writeFileSync(linksFile, links.buffer);
   writeFileSync(join(dir, 'first-six.txt'), firstSix);
+  const linksParsed = await new PdfParser().parse({
+    filePath: 'source-links.pdf',
+    buffer: links.buffer,
+    filename: 'source-links.pdf',
+    extension: 'pdf',
+    fileSize: links.buffer.byteLength,
+    createdAt: new Date(),
+    modifiedAt: new Date(),
+  });
+  const linksText = linksParsed.pages.map((page) => page.text).join('\n');
+  const linksRaw = links.buffer.toString('latin1');
   console.log(
     JSON.stringify(
       {
         pdfFile,
+        wordFile,
+        linksFile,
         templateVersion: pdf.templateVersion,
         expectedVersion: EWI_REPORT_TEMPLATE_VERSION,
         pageCount: pages.length,
-        coverHas3103: /3\.10\.3/.test(pages[0] ?? ''),
+        coverHas3105: /3\.10\.5/.test(pages[0] ?? ''),
+        coverHas3104: /3\.10\.4/.test(pages[0] ?? ''),
         coverHas3101: /3\.10\.1/.test(pages[0] ?? ''),
+        typeUnverifiedGone: !/Type:\s*unverified/i.test(allPdf),
+        firstAuthorOrder: /Ellenberg L, Smith J/.test(allPdf),
+        npiPossibleOnly: /Identity not confirmed/.test(firstSix),
+        pubmedUrlOnceInLinks:
+          (linksText.match(/pubmed\.ncbi\.nlm\.nih\.gov\/11111111/g) ?? [])
+            .length === 1,
         pubmedMatchInCv: /Verified match[\s\S]*Memory after pediatric TBI/i.test(
           firstSix,
         ),
@@ -157,6 +192,22 @@ async function main() {
         pubmedLink: firstSix.includes(
           'https://pubmed.ncbi.nlm.nih.gov/11111111/',
         ),
+        questionsOmittedPdf: /Cross-examination questions omitted/i.test(
+          allPdf,
+        ),
+        questionsSectionGone: !/42\. Cross-Examination Questions/i.test(allPdf),
+        questionsOmittedWord: /Cross-examination questions omitted/i.test(
+          wordText,
+        ),
+        abbreviations: /NPI \(National Provider Identifier\)/.test(allPdf),
+        linksTemplate: links.templateId,
+        linksClickablePubmed: /\/URI\s*\(https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/11111111\/?\)/.test(
+          linksRaw,
+        ),
+        linksHasNpi: linksText.includes(
+          'https://npiregistry.cms.hhs.gov/provider-view/1234567893',
+        ),
+        linksHasCategory: /Category: Publication/.test(linksText),
       },
       null,
       2,

@@ -68,11 +68,14 @@ export class AssemblyAiClient {
     const pollMs = this.options.pollMs ?? 3000;
     const maxWaitMs = this.options.maxWaitMs ?? 180_000;
     while (Date.now() - started < maxWaitMs) {
-      const body = await fetchJson<TranscriptResponse>(`${ASSEMBLY_API}/${id}`, {
-        timeoutMs: this.options.timeoutMs,
-        fetchImpl: this.options.fetchImpl,
-        headers: { Authorization: this.options.apiKey },
-      });
+      const body = await fetchJson<TranscriptResponse>(
+        `${ASSEMBLY_API}/${id}`,
+        {
+          timeoutMs: this.options.timeoutMs,
+          fetchImpl: this.options.fetchImpl,
+          headers: { Authorization: this.options.apiKey },
+        },
+      );
       const status = (body.status ?? '').toLowerCase();
       if (status === 'completed') {
         return {

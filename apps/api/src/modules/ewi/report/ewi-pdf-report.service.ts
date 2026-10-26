@@ -12,6 +12,7 @@ import type { LegalResearchDossier } from '../research/legal';
 import type { OnlinePresenceDossier } from '../research/online-presence';
 import type { ProfessionalBackgroundDossier } from '../research/professional-background';
 import { buildEwiReportDocument } from './ewi-report.template';
+import { buildEwiSourceLinksDocument } from './ewi-source-links';
 import type { CvCheck } from '../cv/cv.types';
 import type { WebResearchDossier } from '@integrations/web-research';
 import type { ReportSourceStatus } from './ewi-report.template';
@@ -54,7 +55,20 @@ export class EwiPdfReportService {
   constructor(private readonly renderer: PdfReportRenderer) {}
 
   async build(input: EwiReportInput): Promise<EwiReportOutput> {
-    const model = buildEwiReportDocument(input);
+    return this.renderModel(buildEwiReportDocument(input));
+  }
+
+  /**
+   * A separate PDF of unique source URLs from the investigation record.
+   * It is built on request and is not stored as the investigation report.
+   */
+  async buildSourceLinks(input: EwiReportInput): Promise<EwiReportOutput> {
+    return this.renderModel(buildEwiSourceLinksDocument(input));
+  }
+
+  private async renderModel(
+    model: ReturnType<typeof buildEwiReportDocument>,
+  ): Promise<EwiReportOutput> {
     const rendered = await this.renderer.render(model);
     return {
       fileName: rendered.fileName,

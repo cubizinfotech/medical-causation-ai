@@ -914,9 +914,7 @@ function licenseGapDrafts(
   ];
 }
 
-function coverageGapDrafts(
-  statuses: QuestionSourceAttempt[],
-): QuestionDraft[] {
+function coverageGapDrafts(statuses: QuestionSourceAttempt[]): QuestionDraft[] {
   const interesting: Array<{
     sourceId: string;
     label: string;

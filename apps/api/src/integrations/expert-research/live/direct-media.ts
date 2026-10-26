@@ -79,17 +79,23 @@ export async function probeDirectMedia(
         skipReason: null,
       };
     }
-    return skip('The media address could not be checked, so it was not sent for transcription.');
+    return skip(
+      'The media address could not be checked, so it was not sent for transcription.',
+    );
   }
   const contentType = response.headers.get('content-type');
   const sizeHeader = response.headers.get('content-length');
   const sizeBytes = sizeHeader ? Number(sizeHeader) : null;
   const durationHeader = response.headers.get('x-content-duration');
   const headerSeconds = durationHeader ? Number(durationHeader) : null;
-  const byType = Boolean(contentType && MEDIA_TYPE.test(contentType.split(';')[0] ?? ''));
+  const byType = Boolean(
+    contentType && MEDIA_TYPE.test(contentType.split(';')[0] ?? ''),
+  );
   const byExt = looksLikeDirectMediaUrl(url);
   if (!byType && !byExt) {
-    return skip('This address is not a public audio or video file, so it was not transcribed.');
+    return skip(
+      'This address is not a public audio or video file, so it was not transcribed.',
+    );
   }
   const estimatedSeconds =
     Number.isFinite(headerSeconds) && (headerSeconds as number) > 0
@@ -97,10 +103,7 @@ export async function probeDirectMedia(
       : sizeBytes && sizeBytes > 0
         ? sizeBytes / BYTES_PER_SECOND
         : null;
-  if (
-    estimatedSeconds != null &&
-    estimatedSeconds / 60 > options.maxMinutes
-  ) {
+  if (estimatedSeconds != null && estimatedSeconds / 60 > options.maxMinutes) {
     return skip(
       `This file is longer than the ${options.maxMinutes}-minute transcription cap, so it was not sent.`,
     );

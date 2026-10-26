@@ -73,14 +73,42 @@ describe('planQueries', () => {
       true,
     );
     expect(socialQueries.some((q) => q.includes('site:bsky.app'))).toBe(true);
-    expect(plans.some((plan) => plan.request.query.includes('site:dri.org') && /speaker|conference/.test(plan.request.query))).toBe(true);
-    expect(plans.some((plan) => plan.request.query.includes('site:abpp.org'))).toBe(true);
-    expect(plans.some((plan) => plan.request.query.includes('site:theaacn.org'))).toBe(true);
-    expect(plans.some((plan) => plan.request.query.includes('site:hgexperts.com'))).toBe(true);
-    expect(plans.some((plan) => plan.request.query.includes('site:expertinstitute.com'))).toBe(true);
-    expect(plans.some((plan) => plan.request.query.includes('site:expertwitnessprofiler.com'))).toBe(true);
-    expect(plans.some((plan) => plan.request.query.includes('site:patents.google.com'))).toBe(true);
-    expect(plans.some((plan) => plan.request.query.includes('site:valor.defense.gov'))).toBe(true);
+    expect(
+      plans.some(
+        (plan) =>
+          plan.request.query.includes('site:dri.org') &&
+          /speaker|conference/.test(plan.request.query),
+      ),
+    ).toBe(true);
+    expect(
+      plans.some((plan) => plan.request.query.includes('site:abpp.org')),
+    ).toBe(true);
+    expect(
+      plans.some((plan) => plan.request.query.includes('site:theaacn.org')),
+    ).toBe(true);
+    expect(
+      plans.some((plan) => plan.request.query.includes('site:hgexperts.com')),
+    ).toBe(true);
+    expect(
+      plans.some((plan) =>
+        plan.request.query.includes('site:expertinstitute.com'),
+      ),
+    ).toBe(true);
+    expect(
+      plans.some((plan) =>
+        plan.request.query.includes('site:expertwitnessprofiler.com'),
+      ),
+    ).toBe(true);
+    expect(
+      plans.some((plan) =>
+        plan.request.query.includes('site:patents.google.com'),
+      ),
+    ).toBe(true);
+    expect(
+      plans.some((plan) =>
+        plan.request.query.includes('site:valor.defense.gov'),
+      ),
+    ).toBe(true);
     const identity = plans.find((plan) => plan.topic === 'identity');
     expect(identity?.paginate).toBe(true);
     expect(identity?.request.num).toBe(20);
@@ -90,7 +118,9 @@ describe('planQueries', () => {
     const portrait = planQueries(subject()).find(
       (plan) => plan.topic === 'portrait',
     );
-    expect(portrait?.request.query).toMatch(/headshot|profile photo|biography/i);
+    expect(portrait?.request.query).toMatch(
+      /headshot|profile photo|biography/i,
+    );
     expect(portrait?.request.query).toMatch(/Neuropsychology/);
     expect(portrait?.request.query).toMatch(/Gainesville/);
     expect(portrait?.request.prompt).toMatch(/photograph/i);
@@ -260,12 +290,20 @@ describe('planFollowUps', () => {
           p.request.query.includes('University of Florida'),
       ),
     ).toBe(true);
-    expect(plans.some((p) => p.request.query.includes('site:chea.org'))).toBe(
-      true,
-    );
-    expect(plans.some((p) => p.request.query.includes('site:ope.ed.gov'))).toBe(
-      true,
-    );
+    expect(
+      plans.some(
+        (p) =>
+          p.topic === 'university_accreditation' &&
+          p.request.query.includes('site:chea.org'),
+      ),
+    ).toBe(true);
+    expect(
+      plans.some(
+        (p) =>
+          p.topic === 'university_accreditation' &&
+          p.request.query.includes('site:ope.ed.gov'),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -292,9 +330,7 @@ describe('selectQueriesForBudget', () => {
     expect(topics.has('directories')).toBe(true);
     expect(topics.has('military_claims')).toBe(true);
     expect(
-      omitted.some(
-        (plan) => plan.topic === 'reviews' || plan.topic === 'news',
-      ),
+      omitted.some((plan) => plan.topic === 'reviews' || plan.topic === 'news'),
     ).toBe(true);
   });
 });

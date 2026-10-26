@@ -262,7 +262,10 @@ export class PubMedResearchProvider extends LiveResearchProvider {
 
 function clampPubMedMax(value: number | undefined): number {
   if (!Number.isFinite(value)) return DEFAULT_MAX_ARTICLES;
-  return Math.min(PUBMED_MAX_ARTICLES_CAP, Math.max(1, Math.floor(value as number)));
+  return Math.min(
+    PUBMED_MAX_ARTICLES_CAP,
+    Math.max(1, Math.floor(value as number)),
+  );
 }
 
 function doiFromSummary(article: PubMedSummary): string | null {
@@ -280,7 +283,11 @@ function doiFromSummary(article: PubMedSummary): string | null {
 function authorPlace(
   authors: string[],
   name: PersonName,
-): { position: 'sole' | 'first' | 'last' | 'middle'; index: number; count: number } | null {
+): {
+  position: 'sole' | 'first' | 'last' | 'middle';
+  index: number;
+  count: number;
+} | null {
   const index = authors.findIndex((author) => authorListed(author, name));
   if (index < 0) return null;
   const count = authors.length;

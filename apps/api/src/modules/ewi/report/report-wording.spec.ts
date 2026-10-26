@@ -79,18 +79,25 @@ describe('report wording', () => {
     ).toBe('Collected statements disagree around "State license".');
   });
 
-  it('states a status on a record only when it is not "not verified"', () => {
-    expect(evidenceStatusLine(item())).toBe('Source: npi_registry.');
+  it('states an evidence-standard status on every collected record', () => {
+    expect(evidenceStatusLine(item())).toBe(
+      'Status: Not independently verified. Source: npi_registry.',
+    );
     expect(evidenceStatusLine(item({ informationStatus: 'verified' }))).toBe(
       'Status: Verified. Source: npi_registry.',
     );
     expect(evidenceStatusLine(item({ informationStatus: 'conflicting' }))).toBe(
-      'Status: Conflicting. Source: npi_registry.',
+      'Status: Discrepancy found. Source: npi_registry.',
     );
     expect(evidenceStatusLine(item({ access: 'restricted' }))).toBe(
-      'Status: Restricted. Source: npi_registry.',
+      'Status: Inaccessible. Source: npi_registry.',
     );
-    expect(sourceIndexStatus(item())).toBe('');
+    expect(evidenceStatusLine(item({ informationStatus: 'unavailable' }))).toBe(
+      'Status: Not found. Source: npi_registry.',
+    );
+    expect(sourceIndexStatus(item())).toBe(
+      '; status: not independently verified',
+    );
     expect(sourceIndexStatus(item({ informationStatus: 'verified' }))).toBe(
       '; status: verified',
     );

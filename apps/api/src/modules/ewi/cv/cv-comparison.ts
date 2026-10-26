@@ -5,6 +5,7 @@ import {
   parsePersonName,
   parseYear,
   sameTitle,
+  scholarlyTypeLabel,
   stateName,
   taxonomyMatches,
   yearsAgree,
@@ -414,8 +415,8 @@ function publicationTitleRows(
     const failed = (lookup?.checks ?? []).filter(
       (check) => check.outcome === 'error',
     );
-    const pubType =
-      lookup?.publicationType ?? claim.details.publicationType ?? 'unverified';
+    const pubType = lookup?.publicationType ?? claim.details.publicationType;
+    const typeLine = scholarlyTypeLabel(pubType);
     if (!lookup || lookup.status === 'unavailable') {
       rows.push({
         topic: 'publication',
@@ -426,11 +427,13 @@ function publicationTitleRows(
         source: null,
         note: [
           'The CV citation is retained. No catalog search completed for this title, so it is not disproven.',
-          `Publication type: ${pubType}.`,
+          typeLine ? `Catalog record type: ${typeLine}.` : '',
           failed.length > 0
             ? `Catalogs that could not be reached: ${failed.map((check) => check.catalog).join(', ')}.`
             : 'Publication catalogs were not searched.',
-        ].join(' '),
+        ]
+          .filter(Boolean)
+          .join(' '),
       });
       continue;
     }
@@ -454,7 +457,7 @@ function publicationTitleRows(
     const statement = [
       `${work?.title ?? title}${work?.year ? ` (${work.year})` : ''}.`,
       `Authors: ${work?.authors.join(', ') || 'not listed'}.`,
-      `Type: ${pubType}.`,
+      typeLine ? `Catalog record type: ${typeLine}.` : '',
       identifiers,
     ]
       .filter(Boolean)
@@ -541,7 +544,7 @@ function publicationTitleRows(
         },
         note: [
           `Catalogs searched: ${catalogs}.`,
-          `Publication type: ${pubType}.`,
+          typeLine ? `Catalog record type: ${typeLine}.` : '',
           typedGap
             ? 'This type is often not indexed as a peer-reviewed journal article.'
             : '',
@@ -589,7 +592,11 @@ function preferPublicationLookup(
   catalog: PublicationLookupResult | undefined,
   evidence: PublicationLookupResult | undefined,
 ): PublicationLookupResult | undefined {
-  if (catalog && catalog.status !== 'not_found' && catalog.status !== 'unavailable') {
+  if (
+    catalog &&
+    catalog.status !== 'not_found' &&
+    catalog.status !== 'unavailable'
+  ) {
     return catalog;
   }
   if (evidence) return evidence;
@@ -603,8 +610,7 @@ function lookupFromCollectedPublications(
   const expert =
     parsePersonName(input.expertName ?? '') ??
     parsePersonName(input.identity?.identity?.name ?? '');
-  const claimYear =
-    parseYear(claim.details.year) ?? parseYear(claim.statement);
+  const claimYear = parseYear(claim.details.year) ?? parseYear(claim.statement);
   for (const item of input.evidence) {
     if (item.category !== 'publication') continue;
     if (item.identityMatch === 'uncertain') continue;
@@ -613,9 +619,10 @@ function lookupFromCollectedPublications(
     }
     const raw = item.raw ?? {};
     const authors = authorsFromRaw(raw);
-    const year = parseYear(stringField(raw, ['pubdate', 'year', 'publicationDate']));
-    const doi =
-      typeof raw.doi === 'string' ? raw.doi : undefined;
+    const year = parseYear(
+      stringField(raw, ['pubdate', 'year', 'publicationDate']),
+    );
+    const doi = typeof raw.doi === 'string' ? raw.doi : undefined;
     const pmid =
       typeof raw.pmid === 'string'
         ? raw.pmid
@@ -627,7 +634,9 @@ function lookupFromCollectedPublications(
     const doiHit =
       Boolean(claim.details.doi && doi) &&
       claim.details.doi!.toLowerCase() === doi!.toLowerCase();
-    const pmidHit = Boolean(claim.details.pmid && pmid && claim.details.pmid === pmid);
+    const pmidHit = Boolean(
+      claim.details.pmid && pmid && claim.details.pmid === pmid,
+    );
     const titleHit =
       Boolean(claimTitle) &&
       (sameTitle(claimTitle, title) ||
@@ -671,8 +680,7 @@ function lookupFromCollectedPublications(
       },
       doi,
       pmid,
-      venue:
-        typeof raw.journal === 'string' ? raw.journal : undefined,
+      venue: typeof raw.journal === 'string' ? raw.journal : undefined,
       matchMethod: doiHit ? 'doi' : pmidHit ? 'pmid' : 'title',
       authorPosition: listed?.position,
       authorIndex: listed?.index,
@@ -692,7 +700,10 @@ function lookupFromCollectedPublications(
 function authorsFromRaw(raw: Record<string, unknown>): string[] {
   for (const key of ['authors', 'authorList', 'authorNames']) {
     const value = raw[key];
-    if (Array.isArray(value) && value.every((entry) => typeof entry === 'string')) {
+    if (
+      Array.isArray(value) &&
+      value.every((entry) => typeof entry === 'string')
+    ) {
       return value.map((entry) => entry.trim()).filter(Boolean);
     }
   }
@@ -903,9 +914,10 @@ function appointmentRows(
       title: `Appointment: ${claim.statement}`,
       cv: cvSide(claim),
       source: null,
-      note: institutions.length === 0
-        ? 'No OpenAlex author profile was matched, so this appointment was not compared. That is not a finding that the position is false.'
-        : 'This institution was not on the matched OpenAlex profile. OpenAlex lists publication affiliations, not every appointment.',
+      note:
+        institutions.length === 0
+          ? 'No OpenAlex author profile was matched, so this appointment was not compared. That is not a finding that the position is false.'
+          : 'This institution was not on the matched OpenAlex profile. OpenAlex lists publication affiliations, not every appointment.',
     };
   });
 }
@@ -936,17 +948,18 @@ function expertWitnessRows(
 }
 
 function educationRows(claims: CvClaim[]): Row[] {
-  return [...byCategory(claims, 'education'), ...byCategory(claims, 'training')].map(
-    (claim) => ({
-      topic: 'education' as const,
-      label: 'unable_to_verify' as const,
-      severity: 'low' as const,
-      title: claim.statement,
-      cv: cvSide(claim),
-      source: null,
-      note: 'No education source is connected. Check the school registrar, the residency program, or the state board profile.',
-    }),
-  );
+  return [
+    ...byCategory(claims, 'education'),
+    ...byCategory(claims, 'training'),
+  ].map((claim) => ({
+    topic: 'education' as const,
+    label: 'unable_to_verify' as const,
+    severity: 'low' as const,
+    title: claim.statement,
+    cv: cvSide(claim),
+    source: null,
+    note: 'No education source is connected. Check the school registrar, the residency program, or the state board profile.',
+  }));
 }
 
 function membershipRows(claims: CvClaim[]): Row[] {
@@ -980,9 +993,7 @@ function leftoverClaimRows(claims: CvClaim[], rows: Row[]): Row[] {
       .filter((id): id is string => Boolean(id)),
   );
   const comparedTitles = claims
-    .filter(
-      (claim) => used.has(claim.id) && claim.category === 'publication',
-    )
+    .filter((claim) => used.has(claim.id) && claim.category === 'publication')
     .map((claim) => claim.details.title || articleTitle(claim.statement));
   return claims.flatMap((claim) => {
     if (used.has(claim.id)) return [];
@@ -1039,8 +1050,7 @@ export function cvComparisonCountSummary(check: CvCheck): string {
   const comparedClaims = check.claims.filter((claim) =>
     comparedIds.has(claim.id),
   ).length;
-  const combined =
-    check.claims.length - comparedClaims;
+  const combined = check.claims.length - comparedClaims;
   const sourceOnly = check.comparisons.filter((row) => !row.cv?.claimId).length;
   const counts = (
     [
@@ -1068,7 +1078,7 @@ export function cvComparisonCountSummary(check: CvCheck): string {
     combined > 0
       ? `${combined} extracted claim(s) are duplicate citations already compared, or were folded into another row.`
       : '',
-    'Not every extracted claim is independently verified. “Not checked” means no connected source covers that claim.',
+    'Not every extracted claim is independently verified. “Not searched” means no connected source covers that claim. “Not verified” means a source was checked and did not independently confirm it. “Discrepancy found” means a catalog or registry disagrees with the CV. An expert’s own CV or website is not independent verification.',
     counts,
   ]
     .filter(Boolean)
@@ -1092,8 +1102,8 @@ function formatUsd(amount: number): string {
 export const CV_LABEL_TEXT: Record<InconsistencyLabel, string> = {
   verified: 'Verified',
   partially_verified: 'Partly verified',
-  conflicting: 'Conflicts',
+  conflicting: 'Discrepancy found',
   not_verified: 'Not verified',
   not_found: 'Not found',
-  unable_to_verify: 'Not checked',
+  unable_to_verify: 'Not searched',
 };

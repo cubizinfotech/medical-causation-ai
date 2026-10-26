@@ -30,7 +30,7 @@ async function pdfPages(buffer: Buffer): Promise<string[]> {
 describe('EWI report template', () => {
   const renderer = new PdfReportRenderer();
 
-  it('includes the full 42-section outline with metadata, TOC, version, and disclaimer', () => {
+  it('includes the full 41-section outline with metadata, TOC, version, and disclaimer', () => {
     const document = buildEwiReportDocument({
       expertName: 'Jane Doe',
       city: 'Boston',
@@ -41,11 +41,11 @@ describe('EWI report template', () => {
       generatedAt: '2026-09-23T00:00:00.000Z',
     });
 
-    expect(document.sections).toHaveLength(42);
+    expect(document.sections).toHaveLength(41);
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.3');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.5');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -64,7 +64,7 @@ describe('EWI report template', () => {
     expect(document.highlights).toEqual([
       '0 collected items',
       '0 inconsistencies',
-      '0 cross-examination questions',
+      'Cross-examination questions omitted',
     ]);
     // Sections 1–5 are on the cover; every other section is a card with an icon.
     expect(
@@ -95,9 +95,8 @@ describe('EWI report template', () => {
         .join(' '),
     ).toBe('This was not searched in this investigation.');
     expect(
-      document.sections.find((section) => section.id === 'questions')?.blocks[0]
-        ?.text,
-    ).toMatch(/facts were not invented/i);
+      document.sections.find((section) => section.id === 'questions'),
+    ).toBeUndefined();
   });
 
   it('does not list a "could not verify" line for each source that returned nothing', () => {
@@ -150,7 +149,7 @@ describe('EWI report template', () => {
     }
   });
 
-  it('does not print "not verified" on findings, records, sources, or questions', () => {
+  it('does not reprint analysis "could not verify" dumps on findings', () => {
     const findings = [
       {
         findingKey: 'f1',
@@ -217,12 +216,12 @@ describe('EWI report template', () => {
       .flatMap((section) => section.blocks.map((block) => block.text))
       .join('\n');
 
-    expect(all).not.toMatch(/not verified|unverified|could not verify/i);
+    expect(all).not.toMatch(/Could not verify a single account/i);
     expect(text('overall-findings')).toContain(
       'Licenses reported to the NPI Registry (NPI 1871685487)',
     );
     expect(text('overall-findings')).toContain('Verified · Source refs: f2');
-    expect(text('questions')).toContain('Basis: f1');
+    expect(text('questions')).toBe('');
     expect(text('summary')).toContain(
       '2 item(s) were collected from the sources searched.',
     );
@@ -448,7 +447,8 @@ describe('EWI report template', () => {
             },
             source: {
               name: 'PubMed',
-              statement: 'Memory after TBI (2018). Authors: Doe J, Roe A, Lee B.',
+              statement:
+                'Memory after TBI (2018). Authors: Doe J, Roe A, Lee B.',
               url: 'https://pubmed.ncbi.nlm.nih.gov/99/',
             },
             note: 'PubMed lists the expert as first of 3 authors.',
@@ -465,6 +465,85 @@ describe('EWI report template', () => {
     expect(text).toContain('https://pubmed.ncbi.nlm.nih.gov/99/');
     expect(text).toContain('CV citation:');
     expect(text).toContain('Verified citation:');
+  });
+
+  it('flags a verified author-position discrepancy and does not reprint the same PubMed item', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Leah Ellenberg',
+      city: 'Los Angeles',
+      specialty: 'Neuropsychology',
+      evidence: [
+        {
+          sourceId: 'pubmed',
+          category: 'publication',
+          title: 'Memory after pediatric TBI.',
+          summary:
+            'PubMed lists “Memory after pediatric TBI.” Authors: Smith J, Ellenberg L.',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/11111111/',
+          informationStatus: 'verified',
+          identityMatch: 'matched',
+          raw: {
+            pmid: '11111111',
+            doi: '10.1000/ellenberg-memory',
+            authors: ['Smith J', 'Ellenberg L'],
+            authorPosition: 'last',
+            authorIndex: 1,
+            authorCount: 2,
+            journal: 'JINS',
+            pubdate: '1999 Jan',
+          },
+        },
+      ],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-26T00:00:00.000Z',
+      cvCheck: {
+        document: {
+          id: 'cv1',
+          name: 'Ellenberg-CV.pdf',
+          pageCount: 4,
+          unreadablePages: [],
+          ocrPages: [],
+        },
+        status: 'completed',
+        claims: [],
+        warnings: [],
+        comparisons: [
+          {
+            id: 'p1',
+            topic: 'publication',
+            label: 'conflicting',
+            severity: 'medium',
+            title:
+              "Publication found; the expert's author position differs from the CV: Memory after pediatric TBI",
+            cv: {
+              statement:
+                'Ellenberg L, Smith J (1999). Memory after pediatric TBI.',
+              page: 3,
+            },
+            source: {
+              name: 'PubMed',
+              statement:
+                'Memory after pediatric TBI (1999). Authors: Smith J, Ellenberg L. PMID 11111111',
+              url: 'https://pubmed.ncbi.nlm.nih.gov/11111111/',
+            },
+            note: 'PubMed lists the expert as last of 2 authors. The CV citation lists the expert as first.',
+          },
+        ],
+      },
+    });
+    const text =
+      document.sections
+        .find((section) => section.id === 'publications')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(text).toMatch(/verified author-position discrepancy/i);
+    expect(text).toContain('Catalog record:');
+    expect(text).not.toContain('Verified citation:');
+    expect(
+      text.match(/https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/11111111\//g)?.length,
+    ).toBe(1);
+    expect(text.match(/Memory after pediatric TBI/g)?.length).toBeLessThan(5);
   });
 
   it('does not label an unverified catalog hit as a verified citation', () => {
@@ -494,7 +573,7 @@ describe('EWI report template', () => {
             label: 'unable_to_verify',
             severity: 'medium',
             title:
-              'Partial match; manual review required. Publication found; the expert\'s authorship could not be confirmed from the catalogs: Verbal learning following mild traumatic brain injury',
+              "Partial match; manual review required. Publication found; the expert's authorship could not be confirmed from the catalogs: Verbal learning following mild traumatic brain injury",
             cv: {
               statement:
                 'Demery, J.A. (1999). Verbal learning following mild traumatic brain injury [Abstract].',
@@ -605,8 +684,7 @@ describe('EWI report template', () => {
     expect(text).toMatch(/cannot be transcribed automatically/i);
     expect(
       videos?.blocks.some(
-        (block) =>
-          block.link === 'https://www.youtube.com/watch?v=abc123XYZ00',
+        (block) => block.link === 'https://www.youtube.com/watch?v=abc123XYZ00',
       ),
     ).toBe(true);
   });
@@ -684,7 +762,7 @@ describe('EWI report template', () => {
     );
   });
 
-  it('writes a PDF with a cover, contents, and many boxed questions', async () => {
+  it('writes a PDF with a cover, contents, and no cross-examination questions', async () => {
     const evidence = Array.from({ length: 60 }, (_, index) => ({
       sourceId: 'pubmed' as const,
       category: 'publication',
@@ -716,13 +794,11 @@ describe('EWI report template', () => {
     expect(document.highlights).toEqual([
       '60 collected items',
       '0 inconsistencies',
-      '60 cross-examination questions',
+      'Cross-examination questions omitted',
     ]);
     expect(
-      document.sections
-        .find((section) => section.id === 'questions')
-        ?.blocks.filter((block) => block.style === 'item'),
-    ).toHaveLength(60);
+      document.sections.find((section) => section.id === 'questions'),
+    ).toBeUndefined();
     expect(rendered.buffer.subarray(0, 5).toString()).toBe('%PDF-');
     expect(rendered.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(rendered.mimeType).toBe('application/pdf');
@@ -735,11 +811,9 @@ describe('EWI report template', () => {
       'The collected publication record is listed under Publications.',
     );
     expect(all).toContain('Contents');
-    expect(all).toContain('42. Cross-Examination Questions');
-    expect(all).toContain(questions[0].question.slice(0, 40));
-    expect(all).toContain(
-      questions[questions.length - 1].question.slice(0, 30),
-    );
+    expect(all).not.toContain('42. Cross-Examination Questions');
+    expect(all).not.toContain(questions[0].question.slice(0, 40));
+    expect(all).toContain('41. Source Index');
     expect(all).toContain('(continued)');
     expect(all).toContain('Disclaimer');
     pages.forEach((page, index) =>
@@ -842,18 +916,17 @@ describe('EwiWordReportService', () => {
       '6. Expert Background',
       '31. Social Media',
       'Public LinkedIn listing',
-      '42. Cross-Examination Questions',
-      questions.length > 0
-        ? `1. [Unresolved] ${questions[0].question}`
-        : 'Cross-examination questions were not generated',
+      'Cross-examination questions omitted',
       'Disclaimer',
     ]) {
       expect(text).toContain(expected);
     }
+    expect(text).not.toContain('42. Cross-Examination Questions');
+    expect(text).not.toMatch(/\[Unresolved\]/);
     expect(html).toContain('<a href="https://linkedin.example/jane">');
   });
 
-  it('prints the same grounded question count in Word as in the report input', async () => {
+  it('omits generated questions from the Word report even when they were prepared', async () => {
     const service = new EwiWordReportService(new DocxReportRenderer());
     const evidence = [
       {
@@ -891,8 +964,8 @@ describe('EwiWordReportService', () => {
       buffer: artifact.buffer,
     });
     expect(questions).toHaveLength(1);
-    expect(text).toContain('1 cross-examination question');
-    expect(text).toContain(questions[0].question);
+    expect(text).toContain('Cross-examination questions omitted');
+    expect(text).not.toContain(questions[0].question);
     expect(text).toContain('https://example.test/license');
     expect(text).not.toMatch(/finding f1|collected record/i);
   });
@@ -1027,9 +1100,11 @@ describe('EwiWordReportService', () => {
         .join('\n') ?? '';
     expect(cv).toMatch(/2 claim\(s\) were read/);
     expect(cv).toMatch(/2 of those claims appear/);
-    expect(cv).toMatch(/Verified: 1; Not checked: 1/);
+    expect(cv).toMatch(/Verified: 1; Not searched: 1/);
     expect(cv).toMatch(/\[Verified\]/);
-    expect(cv).not.toMatch(/Not confirmed in the catalogs searched: Memory after pediatric TBI/);
+    expect(cv).not.toMatch(
+      /Not confirmed in the catalogs searched: Memory after pediatric TBI/,
+    );
     expect(publications).toContain('Verified citation:');
     expect(publications).toContain('https://pubmed.ncbi.nlm.nih.gov/11111111/');
     expect(publications).toMatch(/first of 2 authors/i);
@@ -1038,9 +1113,10 @@ describe('EwiWordReportService', () => {
     expect(summary).toMatch(/not counted as inconsistencies/);
     expect(background).toMatch(/registry city BEVERLY HILLS/);
     expect(background).not.toMatch(/Status: Verified/);
-    expect(document.sections.find((section) => section.id === 'city')?.blocks[0]?.text).toBe(
-      'Los Angeles',
-    );
+    expect(
+      document.sections.find((section) => section.id === 'city')?.blocks[0]
+        ?.text,
+    ).toBe('Los Angeles');
   });
 });
 
@@ -1390,7 +1466,7 @@ describe('EWI report source coverage', () => {
         registries: [],
         limitations: [],
         topics: [{ topic: 'patents', queries: 2, hits: 0 }],
-      } as never,
+      },
     });
     const patents =
       document.sections
@@ -1787,7 +1863,7 @@ describe('EWI report source coverage', () => {
     expect(grants).not.toMatch(/K01 MH001857|21069617/);
   });
 
-  it('prints uploaded-document page citations and question evidence links', () => {
+  it('prints uploaded-document page citations and omits generated questions', () => {
     const questions = buildGroundedCrossExamQuestions({
       expertName: 'Jane Doe',
       evidence: [
@@ -1844,16 +1920,12 @@ describe('EWI report source coverage', () => {
         .join('\n') ?? '';
     expect(licenses).toMatch(/Uploaded document page: 2/);
     expect(licenses).toMatch(/not an independent verification/);
-    const questionsText =
-      document.sections
-        .find((section) => section.id === 'questions')
-        ?.blocks.map((block) => block.text)
-        .join('\n') ?? '';
     expect(questions).toHaveLength(1);
-    expect(questionsText).toMatch(/^1 cross-examination question/);
-    expect(questionsText).toContain(questions[0].question);
-    expect(questionsText).toMatch(/Sourced fact/);
-    expect(questionsText).toContain('https://example.test/license');
-    expect(document.highlights?.[2]).toBe('1 cross-examination question');
+    expect(
+      document.sections.find((section) => section.id === 'questions'),
+    ).toBeUndefined();
+    expect(document.highlights?.[2]).toBe(
+      'Cross-examination questions omitted',
+    );
   });
 });

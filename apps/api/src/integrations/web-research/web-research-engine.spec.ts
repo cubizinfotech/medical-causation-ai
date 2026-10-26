@@ -207,7 +207,9 @@ describe('WebResearchEngine', () => {
     }).run(query);
     const pages = serper.requests.map((request) => request.page ?? 1);
     expect(pages).toContain(2);
-    expect(dossier.queriesRun).toBeGreaterThan(serper.requests.filter((r) => (r.page ?? 1) === 1).length);
+    expect(dossier.queriesRun).toBeGreaterThan(
+      serper.requests.filter((r) => (r.page ?? 1) === 1).length,
+    );
   });
 
   it('sends patent, IME and directory queries when the budget cannot run every search', async () => {
@@ -217,7 +219,9 @@ describe('WebResearchEngine', () => {
       providers: [provider],
       fetcher: fakeFetcher(),
     }).run(query);
-    const queries = provider.requests.map((request) => request.query).join('\n');
+    const queries = provider.requests
+      .map((request) => request.query)
+      .join('\n');
     expect(queries).toMatch(/site:patents\.google\.com/);
     expect(queries).toMatch(/independent medical examination/);
     expect(queries).toMatch(/site:dri\.org/);
@@ -461,7 +465,9 @@ describe('WebResearchEngine', () => {
     expect(dossier.portrait?.dataUrl.startsWith('data:image/png;base64,')).toBe(
       true,
     );
-    expect(dossier.limitations.join(' ')).not.toMatch(/photograph of this person/);
+    expect(dossier.limitations.join(' ')).not.toMatch(
+      /photograph of this person/,
+    );
   });
 
   it('keeps a faculty headshot whose file name names the expert', async () => {
@@ -501,7 +507,11 @@ describe('WebResearchEngine', () => {
       settings,
       providers: [
         fakeProvider('fake_search', [
-          hit(faculty, 'Jason A. Demery faculty', 'neuropsychologist Gainesville'),
+          hit(
+            faculty,
+            'Jason A. Demery faculty',
+            'neuropsychologist Gainesville',
+          ),
           ...allHits,
         ]),
       ],

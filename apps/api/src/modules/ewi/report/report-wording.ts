@@ -72,25 +72,30 @@ export function questionBasis(basis: string): string {
     .join(' — ');
 }
 
-/** "Status: Verified. Source: npi_registry." or, when not verified, "Source: npi_registry." */
+/**
+ * Evidence-standard label for a collected item. An expert's own claim is
+ * never treated as independent verification.
+ */
 export function evidenceStatusLine(item: ExpertEvidenceItem): string {
   const status =
     item.access === 'restricted'
-      ? 'Restricted'
+      ? 'Inaccessible'
       : item.informationStatus === 'conflicting'
-        ? 'Conflicting'
+        ? 'Discrepancy found'
         : item.informationStatus === 'verified'
           ? 'Verified'
           : item.informationStatus === 'unavailable'
-            ? 'Unavailable'
-            : null;
-  return status
-    ? `Status: ${status}. Source: ${item.sourceId}.`
-    : `Source: ${item.sourceId}.`;
+            ? 'Not found'
+            : 'Not independently verified';
+  return `Status: ${status}. Source: ${item.sourceId}.`;
 }
 
-/** The status part of a source index entry; empty when not verified. */
+/** The status part of a source index entry. */
 export function sourceIndexStatus(item: ExpertEvidenceItem): string {
+  if (item.access === 'restricted') return '; status: inaccessible';
   const status = item.informationStatus;
-  return status && !UNVERIFIED.test(status) ? `; status: ${status}` : '';
+  if (status === 'verified') return '; status: verified';
+  if (status === 'conflicting') return '; status: discrepancy found';
+  if (status === 'unavailable') return '; status: not found';
+  return '; status: not independently verified';
 }

@@ -237,7 +237,12 @@ describe('routeWebFindings', () => {
           'webmd',
           'https://doctor.webmd.com/doctor/jason-demery',
           'profile',
-          [claim('license', 'Dr. Jason A Demery holds an active medical license')],
+          [
+            claim(
+              'license',
+              'Dr. Jason A Demery holds an active medical license',
+            ),
+          ],
         ),
         record(
           'pmc',
@@ -547,5 +552,51 @@ describe('coverageLine', () => {
       'grants',
     );
     expect(grants).toMatch(/could not be read/);
+  });
+
+  it('does not label court-order, testimony, or accreditation public searches as unimplemented', () => {
+    const topics = [
+      { topic: 'court_documents', queries: 2, hits: 0 },
+      { topic: 'litigation', queries: 1, hits: 0 },
+      { topic: 'depositions', queries: 1, hits: 0 },
+      { topic: 'university_accreditation', queries: 2, hits: 0 },
+      { topic: 'news', queries: 1, hits: 0 },
+    ];
+    const ran = dossier([], {
+      topics,
+      executedQueries: [
+        {
+          topic: 'university_accreditation',
+          query: '"University of Florida" site:chea.org',
+        },
+      ],
+    });
+    expect(
+      coverageLine(ran, 'orders', [
+        'Orders is not implemented in this investigation.',
+      ]),
+    ).toMatch(
+      /dedicated search for this topic ran|public web search for court orders/i,
+    );
+    expect(
+      coverageLine(ran, 'orders', [
+        'Orders is not implemented in this investigation.',
+      ]),
+    ).not.toMatch(/not implemented/i);
+    expect(
+      coverageLine(ran, 'admissibility-challenges', [
+        'Expert testimony is not implemented in this investigation.',
+      ]),
+    ).not.toMatch(/not implemented/i);
+    expect(
+      coverageLine(ran, 'university-accreditation', [
+        'University accreditation is not implemented in this investigation.',
+      ]),
+    ).not.toMatch(/not implemented/i);
+    expect(
+      coverageLine(ran, 'news', [
+        'News is not implemented in this investigation.',
+      ]),
+    ).not.toMatch(/not implemented/i);
   });
 });

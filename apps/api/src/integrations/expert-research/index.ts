@@ -30,6 +30,7 @@ export {
   normalizeDoi,
   parsePmid,
   parseYear,
+  scholarlyTypeLabel,
 } from './live/publication-citation';
 export { specialtyMatches, taxonomyMatches } from './live/specialty-match';
 export { stateCode, stateName } from './live/location';

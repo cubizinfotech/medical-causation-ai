@@ -58,6 +58,12 @@ export const DEDICATED_SOURCE_TOPICS: Record<string, string[]> = {
   trademarks: ['patents'],
   awards: ['awards'],
   military_claims: ['military_claims', 'awards'],
+  university_accreditation: ['university_accreditation'],
+  depositions: ['depositions'],
+  expert_testimony: ['depositions', 'litigation'],
+  motions: ['court_documents', 'litigation'],
+  orders: ['court_documents', 'litigation'],
+  pleadings: ['court_documents', 'litigation'],
 };
 
 /**
@@ -70,6 +76,9 @@ export function dedicatedSearchRan(
 ): boolean {
   const hosts = DEDICATED_DIRECTORY_HOSTS[sourceId];
   if (hosts) return haystackMentionsHost(dossier, hosts);
+  if (sourceId === 'university_accreditation') {
+    if (haystackMentionsHost(dossier, ['chea.org', 'ope.ed.gov'])) return true;
+  }
   const topics = DEDICATED_SOURCE_TOPICS[sourceId];
   if (!topics) return sourceId === 'web_search';
   return (dossier.topics ?? []).some(
@@ -152,7 +161,8 @@ export function recordServesCatalogSource(
     }
     return sourceId === 'trademarks'
       ? /trademark|service mark/.test(hay)
-      : claims.some((claim) => claim.topic === 'patent') || /\bpatent/.test(hay);
+      : claims.some((claim) => claim.topic === 'patent') ||
+          /\bpatent/.test(hay);
   }
   if (sourceId === 'awards') {
     return (
@@ -168,6 +178,30 @@ export function recordServesCatalogSource(
         hay,
       )
     );
+  }
+  if (sourceId === 'orders') {
+    return (
+      claims.some((claim) => claim.topic === 'order') ||
+      /^\W*(order|opinion|ruling|judgment|memorandum opinion)\b/i.test(
+        record.title,
+      )
+    );
+  }
+  if (sourceId === 'motions' || sourceId === 'pleadings') {
+    return (
+      claims.some((claim) => claim.topic === 'pleading') ||
+      /\b(motion|memorandum|complaint|petition|brief|affidavit)\b/i.test(hay)
+    );
+  }
+  if (sourceId === 'depositions' || sourceId === 'expert_testimony') {
+    return (
+      claims.some(
+        (claim) => claim.topic === 'deposition' || claim.topic === 'testimony',
+      ) || /\b(deposition|transcript|testified|daubert|frye)\b/i.test(hay)
+    );
+  }
+  if (sourceId === 'university_accreditation') {
+    return hostMatches(record.url, ['chea.org', 'ope.ed.gov']);
   }
   if (!PRACTICE_PAGE_KINDS.has(record.kind)) return false;
   const ime =
@@ -229,6 +263,26 @@ export function presenceKindFor(record: WebRecord): string | undefined {
   }
 }
 
+/**
+ * A strong identity match is not independent verification of credentials
+ * the expert (or a directory) stated. Official court, map, and catalog
+ * publication pages can be marked verified as records that exist.
+ */
+function webInformationStatus(
+  record: WebRecord,
+): ExpertEvidenceItem['informationStatus'] {
+  if (record.match.level !== 'strong') return 'unverified';
+  if (
+    record.kind === 'court' ||
+    record.kind === 'justia' ||
+    record.kind === 'maps' ||
+    record.kind === 'publication'
+  ) {
+    return 'verified';
+  }
+  return 'unverified';
+}
+
 function itemFor(
   definition: ProviderDefinition,
   record: WebRecord,
@@ -256,8 +310,7 @@ function itemFor(
     url: record.url,
     simulated: false,
     access: 'public',
-    informationStatus:
-      record.match.level === 'strong' ? 'verified' : 'unverified',
+    informationStatus: webInformationStatus(record),
     retrievedAt,
     source: {
       providerId: definition.id,

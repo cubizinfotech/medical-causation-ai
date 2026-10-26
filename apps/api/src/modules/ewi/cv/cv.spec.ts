@@ -398,6 +398,61 @@ describe('CV comparison', () => {
     ).toEqual([]);
   });
 
+  it('flags a verified first-author discrepancy when the catalog author order differs', () => {
+    const check = compareCv({
+      extraction: {
+        ...extraction,
+        claims: [
+          claim(
+            'cv-p',
+            'publication',
+            'Ellenberg L, Smith J (1999). Memory after pediatric TBI.',
+            {
+              title: 'Memory after pediatric TBI',
+              year: '1999',
+              publicationType: 'article',
+            },
+          ),
+        ],
+      },
+      evidence,
+      sourceResults,
+      identity,
+      publications: [
+        {
+          title: 'Memory after pediatric TBI',
+          status: 'authored',
+          catalog: 'PubMed',
+          pmid: '11111111',
+          publicationType: 'article',
+          work: {
+            title: 'Memory after pediatric TBI',
+            url: 'https://pubmed.ncbi.nlm.nih.gov/11111111/',
+            year: 1999,
+            authors: ['Smith J', 'Ellenberg L'],
+          },
+          authorPosition: 'last',
+          authorIndex: 1,
+          authorCount: 2,
+          cvAuthorPosition: 'first',
+          cvAuthorCount: 2,
+          positionCheck: 'differs',
+          authorListIncomplete: false,
+        },
+      ],
+      expertName: 'Leah Ellenberg',
+    });
+    const row = check.comparisons.find((item) =>
+      item.title.includes('Memory after pediatric TBI'),
+    );
+    expect(row?.label).toBe('conflicting');
+    expect(row?.title).toMatch(/author position differs/i);
+    expect(row?.note).toMatch(/first/i);
+    expect(
+      cvDiscrepancies(check).some((item) => item.field === 'publication'),
+    ).toBe(true);
+  });
+
   it('records a truncated author list as verified authorship with position not verifiable', () => {
     const check = compareCv({
       extraction: {
@@ -564,9 +619,7 @@ describe('CV comparison', () => {
       item.title.includes('Memory after pediatric TBI'),
     );
     expect(row?.label).toBe('verified');
-    expect(row?.source?.url).toBe(
-      'https://pubmed.ncbi.nlm.nih.gov/11111111/',
-    );
+    expect(row?.source?.url).toBe('https://pubmed.ncbi.nlm.nih.gov/11111111/');
     expect(row?.note).toMatch(/first of 2/);
     expect(row?.title).not.toMatch(/not confirmed in the catalogs/i);
   });

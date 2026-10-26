@@ -134,20 +134,37 @@ export class InvestigationHistoryService {
    * is exported (the PDF is the stored copy).
    */
   async getWordReport(id: string, ownerUserId: string): Promise<ReportFile> {
+    const input = await this.finishedReportInput(id, ownerUserId);
+    const report = await this.wordReport.build(input);
+    return {
+      fileName: report.fileName,
+      mimeType: report.mimeType,
+      buffer: report.buffer,
+    };
+  }
+
+  /**
+   * Unique source URLs as a separate PDF, built from the saved
+   * investigation. It is not written over the stored report.
+   */
+  async getLinksReport(id: string, ownerUserId: string): Promise<ReportFile> {
+    const input = await this.finishedReportInput(id, ownerUserId);
+    const report = await this.pdfReport.buildSourceLinks(input);
+    return {
+      fileName: report.fileName,
+      mimeType: report.mimeType,
+      buffer: report.buffer,
+    };
+  }
+
+  private async finishedReportInput(id: string, ownerUserId: string) {
     const row = await this.getHistory(id, ownerUserId);
     if (row.status !== 'completed' || !row.result) {
       throw new NotFoundException(
         `Investigation "${id}" has no finished report to export`,
       );
     }
-    const report = await this.wordReport.build(
-      prepareEwiReportInput(row.result),
-    );
-    return {
-      fileName: report.fileName,
-      mimeType: report.mimeType,
-      buffer: report.buffer,
-    };
+    return prepareEwiReportInput(row.result);
   }
 
   /**

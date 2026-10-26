@@ -1,19 +1,18 @@
 import {
   EXPERT_RESEARCH_CATALOG,
+  articleTitle,
   authorPositionIn,
   describePosition,
   parsePersonName,
   researchCoverageFor,
+  sameTitle,
   type ExpertEvidenceItem,
   type ExpertIdentityResolution,
   type ResearchCoverage,
   type ResearchOutcome,
 } from '@integrations/expert-research';
 import type { ExpertDiscrepancy } from '../research/discrepancy-analyzer';
-import type {
-  CrossExamQuestion,
-  QuestionBasisKind,
-} from '../research/cross-exam-question.generator';
+import type { CrossExamQuestion } from '../research/cross-exam-question.generator';
 import type { EwiAnalysisDocument } from '../investigation/analysis/ewi-analysis.types';
 import {
   NO_RECORDS_LINE,
@@ -26,7 +25,6 @@ import {
   evidenceStatusLine,
   findingLabel,
   findingStatement,
-  questionBasis,
   sourceIndexStatus,
   withoutSingleAccount,
   withoutUnverifiedSentences,
@@ -351,12 +349,6 @@ export const EWI_REPORT_SECTIONS: EwiReportSectionSpec[] = [
     title: '41. Source Index',
     icon: 'link',
   },
-  {
-    id: 'questions',
-    number: 42,
-    title: '42. Cross-Examination Questions',
-    icon: 'gavel',
-  },
 ];
 
 type ClaimTracker = {
@@ -619,8 +611,6 @@ export function buildEwiReportDocument(input: {
         });
       case 'source-index':
         return sourceIndexSection(spec, input.evidence);
-      case 'questions':
-        return questionsSection(spec, input.questions, input.questionsNote);
       default:
         return {
           id: spec.id,
@@ -659,8 +649,8 @@ export function buildEwiReportDocument(input: {
     mimeType: 'application/pdf',
     format: 'pdf',
     includeTableOfContents: true,
-    // Source and category ids appear in questions and source lines; Word
-    // would mark them as misspelled.
+    // Source and category ids appear in source lines; Word would mark
+    // them as misspelled.
     noProofTerms: [
       ...EXPERT_RESEARCH_CATALOG.flatMap((provider) => [
         provider.id,
@@ -679,11 +669,7 @@ export function buildEwiReportDocument(input: {
         'inconsistency',
         'inconsistencies',
       ),
-      countLabel(
-        input.questions.length,
-        'cross-examination question',
-        'cross-examination questions',
-      ),
+      'Cross-examination questions omitted',
     ],
     metadata: {
       expertName: input.expertName,
@@ -794,6 +780,12 @@ const SECTION_SOURCES: Partial<Record<RoutedSectionId, string[]>> = {
   'office-location': ['google_maps'],
   social: ['social'],
   news: ['news', 'blogs'],
+  'admissibility-challenges': [
+    'courtlistener',
+    'justia',
+    'state_court_records',
+    'expert_testimony',
+  ],
   websites: ['expert_website'],
   directories: [
     'expert_directory',
@@ -969,7 +961,10 @@ function withWebFindings(
     blocks.push(...verificationBlocks(verification));
   }
   const coverage = structuredCoverage(section.id, statuses);
-  if (blocks.length === 0) {
+  const hasFindingBlocks =
+    findings.length > 0 ||
+    own.some((block) => block.style !== 'note' && block.style !== 'citation');
+  if (!hasFindingBlocks) {
     blocks.push({
       text: coverageLine(dossier, section.id, coverage, expertName),
       style: 'note',
@@ -1322,8 +1317,7 @@ function webSummaryLines(
     const quote = lead.quote ? ` “${lead.quote.slice(0, 120).trim()}”` : '';
     const more =
       list.length > 1 ? ` (${list.length} items in the section)` : '';
-    const possible =
-      lead.matchLevel === 'possible' ? 'Possible match. ' : '';
+    const possible = lead.matchLevel === 'possible' ? 'Possible match. ' : '';
     lines.push(
       `${plainTitle(sectionId)}: ${possible}${lead.basisLabel}. ${lead.title}.${quote}${more}`,
     );
@@ -1541,7 +1535,9 @@ function cvCoverageLine(check: CvCheck): string {
 function compactCvText(value: string, limit = 180): string {
   const text = value.replace(/\s+/g, ' ').trim();
   if (text.length <= limit) return text;
-  return `${text.slice(0, limit - 1).trim()}…`;
+  const sliced = text.slice(0, limit - 1);
+  const space = sliced.lastIndexOf(' ');
+  return `${(space > Math.floor(limit / 2) ? sliced.slice(0, space) : sliced).trim()}…`;
 }
 
 function cvCheckBlocks(check: CvCheck): ReportBlock[] {
@@ -1698,7 +1694,10 @@ function publicationsSection(
     ],
   });
   const comparisonBlocks = firstAuthorComparisonBlocks(cvCheck);
-  if (items.length === 0 && comparisonBlocks.length === 0) {
+  const uniqueItems = items.filter(
+    (item) => !publicationAlreadyCompared(item, cvCheck),
+  );
+  if (uniqueItems.length === 0 && comparisonBlocks.length === 0) {
     return {
       id: spec.id,
       title: spec.title,
@@ -1706,7 +1705,7 @@ function publicationsSection(
     };
   }
   const blocks: ReportBlock[] = [...comparisonBlocks];
-  for (const item of items) {
+  for (const item of uniqueItems) {
     blocks.push({ text: item.title, style: 'subheading' });
     blocks.push({
       text: evidenceStatusLine(item),
@@ -2309,6 +2308,10 @@ function sourceIndexSection(
       text: 'Source index of collected items. Links are included when present. Restricted items list title and link only; PDF storage is not claimed unless legally permitted and actually performed.',
       style: 'note',
     },
+    {
+      text: 'Abbreviations: NPI (National Provider Identifier); NPPES (National Plan and Provider Enumeration System); PMID (PubMed identifier); DOI (Digital Object Identifier); CV (curriculum vitae); IME (independent medical examination); AACN (American Academy of Clinical Neuropsychology); ABPP (American Board of Professional Psychology); ABMS (American Board of Medical Specialties); CHEA (Council for Higher Education Accreditation); USPTO (United States Patent and Trademark Office); NIH (National Institutes of Health); PACER (Public Access to Court Electronic Records); DRI (Defense Research Institute); SEAK (expert-directory publisher).',
+      style: 'note',
+    },
   ];
   if (evidence.length === 0) {
     blocks.push({ text: 'No source links were collected.', style: 'note' });
@@ -2327,110 +2330,6 @@ function sourceIndexSection(
       blocks.push({ text: item.url, link: item.url, style: 'citation' });
     }
   });
-  return { id: spec.id, title: spec.title, blocks };
-}
-
-const QUESTION_LABEL_TEXT = {
-  verified: 'Verified',
-  allegation: 'Allegation',
-  unresolved: 'Unresolved',
-} as const;
-
-const QUESTION_BASIS_KIND_TEXT: Record<QuestionBasisKind, string> = {
-  sourced_fact: 'Sourced fact',
-  inconsistency: 'Confirmed inconsistency in collected sources',
-  limitation: 'Research limitation — not a finding that nothing exists',
-  evidence_gap: 'Unresolved evidence gap',
-};
-
-function printedQuestionLabel(
-  label: CrossExamQuestion['label'] | undefined,
-): keyof typeof QUESTION_LABEL_TEXT {
-  return label === 'verified' || label === 'allegation' ? label : 'unresolved';
-}
-
-function questionsSection(
-  spec: EwiReportSectionSpec,
-  questions: CrossExamQuestion[],
-  questionsNote?: string,
-): ReportSectionModel {
-  if (questions.length === 0) {
-    return {
-      id: spec.id,
-      title: spec.title,
-      blocks: [
-        {
-          text:
-            questionsNote ??
-            'Cross-examination questions were not generated. No collected finding was available, and facts were not invented to create questions.',
-          style: 'note',
-        },
-      ],
-    };
-  }
-  const counts = {
-    verified: questions.filter(
-      (q) => printedQuestionLabel(q.label) === 'verified',
-    ).length,
-    allegation: questions.filter(
-      (q) => printedQuestionLabel(q.label) === 'allegation',
-    ).length,
-    unresolved: questions.filter(
-      (q) => printedQuestionLabel(q.label) === 'unresolved',
-    ).length,
-  };
-  const blocks: ReportBlock[] = [
-    {
-      text: `${questions.length} cross-examination question(s), each tied to a distinct collected fact, a CV discrepancy, or a coverage gap. The target is 100 when enough distinct facts exist. None were padded and no facts were invented. Labels: Verified (${counts.verified}) means a cited source states the fact about this expert; Allegation (${counts.allegation}) means a third party reported it and it has not been adjudicated; Unresolved (${counts.unresolved}) means the identity or the detail is not confirmed, sources conflict, or the research is incomplete, so the question is conditional.`,
-      style: 'note',
-    },
-  ];
-  if (questionsNote) {
-    blocks.push({ text: questionsNote, style: 'note' });
-  }
-  let heading = '';
-  for (const question of questions) {
-    if (question.category !== heading) {
-      heading = question.category;
-      blocks.push({ text: heading, style: 'subheading' });
-    }
-    const label = QUESTION_LABEL_TEXT[printedQuestionLabel(question.label)];
-    blocks.push({
-      text: `${question.number}. [${label}] ${withoutSingleAccount(question.question)}`,
-      style: 'item',
-    });
-    if (question.basisKind) {
-      blocks.push({
-        text: [QUESTION_BASIS_KIND_TEXT[question.basisKind], question.relevance]
-          .filter(Boolean)
-          .join('. '),
-        style: 'note',
-      });
-    } else if (question.relevance) {
-      blocks.push({ text: question.relevance, style: 'note' });
-    }
-    if (question.excerpt) {
-      blocks.push({
-        text: `Factual basis: “${question.excerpt}”`,
-        style: 'citation',
-      });
-    }
-    const sources = question.sources ?? [];
-    if (sources.length > 0) {
-      for (const source of sources) {
-        blocks.push({
-          text: `Source: ${source.name}${source.date ? ` (${source.date})` : ''}${source.url ? ` — ${source.url}` : ''}`,
-          ...(source.url ? { link: source.url } : {}),
-          style: 'citation',
-        });
-      }
-    } else {
-      blocks.push({
-        text: `Basis: ${questionBasis(question.evidenceBasis)}`,
-        style: 'citation',
-      });
-    }
-  }
   return { id: spec.id, title: spec.title, blocks };
 }
 
@@ -3073,6 +2972,39 @@ function authorListFromRaw(raw: Record<string, unknown>): string[] {
     .filter(Boolean);
 }
 
+function publicationAlreadyCompared(
+  item: ExpertEvidenceItem,
+  check: CvCheck | null | undefined,
+): boolean {
+  const rows = (check?.comparisons ?? []).filter(
+    (row) => row.topic === 'publication',
+  );
+  if (rows.length === 0) return false;
+  const raw = item.raw ?? {};
+  const pmid = stringField(raw, ['pmid']);
+  const doi = stringField(raw, ['doi']);
+  const title = articleTitle(item.title);
+  return rows.some((row) => {
+    const hay = [
+      row.source?.statement,
+      row.source?.url,
+      row.title,
+      row.cv?.statement,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    if (pmid && hay.includes(pmid.toLowerCase())) return true;
+    if (doi && hay.includes(doi.toLowerCase())) return true;
+    const rowTitle = articleTitle(row.title);
+    const cvTitle = row.cv?.statement ? articleTitle(row.cv.statement) : '';
+    return (
+      sameTitle(title, rowTitle) ||
+      (cvTitle ? sameTitle(title, cvTitle) : false)
+    );
+  });
+}
+
 function firstAuthorComparisonBlocks(
   check: CvCheck | null | undefined,
 ): ReportBlock[] {
@@ -3083,7 +3015,7 @@ function firstAuthorComparisonBlocks(
   const blocks: ReportBlock[] = [
     { text: 'First-author and CV comparison', style: 'subheading' },
     {
-      text: 'Each CV citation is compared with the catalog record (OpenAlex, PubMed, Crossref, or ORCID). “Misrepresentation” is not used unless the catalogs actually disagree with the CV. Equal-contribution notes are kept when the source stated them.',
+      text: 'Each CV citation is compared with the catalog record (OpenAlex, PubMed, Crossref, or ORCID) by title, authors, DOI, and PubMed identifier when present. A verified author-position discrepancy means the CV listed the expert first (or in another stated place) and the catalog author list disagrees. “Misrepresentation” is not used unless the catalogs actually disagree with the CV. Equal-contribution notes are kept when the source stated them.',
       style: 'note',
     },
   ];
@@ -3112,7 +3044,11 @@ function firstAuthorComparisonBlocks(
 
 function firstAuthorClass(row: CvComparison): string {
   const hay = `${row.title} ${row.note}`.toLowerCase();
-  if (row.label === 'conflicting') return 'citation mismatch';
+  if (row.label === 'conflicting') {
+    return /author position differs/.test(hay)
+      ? 'verified author-position discrepancy'
+      : 'verified citation discrepancy';
+  }
   if (
     /\bnot verifiable\b|\bauthor list is truncated\b|\bunable to verify\b/.test(
       hay,

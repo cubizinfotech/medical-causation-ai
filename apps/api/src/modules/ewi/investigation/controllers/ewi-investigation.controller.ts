@@ -135,6 +135,27 @@ export class EwiInvestigationController {
     return new StreamableFile(report.buffer);
   }
 
+  /** Unique source URLs as a separate PDF, built from the saved investigation. */
+  @Get('histories/:id/report/links')
+  async downloadLinksReport(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: AuthedRequest,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const userId = requireRequestUser(request).id;
+    const report = await this.historyService.getLinksReport(id, userId);
+    void this.audit.record({
+      product: 'ewi',
+      action: 'report.download',
+      actorId: userId,
+      resourceType: 'investigation',
+      resourceId: id,
+      metadata: { format: 'source-links' },
+    });
+    res.set(downloadHeaders(report.fileName, report.mimeType));
+    return new StreamableFile(report.buffer);
+  }
+
   @Post('jobs')
   @JobRateLimit()
   @HttpCode(HttpStatus.ACCEPTED)

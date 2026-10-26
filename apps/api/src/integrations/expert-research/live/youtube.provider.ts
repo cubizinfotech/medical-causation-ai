@@ -144,9 +144,7 @@ export class YoutubeResearchProvider extends LiveResearchProvider {
     corroborated: string | null,
   ): ExpertEvidenceItem {
     const url = youtubeWatchUrl(video.videoId);
-    const published = video.publishedAt
-      ? video.publishedAt.slice(0, 10)
-      : null;
+    const published = video.publishedAt ? video.publishedAt.slice(0, 10) : null;
     const transcriptReason = youtubeTranscriptReason(video.captionAvailable);
     return this.item({
       category: 'video',

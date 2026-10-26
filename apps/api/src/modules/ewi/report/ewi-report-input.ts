@@ -247,7 +247,10 @@ export function missingEvidenceForMoreQuestions(
   if (unresolved('social')) {
     missing.push('public social-media profiles that open without a login');
   }
-  if (!foundSource('youtube') && !evidence.some((item) => item.category === 'video')) {
+  if (
+    !foundSource('youtube') &&
+    !evidence.some((item) => item.category === 'video')
+  ) {
     missing.push(
       'public videos or a direct audio/video file that can be transcribed',
     );
@@ -262,13 +265,19 @@ export function missingEvidenceForMoreQuestions(
     missing.push('additional public court filings with readable text');
   }
   if (unresolved('depositions')) {
-    missing.push('a user-supplied deposition transcript (depositions are not scraped)');
+    missing.push(
+      'a user-supplied deposition transcript (depositions are not scraped)',
+    );
   }
   if (unresolved('patents')) {
-    missing.push('public patent or trademark records after USPTO identity verification');
+    missing.push(
+      'public patent or trademark records after USPTO identity verification',
+    );
   }
   if (unresolved('university_accreditation')) {
-    missing.push('CHEA or U.S. Department of Education accreditation confirmation');
+    missing.push(
+      'CHEA or U.S. Department of Education accreditation confirmation',
+    );
   }
   if (missing.length === 0) return '';
   return ` More questions would need: ${missing.slice(0, 8).join('; ')}.`;

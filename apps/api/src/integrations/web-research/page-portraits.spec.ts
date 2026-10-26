@@ -33,7 +33,10 @@ describe('extractPortraitCandidates', () => {
     const html = `
       <img class="staff-photo" data-src="/faculty/demery-headshot.jpg"
            srcset="/faculty/demery-headshot.jpg 1x, /faculty/demery-headshot-2x.jpg 2x">`;
-    const found = extractPortraitCandidates(html, 'https://med.ufl.edu/faculty/demery');
+    const found = extractPortraitCandidates(
+      html,
+      'https://med.ufl.edu/faculty/demery',
+    );
     expect(found.map((item) => item.url)).toEqual([
       'https://med.ufl.edu/faculty/demery-headshot.jpg',
     ]);
@@ -102,7 +105,7 @@ describe('usablePortraitCandidates', () => {
     ).toEqual([]);
   });
 
-  it('uses Open Graph photos on the person\'s own site', () => {
+  it("uses Open Graph photos on the person's own site", () => {
     expect(
       usablePortraitCandidates([og], {
         kind: 'expert_website',

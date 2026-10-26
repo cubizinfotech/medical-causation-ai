@@ -145,8 +145,9 @@ function resolveKind(
 ): PresenceKind {
   const stated =
     readString(raw.presenceKind)?.toLowerCase() ??
-    readString((raw.web as { presenceKind?: unknown } | undefined)?.presenceKind)
-      ?.toLowerCase();
+    readString(
+      (raw.web as { presenceKind?: unknown } | undefined)?.presenceKind,
+    )?.toLowerCase();
   if (stated && isPresenceKind(stated)) return stated;
 
   switch (item.sourceId) {
@@ -230,7 +231,9 @@ function readPlatform(value: unknown): SocialPlatform | null {
   return 'other';
 }
 
-function readNestedPlatform(raw: Record<string, unknown>): SocialPlatform | null {
+function readNestedPlatform(
+  raw: Record<string, unknown>,
+): SocialPlatform | null {
   const web = raw.web as { platform?: unknown } | undefined;
   return web ? readPlatform(web.platform) : null;
 }

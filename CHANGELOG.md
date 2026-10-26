@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-10-26): catalog type labels, OpenAlex matching, source-links PDF (report 3.10.5)
+
+- Catalog publication type is printed only when classified (for example “journal article”). Unclassified records no longer show “Type: unverified”.
+- OpenAlex keeps a unique name-and-specialty author profile when institution geography is not listed. An institution in another country is still rejected. Location is not claimed unless the profile listed it.
+- A completed investigation can export a separate PDF of unique source URLs (title, category, clickable address). The stored investigation report is unchanged.
+- Not deployed. Historic client reports were not overwritten. Paid APIs were not used.
+
+### Changed (2026-10-26): investigation accuracy and evidence standards (report 3.10.4)
+
+- Publication matching still uses title, authors, DOI, PubMed, and Crossref. When a CV lists the expert as first author and the catalog author list disagrees, the report labels a verified author-position discrepancy. Duplicate PubMed listings of the same citation are dropped.
+- A strong identity match on the expert’s own website or a directory is not independent credential or education verification. Evidence lines distinguish verified, discrepancy found, not independently verified, not found, and inaccessible.
+- Public searches for court orders, motions, testimony, Daubert/Frye mentions, news, social profiles, patents, military claims, corporate records, patient reviews, and CHEA/USDE accreditation are no longer labelled “not implemented” when those queries ran. PACER paid downloads, login-gated social pages, and official USPTO/military logins remain incomplete.
+- Generated cross-examination questions are omitted from the PDF and Word reports. Abbreviations used in the report are defined in the source index. Long words in the PDF are hyphenated instead of split mid-letter.
+- Not deployed. Historic client reports were not overwritten. Paid APIs were not used.
+
 ### Changed (2026-10-26): opening-page CV, identity, and summary consistency (report 3.10.3)
 
 - CV comparison now reuses collected PubMed/OpenAlex records when a catalog title search missed the same citation, so the publications section and CV comparison no longer disagree on status.

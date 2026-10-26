@@ -130,9 +130,9 @@ describe('EWI report CV comparison', () => {
     });
     const text = sectionText(document, 'cv-comparison');
     expect(text).toMatch(/Uploaded CV: smith-cv\.pdf \(4 pages\)/);
-    expect(text).toMatch(/Conflicts: 1; Not checked: 1/);
-    expect(text.indexOf('[Conflicts]')).toBeLessThan(
-      text.indexOf('[Not checked]'),
+    expect(text).toMatch(/Discrepancy found: 1; Not searched: 1/);
+    expect(text.indexOf('[Discrepancy found]')).toBeLessThan(
+      text.indexOf('[Not searched]'),
     );
     expect(text).toContain('CV (page 3): “Spine study. Spine 2012.”');
     expect(text).toContain('OpenAlex: Spine study (2012). Authors: Ann Lee.');
@@ -184,7 +184,7 @@ describe('EWI report CV comparison', () => {
             source: {
               name: 'Crossref',
               statement:
-                'Migraine outcomes after cervical fusion (2015). Authors: Jane A. Smith, Ann Lee. Type: article. DOI 10.1000/xyz',
+                'Migraine outcomes after cervical fusion (2015). Authors: Jane A. Smith, Ann Lee. Catalog record type: journal article. DOI 10.1000/xyz',
               url: 'https://doi.org/10.1000/xyz',
             },
             note: 'The CV position matches the catalog.',
@@ -289,7 +289,9 @@ describe('EWI report with live sources', () => {
 
   it('does not treat a possible NPI record as a verified identity or license', () => {
     const background = sectionText(document, 'background');
-    expect(background).toMatch(/Identity not confirmed — one possible NPI record/);
+    expect(background).toMatch(
+      /Identity not confirmed — one possible NPI record/,
+    );
     expect(background).toMatch(/Possible record: NPI 1234567893/);
     expect(background).toMatch(/registry city PHOENIX/);
     expect(background).toMatch(/not a confirmed identity/i);

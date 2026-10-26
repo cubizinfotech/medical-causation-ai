@@ -99,19 +99,23 @@ export class OpenAlexResearchProvider extends LiveResearchProvider {
       .map((author) => candidateFor(author, query.specialty, place, byId))
       .filter((candidate): candidate is Candidate => candidate !== null);
     const where = describePlace(place);
+    const located = candidates.filter(
+      (candidate) => candidate.matchedInstitutions.length > 0,
+    );
+    const pool = located.length > 0 ? located : candidates;
 
-    if (candidates.length === 0) {
+    if (pool.length === 0) {
       return {
         items: [],
         message: `${authors.length} OpenAlex author profile(s) are named ${displayName(name)}, but none has ${query.specialty} research topics${hasPlace(place) ? ` and an institution in ${where}` : ''}. Nothing was attributed to the expert.`,
       };
     }
-    const chosen = sameOrcid(candidates);
+    const chosen = sameOrcid(pool);
     if (!chosen) {
       return {
         items: [],
         outcome: 'conflicting',
-        message: `${candidates.length} OpenAlex author profiles fit the name and ${query.specialty} topics${hasPlace(place) ? ` and ${where}` : ''}: ${candidates
+        message: `${pool.length} OpenAlex author profiles fit the name and ${query.specialty} topics${located.length > 0 ? ` and ${where}` : ''}: ${pool
           .map(
             (candidate) =>
               `${candidate.author.display_name} (${candidate.matchedInstitutions.join(', ') || 'institution not listed'}; ${candidate.author.works_count ?? 0} works; ${candidate.author.id})`,
@@ -122,12 +126,13 @@ export class OpenAlexResearchProvider extends LiveResearchProvider {
       };
     }
 
+    const locationConfirmed = chosen.matchedInstitutions.length > 0;
     const authorIdentity = {
       name: chosen.author.display_name ?? query.expertName,
       city: query.city,
       specialty: query.specialty,
       verifiedBy: 'source_match',
-      basis: hasPlace(place)
+      basis: locationConfirmed
         ? ['name', 'research topics', 'institution location']
         : ['name', 'research topics'],
       openalexId: chosen.author.id,
@@ -158,9 +163,12 @@ export class OpenAlexResearchProvider extends LiveResearchProvider {
         this.workItem(work, chosen.author.id, authorIdentity, retrievedAt),
       ),
     ];
+    const locationNote = locationConfirmed
+      ? ` Institution: ${chosen.matchedInstitutions[0]}.`
+      : ' Institution location was not listed on the profile, so it was not used to confirm the match.';
     return {
       items,
-      message: `Matched OpenAlex author ${chosen.author.display_name} (${chosen.author.works_count ?? 0} works) on name, ${chosen.matchedTopics[0] ?? query.specialty} topics, and ${chosen.matchedInstitutions[0] ?? where}.${retracted.count > 0 ? ` ${retracted.count} work(s) are marked retracted.` : ''}`,
+      message: `Matched OpenAlex author ${chosen.author.display_name} (${chosen.author.works_count ?? 0} works) on name and ${chosen.matchedTopics[0] ?? query.specialty} topics.${locationNote}${retracted.count > 0 ? ` ${retracted.count} work(s) are marked retracted.` : ''}`,
     };
   }
 
@@ -200,7 +208,9 @@ export class OpenAlexResearchProvider extends LiveResearchProvider {
       retractedCount > 0
         ? `${retractedCount} work(s) are marked retracted in OpenAlex.`
         : 'No work is marked retracted in OpenAlex.',
-      `Matched on name, research topics (${candidate.matchedTopics.slice(0, 2).join('; ')}), and institution location (${candidate.matchedInstitutions.slice(0, 2).join('; ')}).`,
+      candidate.matchedInstitutions.length > 0
+        ? `Matched on name, research topics (${candidate.matchedTopics.slice(0, 2).join('; ')}), and institution location (${candidate.matchedInstitutions.slice(0, 2).join('; ')}).`
+        : `Matched on name and research topics (${candidate.matchedTopics.slice(0, 2).join('; ')}). Institution location was not listed on the profile, so it was not used to confirm the match.`,
       PROFILE_NOTE,
     ]
       .filter(Boolean)
@@ -364,14 +374,16 @@ function candidateFor(
     .map((topic) => topic.display_name ?? '')
     .filter(Boolean);
   if (matchedTopics.length === 0) return null;
+  const listed = institutionIds(author)
+    .map((id) => institutions.get(shortId(id)))
+    .filter((institution): institution is OpenAlexInstitution =>
+      Boolean(institution),
+    );
   const matchedInstitutions = [
     ...new Set(
-      institutionIds(author)
-        .map((id) => institutions.get(shortId(id)))
-        .filter((institution): institution is OpenAlexInstitution =>
-          Boolean(
-            institution && (!hasPlace(place) || inPlace(institution, place)),
-          ),
+      listed
+        .filter(
+          (institution) => !hasPlace(place) || inPlace(institution, place),
         )
         .map((institution) => {
           const geo = institution.geo;
@@ -379,7 +391,16 @@ function candidateFor(
         }),
     ),
   ];
-  if (hasPlace(place) && matchedInstitutions.length === 0) return null;
+  if (hasPlace(place)) {
+    const locatedMatch = listed.some(
+      (institution) => institution.geo && inPlace(institution, place),
+    );
+    const locatedMismatch = listed.some(
+      (institution) => institution.geo && !inPlace(institution, place),
+    );
+    if (locatedMatch) return { author, matchedTopics, matchedInstitutions };
+    if (locatedMismatch) return null;
+  }
   return { author, matchedTopics, matchedInstitutions };
 }
 

@@ -77,6 +77,26 @@ export function classifyPublicationType(
   return 'other';
 }
 
+const SCHOLARLY_TYPE_LABEL: Record<ScholarlyType, string> = {
+  article: 'journal article',
+  chapter: 'book chapter',
+  abstract: 'meeting abstract',
+  presentation: 'presentation or proceedings',
+  poster: 'poster',
+  other: 'other scholarly record',
+};
+
+/**
+ * Attorney-facing catalog record type. Returns null when the catalogs did
+ * not classify the work, so the report never prints “Type: unverified”.
+ */
+export function scholarlyTypeLabel(
+  type: string | null | undefined,
+): string | null {
+  if (!type || type === 'unverified') return null;
+  return SCHOLARLY_TYPE_LABEL[type as ScholarlyType] ?? null;
+}
+
 export function mapCatalogType(
   catalogType: string | null | undefined,
 ): ScholarlyType | undefined {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
-import { AlertCircle, Download, FileText, RefreshCw } from "lucide-react";
+import { AlertCircle, Download, FileText, Link2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { startRouteProgress } from "@/components/layout/route-progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,10 +37,11 @@ export default function EwiHistoryDetailPage() {
   const id = params.id;
   const [downloadError, setDownloadError] = useState<{
     message: string;
-    format: "pdf" | "word";
+    format: "pdf" | "word" | "links";
   } | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [exportingWord, setExportingWord] = useState(false);
+  const [exportingLinks, setExportingLinks] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
   const history = useQuery({
@@ -186,11 +187,44 @@ export default function EwiHistoryDetailPage() {
     }
   };
 
-  const retryDownload = () =>
-    void (downloadError?.format === "word" ? exportWord() : download());
+  const exportLinks = async () => {
+    setDownloadError(null);
+    setExportingLinks(true);
+    try {
+      await ewiClient.downloadSourceLinksReport(
+        detail.id,
+        (detail.reportFileName || "ewi-report.pdf").replace(
+          /(\.[a-z0-9]+)?$/i,
+          "-source-links.pdf",
+        ),
+      );
+    } catch (error) {
+      setDownloadError({
+        message: toUserFacingError(
+          error,
+          "The source-links PDF could not be exported. Please retry.",
+        ),
+        format: "links",
+      });
+    } finally {
+      setExportingLinks(false);
+    }
+  };
 
-  const canExportWord = detail.status === "completed";
-  const wordButton = canExportWord ? (
+  const retryDownload = () => {
+    if (downloadError?.format === "word") {
+      void exportWord();
+      return;
+    }
+    if (downloadError?.format === "links") {
+      void exportLinks();
+      return;
+    }
+    void download();
+  };
+
+  const canExportExtras = detail.status === "completed";
+  const wordButton = canExportExtras ? (
     <Button
       variant="outline"
       onClick={() => void exportWord()}
@@ -199,6 +233,17 @@ export default function EwiHistoryDetailPage() {
     >
       <FileText className="h-4 w-4" />
       Export Word
+    </Button>
+  ) : null;
+  const linksButton = canExportExtras ? (
+    <Button
+      variant="outline"
+      onClick={() => void exportLinks()}
+      loading={exportingLinks}
+      loadingText="Exporting…"
+    >
+      <Link2 className="h-4 w-4" />
+      Export source links PDF
     </Button>
   ) : null;
 
@@ -235,6 +280,7 @@ export default function EwiHistoryDetailPage() {
               Download PDF Report
             </Button>
             {wordButton}
+            {linksButton}
           </div>
         </>
       ) : detail.status === "completed" ? (
@@ -244,6 +290,7 @@ export default function EwiHistoryDetailPage() {
             available for download.
           </EmptyReportNote>
           {wordButton}
+          {linksButton}
         </>
       ) : inProgress ? (
         <EmptyReportNote>
@@ -263,7 +310,7 @@ export default function EwiHistoryDetailPage() {
               className="mt-2"
               size="sm"
               variant="outline"
-              loading={downloading || exportingWord}
+              loading={downloading || exportingWord || exportingLinks}
               onClick={retryDownload}
             >
               Retry download
@@ -306,6 +353,7 @@ export default function EwiHistoryDetailPage() {
             </Button>
           ) : null}
           {wordButton}
+          {linksButton}
           <Button
             variant="outline"
             loading={retrying}
@@ -371,7 +419,7 @@ export default function EwiHistoryDetailPage() {
               className="mt-2"
               size="sm"
               variant="outline"
-              loading={downloading || exportingWord}
+              loading={downloading || exportingWord || exportingLinks}
               onClick={retryDownload}
             >
               Retry download

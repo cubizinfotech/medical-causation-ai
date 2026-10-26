@@ -66,7 +66,9 @@ describe('ExpertIdentityResolver', () => {
       '1457767758',
     ]);
     expect(resolution.note).toMatch(/NPI number/);
-    expect(resolution.note).toMatch(/not required to keep searching public records/);
+    expect(resolution.note).toMatch(
+      /not required to keep searching public records/,
+    );
   });
 
   it('confirms a single name and specialty match when no city is given', async () => {
@@ -122,7 +124,9 @@ describe('ExpertIdentityResolver', () => {
     expect(resolution.note).toMatch(/Los Angeles/);
     expect(resolution.note).toMatch(/BEVERLY HILLS/);
     expect(resolution.note).toMatch(/not used as a confirmed identity/);
-    expect(resolution.note).toMatch(/not required to keep searching public records/);
+    expect(resolution.note).toMatch(
+      /not required to keep searching public records/,
+    );
   });
 
   it('keeps a same-specialty record in another city as a candidate only', async () => {

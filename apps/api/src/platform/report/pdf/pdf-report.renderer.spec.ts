@@ -266,6 +266,13 @@ describe('wrapText', () => {
     expect(lines.slice(1, -1).every((line) => line.endsWith('/'))).toBe(true);
   });
 
+  it('hyphenates a long alphabetic word instead of splitting it mid-letter', () => {
+    const lines = wrapText('neuropsychological', 50, measure);
+    expect(lines.some((line) => line.endsWith('-'))).toBe(true);
+    expect(lines.join('').replace(/-/g, '')).toBe('neuropsychological');
+    for (const line of lines) expect(measure(line)).toBeLessThanOrEqual(50);
+  });
+
   it('drops characters that have no glyph', () => {
     expect(wrapText('a\u0000b​c﻿', 100, measure)).toEqual(['abc']);
   });

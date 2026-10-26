@@ -378,6 +378,90 @@ describe('OpenAlex live source', () => {
     expect(result.outcome).toBe('conflicting');
     expect(result.message).toMatch(/could not be told apart/);
   });
+
+  it('keeps a unique name-and-specialty profile when institution geography is not listed', async () => {
+    const { get } = providers([
+      nppesRoute([doctor]),
+      ...openAlexRoutes(
+        [
+          {
+            id: 'https://openalex.org/A1',
+            display_name: 'Jane A. Smith',
+            works_count: 40,
+            topics: neuroTopics,
+          },
+        ],
+        [],
+      ),
+    ]);
+    const result = await get('openalex').search(query);
+    expect(result.items[0]?.title).toBe(
+      'OpenAlex author profile: Jane A. Smith',
+    );
+    expect(result.message).toMatch(/not listed on the profile/);
+    expect(result.items[0]?.summary).toMatch(/not used to confirm the match/);
+  });
+
+  it('still rejects a unique specialty match at an institution in another country', async () => {
+    const { get } = providers([
+      nppesRoute([doctor]),
+      ...openAlexRoutes(
+        [
+          {
+            id: 'https://openalex.org/A3',
+            display_name: 'Jane Smith',
+            topics: neuroTopics,
+            affiliations: [{ institution: { id: 'https://openalex.org/I2' } }],
+          },
+        ],
+        [
+          {
+            id: 'https://openalex.org/I2',
+            display_name: 'Oxford',
+            geo: { city: 'Oxford', region: 'England', country_code: 'GB' },
+          },
+        ],
+      ),
+    ]);
+    const result = await get('openalex').search(query);
+    expect(result.items).toHaveLength(0);
+    expect(result.message).toMatch(/Nothing was attributed/);
+  });
+
+  it('prefers the profile with a matching institution over one without geography', async () => {
+    const { get } = providers([
+      nppesRoute([doctor]),
+      ...openAlexRoutes(
+        [
+          {
+            id: 'https://openalex.org/A1',
+            display_name: 'Jane A. Smith',
+            works_count: 40,
+            topics: neuroTopics,
+            affiliations: [{ institution: { id: 'https://openalex.org/I1' } }],
+          },
+          {
+            id: 'https://openalex.org/A5',
+            display_name: 'Jane Smith',
+            works_count: 12,
+            topics: neuroTopics,
+          },
+        ],
+        [
+          {
+            id: 'https://openalex.org/I1',
+            display_name: 'Barrow Neurological Institute',
+            geo: { city: 'Phoenix', region: 'Arizona', country_code: 'US' },
+          },
+        ],
+      ),
+    ]);
+    const result = await get('openalex').search(query);
+    expect(result.items[0]?.title).toBe(
+      'OpenAlex author profile: Jane A. Smith',
+    );
+    expect(result.items[0]?.summary).toMatch(/Barrow Neurological Institute/);
+  });
 });
 
 describe('CourtListener live source', () => {
@@ -559,7 +643,8 @@ describe('CourtListener live source', () => {
               id: 9,
               caseName: 'People v. Roe',
               description: 'Motion to Exclude Testimony of Jane Smith, Ph.D.',
-              snippet: 'Jane Smith, Ph.D., appeared as the defense expert in Phoenix',
+              snippet:
+                'Jane Smith, Ph.D., appeared as the defense expert in Phoenix',
               docketNumber: '1:18-cv-3',
               court: 'District Court, D. Arizona',
               dateFiled: '2018-01-02',

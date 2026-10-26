@@ -62,8 +62,18 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * same publication status; claim counts account for uncompared rows; a
  * possible NPI in another city is not treated as a confirmed identity;
  * opening-page wording states the source basis instead of over-claiming.
+ * 3.10.4: CV first-author claims are compared with catalog author order;
+ * verified position discrepancies are labelled as such; duplicate
+ * publication listings are dropped; a strong identity match on the
+ * expert's own site is not independent credential verification; public
+ * court/news/social/accreditation searches are not labelled unimplemented
+ * when they ran; generated cross-examination questions are omitted.
+ * 3.10.5: catalog publication type is omitted unless classified; OpenAlex
+ * keeps a unique name-and-specialty author profile when institution
+ * geography is not listed; a separate unique source-links PDF can be
+ * exported without changing the stored report.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.10.3';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.5';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis and other licensed PDFs are not stored unless legally permitted.';

@@ -38,6 +38,7 @@ export type QueryTopic =
   | 'ime'
   | 'criminal'
   | 'university_rules'
+  | 'university_accreditation'
   | 'follow_up';
 
 export interface PlannedQuery {
@@ -102,6 +103,7 @@ export const QUERY_PRIORITY: Record<QueryTopic, number> = {
   certification: 4,
   certification_org: 5,
   education: 6,
+  university_accreditation: 7,
   follow_up: 8,
   directories: 10,
   ime: 11,
@@ -524,7 +526,7 @@ export function planFollowUps(
       prompt: `Find the faculty or staff page for ${label} at ${institution}, and any public conflict-of-interest, outside-activity or consulting policy that would apply to that role. Do not report a generic course syllabus unless it names this person as the instructor.`,
     });
     push(
-      'education',
+      'university_accreditation',
       {
         query: `site:chea.org ${quote(institution)}`,
         prompt: `Find whether ${institution} is listed in the Council for Higher Education Accreditation (CHEA) database. A missing listing is not proof the school was unaccredited.`,
@@ -532,7 +534,7 @@ export function planFollowUps(
       { label: 'CHEA', topics: ['education'] },
     );
     push(
-      'education',
+      'university_accreditation',
       {
         query: `site:ope.ed.gov ${quote(institution)}`,
         prompt: `Find the U.S. Department of Education College Navigator or accreditation listing for ${institution}. A missing listing is not proof the school was unaccredited.`,

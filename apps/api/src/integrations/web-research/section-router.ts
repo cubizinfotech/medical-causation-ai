@@ -556,10 +556,7 @@ export function routeWebFindings(
       push(recordFinding('ime', short(record.title, 140)));
     }
     const officialPage = officialSourceFor(record.url);
-    if (
-      officialPage?.topics.includes('patent') &&
-      !alreadyFiled('patents')
-    ) {
+    if (officialPage?.topics.includes('patent') && !alreadyFiled('patents')) {
       push(recordFinding('patents', short(record.title, 140)));
     }
     if (
@@ -659,7 +656,7 @@ const SECTION_SEARCH: Record<
   education: { what: 'a degree or training', topics: ['education'] },
   'university-accreditation': {
     what: 'a degree-granting institution',
-    topics: [],
+    topics: ['university_accreditation'],
   },
   licenses: { what: 'a professional license', topics: ['license'] },
   'board-actions': {
@@ -761,8 +758,7 @@ const PRIOR_NOT_REUSED =
   'Results from other investigations are not reused or revalidated here.';
 const BUDGET_OMITTED =
   'This category was planned but not searched because the query budget or time limit was reached. That is not proof that nothing exists.';
-const NOT_IMPLEMENTED_LINE =
-  /is not implemented in this investigation/i;
+const NOT_IMPLEMENTED_LINE = /is not implemented in this investigation/i;
 
 /** Public search ran; official database login or dedicated API was not used. */
 const PUBLIC_SEARCH_LIMIT: Partial<Record<RoutedSectionId, string>> = {
@@ -777,6 +773,21 @@ const PUBLIC_SEARCH_LIMIT: Partial<Record<RoutedSectionId, string>> = {
     'A public news and web search for criminal-record mentions was performed. Dedicated criminal-record databases were not queried.',
   depositions:
     'A public web search for deposition or testimony transcripts was performed. Paid transcript databases were not accessed.',
+  'testimony-inconsistencies':
+    'A public web search for testimony and Daubert, Frye, or Rule 702 mentions was performed. Full transcripts were not purchased or opened.',
+  orders:
+    'A public web search for court orders naming the expert was performed. PACER paid downloads and complete dockets were not retrieved.',
+  pleadings:
+    'A public web search for motions and pleadings naming the expert was performed. PACER paid downloads and complete dockets were not retrieved.',
+  'admissibility-challenges':
+    'A public web search for Daubert, Frye, and Rule 702 mentions was performed. This is not a complete docket review.',
+  news: 'Public news search included web and Google News results when those providers ran. A missing article is not proof that none exist.',
+  social:
+    'Public search listed social profiles. Login-gated pages were not opened, so profile content was not independently verified.',
+  corporate:
+    'A public web search for corporate-registry mentions was performed. Official secretary-of-state logins were not completed.',
+  'patient-reviews':
+    'Public review-site listings were searched. This is not a complete patient-review file.',
   'university-accreditation':
     'Public accreditation listings were searched when an institution was identified. That is not a complete official accreditation file.',
 };
@@ -881,7 +892,9 @@ export function coverageLine(
   const worked = Boolean(dossier && webRunWorked(dossier));
   const queried =
     !!dossier && worked && topicQueriesForSection(dossier, sectionId) > 0;
-  const omitted = Boolean(dossier && topicOmittedForSection(dossier, sectionId));
+  const omitted = Boolean(
+    dossier && topicOmittedForSection(dossier, sectionId),
+  );
   const display = displayStructuredCoverage(dossier, sectionId, structured);
   if (attempted && !worked) {
     parts.push(SEARCH_INCOMPLETE);

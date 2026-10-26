@@ -106,15 +106,11 @@ describe('prepareEwiReportInput', () => {
     expect(input.questionsNote).toMatch(/not reprinted/i);
 
     const document = buildEwiReportDocument(input);
-    const questionSection = document.sections.find(
-      (section) => section.id === 'questions',
-    );
-    const printed = questionSection?.blocks.filter(
-      (block) => block.style === 'item',
-    );
-    expect(printed).toHaveLength(input.questions.length);
-    expect(questionSection?.blocks[0]?.text).toMatch(
-      /^1 cross-examination question/,
+    expect(
+      document.sections.find((section) => section.id === 'questions'),
+    ).toBeUndefined();
+    expect(document.highlights).toContain(
+      'Cross-examination questions omitted',
     );
   });
 
@@ -259,11 +255,12 @@ describe('prepareEwiReportInput', () => {
     expect(input.questionsNote).toMatch(/omitted/i);
 
     const document = buildEwiReportDocument(input);
-    const printed = document.sections
-      .find((section) => section.id === 'questions')
-      ?.blocks.filter((block) => block.style === 'item');
-    expect(printed).toHaveLength(1);
-    expect(document.highlights?.[2]).toBe('1 cross-examination question');
+    expect(
+      document.sections.find((section) => section.id === 'questions'),
+    ).toBeUndefined();
+    expect(document.highlights?.[2]).toBe(
+      'Cross-examination questions omitted',
+    );
   });
 
   it('generates grounded questions when an older result stored none', () => {
@@ -680,10 +677,9 @@ describe('prepareEwiReportInput', () => {
     expect(input.questionsNote).toMatch(/omitted/i);
     expect(input.questionsNote).toMatch(/Legal questions were generated/i);
     const document = buildEwiReportDocument(input);
-    const printed = document.sections
-      .find((section) => section.id === 'questions')
-      ?.blocks.filter((block) => block.style === 'item');
-    expect(printed).toHaveLength(input.questions.length);
+    expect(
+      document.sections.find((section) => section.id === 'questions'),
+    ).toBeUndefined();
   });
 
   it('does not duplicate a stored legal question that already uses the resolved caption', () => {
@@ -761,11 +757,9 @@ describe('prepareEwiReportInput', () => {
     const input = prepareEwiReportInput(stored);
     expect(input.questions).toEqual([]);
     const document = buildEwiReportDocument(input);
-    const questions =
-      document.sections.find((section) => section.id === 'questions')?.blocks ??
-      [];
-    expect(questions.some((block) => block.style === 'item')).toBe(false);
-    expect(questions[0]?.text).toMatch(/not generated|not reprinted/i);
+    expect(
+      document.sections.find((section) => section.id === 'questions'),
+    ).toBeUndefined();
   });
 
   it('prints pending, empty-search, never-sent, and blocked coverage in the report', () => {

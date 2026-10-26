@@ -348,9 +348,7 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
               : undefined,
           ambiguous: !(
             specialtyInText ||
-            (recapSupported &&
-              npiConfirmed &&
-              searchKind === 'recap_document')
+            (recapSupported && npiConfirmed && searchKind === 'recap_document')
           ),
           basis: specialtyInText
             ? ['full name in filing', 'specialty term in filing']

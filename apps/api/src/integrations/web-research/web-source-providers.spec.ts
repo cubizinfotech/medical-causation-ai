@@ -297,4 +297,54 @@ describe('WebSourceProvider coverage', () => {
     expect(ime.status).toBe('ok');
     expect(ime.items[0].url).toContain('expertinstitute.com');
   });
+
+  it('treats court-document and accreditation topics as dedicated public searches', () => {
+    const legal = dossier([], {
+      topics: [
+        { topic: 'court_documents', queries: 2, hits: 0 },
+        { topic: 'litigation', queries: 1, hits: 0 },
+        { topic: 'depositions', queries: 1, hits: 0 },
+        { topic: 'university_accreditation', queries: 2, hits: 0 },
+      ],
+      executedQueries: [
+        {
+          topic: 'university_accreditation',
+          query: '"University of Florida" site:chea.org',
+        },
+      ],
+    });
+    expect(dedicatedSearchRan('orders', legal)).toBe(true);
+    expect(dedicatedSearchRan('motions', legal)).toBe(true);
+    expect(dedicatedSearchRan('depositions', legal)).toBe(true);
+    expect(dedicatedSearchRan('expert_testimony', legal)).toBe(true);
+    expect(dedicatedSearchRan('university_accreditation', legal)).toBe(true);
+  });
+
+  it('does not treat the expert website as independently verified credentials', async () => {
+    const result = await provider(
+      'expert_website',
+      dossier(
+        [
+          record({
+            id: 'site',
+            url: 'https://ellenbergneuropsychology.com/about',
+            kind: 'expert_website',
+            title: 'Leah Ellenberg, PhD',
+            summary: 'Board certified clinical neuropsychologist.',
+            match: {
+              level: 'strong',
+              confidence: 'high',
+              basis: ['name', 'specialty'],
+              conflicts: [],
+              quote: 'board certified',
+              quoteVerified: true,
+              classifiedBy: 'rules',
+            },
+          }),
+        ],
+        { topics: [{ topic: 'identity', queries: 1, hits: 1 }] },
+      ),
+    ).search(query);
+    expect(result.items[0].informationStatus).toBe('unverified');
+  });
 });

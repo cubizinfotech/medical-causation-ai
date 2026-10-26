@@ -100,6 +100,14 @@ export class EwiClient {
     return this.saveReport(`/ewi/histories/${id}/report/word`, fileName);
   }
 
+  /** Saves a separate PDF of unique source URLs from the investigation. */
+  async downloadSourceLinksReport(
+    id: string,
+    fileName: string,
+  ): Promise<string> {
+    return this.saveReport(`/ewi/histories/${id}/report/links`, fileName);
+  }
+
   private async saveReport(path: string, fileName: string): Promise<string> {
     const response = await apiFetch(path);
     if (!response.ok) {
