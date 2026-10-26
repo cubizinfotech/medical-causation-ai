@@ -316,13 +316,22 @@ function courtDocumentSection(record: WebRecord): RoutedSectionId | null {
   ) {
     return 'orders';
   }
-  if (/\b(deposition|transcript)\b/.test(text)) return 'depositions';
   if (
     /\b(motion|memorandum|complaint|petition|brief|affidavit|response in|reply)\b/.test(
       text,
     )
   ) {
     return 'pleadings';
+  }
+  if (
+    /\b(deposition of|deposition transcript|notice of deposition)\b/.test(text)
+  ) {
+    return 'depositions';
+  }
+  if (
+    /\b(trial transcript|hearing transcript|testimony transcript)\b/.test(text)
+  ) {
+    return 'depositions';
   }
   if (
     /\b(order|opinion|ruling|judgment|report and recommendation)\b/.test(text)
@@ -530,9 +539,10 @@ export function routeWebFindings(
       }
     }
 
-    // Possible pages with a conflicting first name belong under Other people,
-    // not the subject's directories, reviews, or social sections.
-    if (record.match.level !== 'strong' && record.match.conflicts.length > 0) {
+    // Possible and other-person pages belong under Other people, not the
+    // subject's directories, reviews, news, or advertising sections.
+    // Social listings may still appear as possible matches.
+    if (record.match.level !== 'strong' && record.kind !== 'social') {
       continue;
     }
 
@@ -831,8 +841,10 @@ const PUBLIC_SEARCH_LIMIT: Partial<Record<RoutedSectionId, string>> = {
   directories:
     'Public directory pages were searched. Login-gated member databases, including the DRI members-only area, were not accessed.',
   ime: 'A public search for IME, forensic, and expert-services advertising was performed. Paid expert-referral databases were not accessed.',
+  lawsuits:
+    'A public web search for court records naming the expert was performed. That is not a comprehensive malpractice or lawsuit search. Paid docket databases were not queried.',
   criminal:
-    'A public news and web search for criminal-record mentions was performed. Dedicated criminal-record databases were not queried.',
+    'A public news and web search for criminal-record mentions was performed. Dedicated criminal-record databases were not queried. This is not a comprehensive criminal-records search.',
   depositions:
     'A public web search for deposition or testimony transcripts was performed. Paid transcript databases were not accessed.',
   'testimony-inconsistencies':
@@ -974,7 +986,13 @@ export function coverageLine(
     parts.push(SEARCH_INCOMPLETE);
   } else if (display.length === 0) {
     if (queried) {
-      parts.push(TOPIC_SEARCHED_EMPTY);
+      if (sectionId === 'lawsuits') {
+        parts.push(
+          'No relevant records identified that qualify as a lawsuit or malpractice claim against this expert. An opinion, motion, or appointment that names the expert is not a lawsuit against the expert.',
+        );
+      } else {
+        parts.push(TOPIC_SEARCHED_EMPTY);
+      }
       if (sectionId === 'videos') parts.push(PRIOR_NOT_REUSED);
     } else {
       parts.push(omitted ? BUDGET_OMITTED : NOT_SEARCHED);

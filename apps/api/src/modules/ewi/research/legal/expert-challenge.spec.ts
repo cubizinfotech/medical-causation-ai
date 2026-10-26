@@ -169,4 +169,22 @@ describe('expert challenge readings', () => {
       readExpertChallenge({ outcome: 'excluded', quote: null, excerpts: [] }),
     ).toMatchObject({ outcome: 'not_determined', basis: 'not_determined' });
   });
+
+  it('does not treat a deferred Daubert ruling as an exclusion', () => {
+    const text =
+      'The court deferred ruling on the Daubert motion to exclude Dr. Jane Smith.';
+    expect(
+      validateChallengeReading(
+        {
+          id: 'c1',
+          role: 'challenged_expert',
+          outcome: 'excluded',
+          quote:
+            'The court deferred ruling on the Daubert motion to exclude Dr. Jane Smith.',
+        },
+        [text],
+        'smith',
+      ).outcome,
+    ).toBe('not_determined');
+  });
 });

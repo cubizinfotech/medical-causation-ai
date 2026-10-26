@@ -8,6 +8,7 @@ import type {
   ReportDocumentModel,
 } from '@platform/report/report-document';
 import type { CvCheck } from '../cv/cv.types';
+import { sourceAccessLabel } from './report-wording';
 import {
   EWI_REPORT_DISCLAIMER,
   EWI_REPORT_TEMPLATE_VERSION,
@@ -30,6 +31,10 @@ export interface ReportSourceLink {
   title: string;
   url: string;
   category: string;
+  /** How the URL is tied to the subject. */
+  attribution: 'subject' | 'possible' | 'other';
+  /** Access/read note; not a verification claim. */
+  access?: string;
 }
 
 function sourceUrlKey(url: string): string | null {
@@ -68,6 +73,8 @@ function addLink(
   url: string | undefined,
   title: string | undefined,
   category: string | undefined,
+  attribution: ReportSourceLink['attribution'] = 'subject',
+  access?: string,
 ): void {
   if (!url) return;
   const key = sourceUrlKey(url);
@@ -78,7 +85,27 @@ function addLink(
     url: key,
     title: title?.trim() || key,
     category: categoryLabel(category),
+    attribution,
+    ...(access ? { access } : {}),
   });
+}
+
+function webAccess(read: string | undefined): string | undefined {
+  if (read === 'read') return 'page content read';
+  if (read === 'snippet_only') return 'search result only';
+  if (read === 'restricted' || read === 'failed' || read === 'not_read') {
+    return 'not read (login or bot protection)';
+  }
+  return undefined;
+}
+
+function webAttribution(
+  level: string | undefined,
+): ReportSourceLink['attribution'] | null {
+  if (level === 'strong') return 'subject';
+  if (level === 'possible') return 'possible';
+  if (level === 'other_person' || level === 'weak') return 'other';
+  return null;
 }
 
 /**
@@ -99,6 +126,8 @@ export function uniqueSourceLinks(
       item.url ?? item.source?.url,
       item.title,
       item.category || item.sourceId,
+      item.identityMatch === 'uncertain' ? 'possible' : 'subject',
+      sourceAccessLabel(item),
     );
   }
   const identity = input.identity;
@@ -108,10 +137,8 @@ export function uniqueSourceLinks(
       identity.identity.url,
       identity.identity.name,
       'NPI Registry',
+      'subject',
     );
-  }
-  for (const candidate of identity?.candidates ?? []) {
-    addLink(byKey, candidate.url, candidate.name, 'NPI Registry');
   }
   for (const comparison of input.cvCheck?.comparisons ?? []) {
     addLink(
@@ -119,20 +146,73 @@ export function uniqueSourceLinks(
       comparison.source?.url,
       comparison.source?.name || comparison.title,
       comparison.topic,
+      'subject',
     );
   }
   for (const record of input.webResearch?.records ?? []) {
-    addLink(byKey, record.url, record.title, record.kind);
-    addLink(byKey, record.archiveUrl, record.title, record.kind);
+    const attribution = webAttribution(record.match.level);
+    if (!attribution || attribution !== 'subject') continue;
+    addLink(
+      byKey,
+      record.url,
+      record.title,
+      record.kind,
+      'subject',
+      webAccess(record.read),
+    );
+    addLink(
+      byKey,
+      record.archiveUrl,
+      record.title,
+      record.kind,
+      'subject',
+      webAccess(record.read),
+    );
+  }
+  for (const candidate of identity?.candidates ?? []) {
+    addLink(byKey, candidate.url, candidate.name, 'NPI Registry', 'possible');
+  }
+  for (const record of input.webResearch?.records ?? []) {
+    const attribution = webAttribution(record.match.level);
+    if (attribution !== 'possible') continue;
+    addLink(
+      byKey,
+      record.url,
+      record.title,
+      `${record.kind} (possible match)`,
+      'possible',
+      webAccess(record.read),
+    );
+  }
+  for (const record of input.webResearch?.records ?? []) {
+    const attribution = webAttribution(record.match.level);
+    if (attribution !== 'other') continue;
+    addLink(
+      byKey,
+      record.url,
+      record.title,
+      `${record.kind} (not this person)`,
+      'other',
+      webAccess(record.read),
+    );
   }
   for (const registry of input.webResearch?.registries ?? []) {
-    addLink(byKey, registry.url, registry.name, registry.id);
+    addLink(byKey, registry.url, registry.name, registry.id, 'subject');
   }
   const portrait = input.webResearch?.portrait;
   if (portrait?.sourceUrl) {
-    addLink(byKey, portrait.sourceUrl, 'Cover photograph source', 'Photograph');
+    addLink(
+      byKey,
+      portrait.sourceUrl,
+      'Cover photograph source',
+      'Photograph',
+      'subject',
+    );
   }
+  const rank = { subject: 0, possible: 1, other: 2 };
   return [...byKey.values()].sort((left, right) => {
+    const byAttr = rank[left.attribution] - rank[right.attribution];
+    if (byAttr !== 0) return byAttr;
     const byCategory = left.category.localeCompare(right.category);
     if (byCategory !== 0) return byCategory;
     return left.title.localeCompare(right.title);
@@ -143,32 +223,35 @@ export function buildEwiSourceLinksDocument(
   input: SourceLinksInput,
 ): ReportDocumentModel {
   const links = uniqueSourceLinks(input);
+  const subject = links.filter((link) => link.attribution === 'subject');
+  const possible = links.filter((link) => link.attribution === 'possible');
+  const other = links.filter((link) => link.attribution === 'other');
   const blocks: ReportBlock[] = [
     {
-      text: `Unique source URLs collected for ${input.expertName}. Each address appears once. This list is generated from the investigation record; it is not a new search.`,
+      text: `Unique source URLs collected for ${input.expertName}. Each address appears once. This list is generated from the investigation record; it is not a new search. A URL here is not proof that the page was read or independently verified.`,
       style: 'note',
     },
     {
-      text:
-        links.length === 1
-          ? '1 unique source link.'
-          : `${links.length} unique source links.`,
+      text: `${subject.length} subject source(s); ${possible.length} possible match(es); ${other.length} other-person or unconfirmed page(s). ${links.length} unique URL(s) in total.`,
       style: 'note',
     },
   ];
-  if (links.length === 0) {
-    blocks.push({
-      text: 'No source URLs were collected.',
-      style: 'note',
-    });
-  } else {
-    links.forEach((link, index) => {
+  const writeGroup = (
+    heading: string,
+    note: string,
+    group: ReportSourceLink[],
+    start: number,
+  ): number => {
+    if (group.length === 0) return start;
+    blocks.push({ text: heading, style: 'subheading' });
+    blocks.push({ text: note, style: 'note' });
+    group.forEach((link, index) => {
       blocks.push({
-        text: `${index + 1}. ${link.title}`,
+        text: `${start + index}. ${link.title}`,
         style: 'item',
       });
       blocks.push({
-        text: `Category: ${link.category}.`,
+        text: `Category: ${link.category}.${link.access ? ` Access: ${link.access}.` : ''}`,
         style: 'citation',
       });
       blocks.push({
@@ -177,6 +260,33 @@ export function buildEwiSourceLinksDocument(
         style: 'citation',
       });
     });
+    return start + group.length;
+  };
+  if (links.length === 0) {
+    blocks.push({
+      text: 'No source URLs were collected.',
+      style: 'note',
+    });
+  } else {
+    let next = 1;
+    next = writeGroup(
+      'Sources tied to this expert',
+      'Strong identity match, confirmed NPI, or collected evidence attributed to the subject.',
+      subject,
+      next,
+    );
+    next = writeGroup(
+      'Possible matches',
+      'The name or specialty only partly agrees. These are not treated as the subject’s credentials.',
+      possible,
+      next,
+    );
+    writeGroup(
+      'Other people or unconfirmed pages',
+      'Kept for audit. Not attributed to the subject. The URL and the reason for exclusion are listed.',
+      other,
+      next,
+    );
   }
   const safeName = input.expertName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   return {
@@ -202,9 +312,9 @@ export function buildEwiSourceLinksDocument(
       },
     ],
     highlights: [
-      links.length === 1
-        ? '1 unique source link'
-        : `${links.length} unique source links`,
+      `${subject.length} subject source(s)`,
+      `${possible.length} possible match(es)`,
+      `${other.length} other-person page(s)`,
     ],
     metadata: {
       expertName: input.expertName,

@@ -312,6 +312,7 @@ async function main() {
         templateVersion: pdf.templateVersion,
         expectedVersion: EWI_REPORT_TEMPLATE_VERSION,
         pageCount: pages.length,
+        coverHas3107: /3\.10\.7/.test(pages[0] ?? ''),
         coverHas3106: /3\.10\.6/.test(pages[0] ?? ''),
         coverHas3105: /3\.10\.5/.test(pages[0] ?? ''),
         coverHas3104: /3\.10\.4/.test(pages[0] ?? ''),

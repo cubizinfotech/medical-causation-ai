@@ -595,6 +595,40 @@ describe('CourtListener live source', () => {
     ).toBe(true);
   });
 
+  it('marks a court hit uncertain when the retrieved excerpt does not name the expert', async () => {
+    const { get } = providers([
+      nppesRoute([doctor]),
+      {
+        match: (url) => url.pathname === '/api/rest/v4/search/',
+        respond: (url) => {
+          if (url.searchParams.get('type') === 'rd') {
+            return { count: 0, results: [] };
+          }
+          return {
+            count: 1,
+            results: [
+              hit(
+                9,
+                'A neuropsychologist testified. The court deferred ruling on the Daubert motion.',
+              ),
+            ],
+          };
+        },
+      },
+    ]);
+    const result = await get('courtlistener').search(query);
+    const identity = result.items[0].raw?.identity as {
+      ambiguous?: boolean;
+      basis?: string[];
+    };
+    expect(identity?.ambiguous).toBe(true);
+    expect(
+      identity?.basis?.some((line) =>
+        /not in the retrieved excerpt/i.test(line),
+      ),
+    ).toBe(true);
+  });
+
   it('does not drop a RECAP filing that lacks a specialty word once NPI identity is confirmed', async () => {
     const { get } = providers([
       nppesRoute([doctor]),

@@ -1,5 +1,9 @@
 import type { EwiInvestigationResult } from '../investigation/jobs/ewi-investigation-job.types';
-import { prepareEwiReportInput, questionsAreStale } from './ewi-report-input';
+import {
+  cvComparisonState,
+  prepareEwiReportInput,
+  questionsAreStale,
+} from './ewi-report-input';
 import { buildEwiReportDocument } from './ewi-report.template';
 
 function result(
@@ -25,6 +29,33 @@ function result(
     ...overrides,
   };
 }
+
+describe('cvComparisonState', () => {
+  it('treats a missing CV check as not uploaded unless the CV source said it was uploaded', () => {
+    expect(cvComparisonState({})).toBe('not_uploaded');
+    expect(
+      cvComparisonState({
+        sourceStatuses: [
+          {
+            sourceId: 'cv_profile',
+            message:
+              'Not searched. CV and profile research live adapter is not connected.',
+          },
+        ],
+      }),
+    ).toBe('not_uploaded');
+    expect(
+      cvComparisonState({
+        sourceStatuses: [
+          {
+            sourceId: 'cv_profile',
+            message: 'The uploaded CV could not be read: parser failed',
+          },
+        ],
+      }),
+    ).toBe('not_read');
+  });
+});
 
 describe('prepareEwiReportInput', () => {
   it('does not treat stored OpenAlex title misses as current discrepancies', () => {

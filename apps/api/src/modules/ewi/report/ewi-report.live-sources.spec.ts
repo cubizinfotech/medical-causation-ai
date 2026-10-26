@@ -303,7 +303,8 @@ describe('EWI report with live sources', () => {
 
   it('lists admissibility challenges with the court’s words', () => {
     const text = sectionText(document, 'admissibility-challenges');
-    expect(text).toMatch(/1 opinion\(s\): Excluded 1\./);
+    expect(text).toMatch(/1 ruling\(s\) from the court’s words: Excluded 1\./);
+    expect(text).not.toMatch(/1 opinion\(s\):/);
     expect(text).toMatch(/Standard: Daubert/);
     expect(text).toMatch(
       /Excluded — the court’s words: “the motion to exclude Dr\. Smith is GRANTED”/,

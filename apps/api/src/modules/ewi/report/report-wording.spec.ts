@@ -95,9 +95,22 @@ describe('report wording', () => {
     expect(evidenceStatusLine(item({ informationStatus: 'unavailable' }))).toBe(
       'Status: Not found. Source: npi_registry.',
     );
-    expect(sourceIndexStatus(item())).toBe('; access: retrieved');
+    expect(
+      evidenceStatusLine(
+        item({
+          sourceId: 'pubmed',
+          category: 'publication',
+          informationStatus: 'unverified',
+        }),
+      ),
+    ).toBe(
+      'Status: Catalog record found. This is not a comparison against an uploaded CV claim. Source: pubmed.',
+    );
+    expect(sourceIndexStatus(item())).toBe(
+      '; access: catalog record retrieved',
+    );
     expect(sourceIndexStatus(item({ informationStatus: 'verified' }))).toBe(
-      '; access: retrieved',
+      '; access: catalog record retrieved',
     );
     expect(
       sourceIndexStatus(
@@ -106,6 +119,44 @@ describe('report wording', () => {
           raw: { web: { read: 'read' } },
         }),
       ),
-    ).toBe('; access: page was read');
+    ).toBe('; access: page content read');
+    expect(
+      sourceIndexStatus(
+        item({
+          sourceId: 'courtlistener',
+          category: 'legal',
+          raw: { retrievalStatus: 'snippet_only' },
+        }),
+      ),
+    ).toBe('; access: search result only');
+    expect(
+      sourceIndexStatus(
+        item({
+          sourceId: 'courtlistener',
+          category: 'legal',
+          raw: { retrievalStatus: 'metadata_only' },
+        }),
+      ),
+    ).toBe('; access: docket metadata only');
+    expect(
+      sourceIndexStatus(
+        item({
+          sourceId: 'courtlistener',
+          category: 'legal',
+          raw: { retrievalStatus: 'full_text' },
+        }),
+      ),
+    ).toBe('; access: page content read');
+    expect(
+      sourceIndexStatus(
+        item({
+          sourceId: 'courtlistener',
+          category: 'legal',
+          title: 'Docket PDF URL',
+          url: 'https://storage.courtlistener.com/pdf/1.pdf',
+          raw: { retrievalStatus: 'snippet_only' },
+        }),
+      ),
+    ).not.toMatch(/page content read/);
   });
 });

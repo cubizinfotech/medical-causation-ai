@@ -25,12 +25,17 @@ import {
   evidenceStatusLine,
   findingLabel,
   findingStatement,
-  sourceIndexStatus,
+  sourceAccessLabel,
   withoutSingleAccount,
   withoutUnverifiedSentences,
 } from './report-wording';
 import type { InconsistencyLabel } from '../research/verification-labels';
-import type { LegalMatter, LegalResearchDossier } from '../research/legal';
+import type {
+  ChallengeRecord,
+  ExpertChallenge,
+  LegalMatter,
+  LegalResearchDossier,
+} from '../research/legal';
 import {
   CHALLENGE_OUTCOME_LABEL,
   CHALLENGE_STANDARD_LABEL,
@@ -372,6 +377,7 @@ export function buildEwiReportDocument(input: {
   professionalBackground?: ProfessionalBackgroundDossier;
   identity?: ExpertIdentityResolution | null;
   cvCheck?: CvCheck | null;
+  cvComparisonState?: 'compared' | 'not_uploaded' | 'not_read';
   /** Free text the attorney added to the intake form. */
   additionalContext?: string | null;
   /** Global web research: candidates, pages, coverage and limits. */
@@ -984,8 +990,26 @@ function withWebFindings(
     seenFinding.add(key);
     return true;
   });
+  const confirmedFindings = findings.filter(
+    (finding) => finding.matchLevel !== 'possible',
+  );
+  const possibleFindings = findings.filter(
+    (finding) => finding.matchLevel === 'possible',
+  );
   const blocks: ReportBlock[] = [...own];
-  for (const finding of findings) blocks.push(...webFindingBlocks(finding));
+  for (const finding of confirmedFindings) {
+    blocks.push(...webFindingBlocks(finding));
+  }
+  if (possibleFindings.length > 0) {
+    const heading =
+      section.id === 'memberships' || section.id === 'corporate'
+        ? 'Possible matches (not confirmed memberships or affiliations)'
+        : 'Possible matches (not confirmed)';
+    blocks.push({ text: heading, style: 'subheading' });
+    for (const finding of possibleFindings) {
+      blocks.push(...webFindingBlocks(finding));
+    }
+  }
   const verification = sectionVerification(dossier, section.id);
   if (verification && (findings.length > 0 || own.length > 0)) {
     blocks.push(...verificationBlocks(verification));
@@ -1158,6 +1182,65 @@ function identityBlocks(
   return blocks;
 }
 
+function isFiledChallengeMotion(matter: LegalMatter): boolean {
+  return matter.documentType === 'motion' || matter.documentType === 'pleading';
+}
+
+function isEstablishedChallengeRuling(challenge: ExpertChallenge): boolean {
+  return (
+    challenge.basis === 'court_text' &&
+    challenge.outcome !== 'not_determined' &&
+    Boolean(challenge.quote)
+  );
+}
+
+function challengeBucket(
+  record: ChallengeRecord,
+): 'motion' | 'ruling' | 'opinion' {
+  if (isFiledChallengeMotion(record.matter)) return 'motion';
+  if (isEstablishedChallengeRuling(record.challenge)) return 'ruling';
+  return 'opinion';
+}
+
+function challengeOutcomeCounts(records: ChallengeRecord[]): string {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const label = CHALLENGE_OUTCOME_LABEL[record.challenge.outcome];
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => `${label} ${count}`)
+    .join('; ');
+}
+
+function admissibilityKindLabel(
+  bucket: 'motion' | 'ruling' | 'opinion',
+  matter: LegalMatter,
+): string {
+  if (bucket === 'motion') return 'Filed motion (not a court opinion)';
+  if (bucket === 'ruling') return 'Court ruling';
+  return matter.documentType === 'order' ? 'Court order' : 'Court opinion';
+}
+
+function admissibilityDisplayNote(
+  matter: LegalMatter,
+  challenge: ExpertChallenge,
+): string {
+  if (isEstablishedChallengeRuling(challenge) && challenge.quote) {
+    return challenge.note;
+  }
+  const reviewed =
+    challenge.excerptSource === 'search_snippet'
+      ? 'Only a search-result snippet was reviewed; the full filing was not retrieved.'
+      : challenge.excerptSource === 'opinion_text'
+        ? 'Collected opinion or order text was reviewed.'
+        : 'Retrieved materials were reviewed.';
+  if (isFiledChallengeMotion(matter)) {
+    return `A challenge was filed. Outcome was not established from the retrieved materials. ${reviewed} This is not a finding that the expert was excluded or criticized.`;
+  }
+  return `Not determined. ${reviewed} The collected text did not state how the court ruled on this expert. This is not a finding that the expert was excluded or criticized.`;
+}
+
 function admissibilitySection(
   spec: EwiReportSectionSpec,
   dossier: LegalResearchDossier,
@@ -1170,7 +1253,7 @@ function admissibilitySection(
   );
   const blocks: ReportBlock[] = [
     {
-      text: 'Court opinions that contain the expert’s full name, a specialty term, and Daubert, Frye, Rule 702, or motion-to-exclude language. An outcome is stated only when the court’s own words, quoted exactly from the collected opinion text, say how the court ruled on this expert. “Not determined” means the collected text did not say; read the opinion.',
+      text: 'Admissibility challenges are listed by what was collected: a filed motion, a court opinion or order, or a ruling in the court’s own words. A filed motion is not a court opinion. An outcome is stated only when the court’s words, quoted from collected opinion or order text, say how the court ruled on this expert. “Not determined” is used only when the listed materials were reviewed and they did not state a ruling.',
       style: 'note',
     },
   ];
@@ -1178,36 +1261,54 @@ function admissibilitySection(
     blocks.push({ text: EMPTY, style: 'note' });
     return { id: spec.id, title: spec.title, blocks };
   }
-  const counts = new Map<string, number>();
-  for (const record of records) {
-    const label = CHALLENGE_OUTCOME_LABEL[record.challenge.outcome];
-    counts.set(label, (counts.get(label) ?? 0) + 1);
+  const motions = records.filter(
+    (record) => challengeBucket(record) === 'motion',
+  );
+  const opinions = records.filter(
+    (record) => challengeBucket(record) === 'opinion',
+  );
+  const rulings = records.filter(
+    (record) => challengeBucket(record) === 'ruling',
+  );
+  const tally: string[] = [];
+  if (motions.length > 0) {
+    tally.push(`${motions.length} filed motion(s)`);
   }
-  blocks.push({
-    text: `${records.length} opinion(s): ${[...counts.entries()]
-      .map(([label, count]) => `${label} ${count}`)
-      .join('; ')}.`,
-  });
+  if (opinions.length > 0) {
+    tally.push(
+      `${opinions.length} court opinion(s)/order(s): ${challengeOutcomeCounts(opinions)}`,
+    );
+  }
+  if (rulings.length > 0) {
+    tally.push(
+      `${rulings.length} ruling(s) from the court’s words: ${challengeOutcomeCounts(rulings)}`,
+    );
+  }
+  blocks.push({ text: `${tally.join('; ')}.` });
   for (const record of records) {
     const matter = record.matter;
     const challenge = record.challenge;
+    const bucket = challengeBucket(record);
     blocks.push({
       text: `${matter.caseName ?? matter.title}${record.sortDate ? ` (${record.sortDate})` : ''}`,
       style: 'subheading',
     });
     const fields = [
+      `Kind: ${admissibilityKindLabel(bucket, matter)}`,
       matter.court ? `Court: ${matter.court}` : null,
       matter.citation ? `Citation: ${matter.citation}` : null,
       matter.caseNumber ? `Docket: ${matter.caseNumber}` : null,
       `Standard: ${CHALLENGE_STANDARD_LABEL[challenge.standard]}`,
-      `Outcome: ${CHALLENGE_OUTCOME_LABEL[challenge.outcome]}`,
+      bucket === 'motion'
+        ? 'Outcome: not established from retrieved materials'
+        : `Outcome: ${CHALLENGE_OUTCOME_LABEL[challenge.outcome]}`,
     ].filter((line): line is string => Boolean(line));
     for (const line of fields) blocks.push({ text: line });
     blocks.push({
-      text: challenge.note,
-      style: challenge.basis === 'court_text' ? undefined : 'note',
+      text: admissibilityDisplayNote(matter, challenge),
+      style: bucket === 'ruling' ? undefined : 'note',
     });
-    if (challenge.basis !== 'court_text') {
+    if (bucket !== 'ruling') {
       for (const excerpt of challenge.excerpts.slice(0, 2)) {
         blocks.push({ text: `Excerpt: “${excerpt}”`, style: 'citation' });
       }
@@ -1240,6 +1341,7 @@ function summarySection(
     webLines?: string[];
     identity?: ExpertIdentityResolution | null;
     cvCheck?: CvCheck | null;
+    cvComparisonState?: 'compared' | 'not_uploaded' | 'not_read';
     discrepancies: ExpertDiscrepancy[];
   },
 ): ReportSectionModel {
@@ -1275,12 +1377,19 @@ function summarySection(
       text: cvComparisonCountSummary(input.cvCheck),
       style: 'note',
     });
+  } else {
+    blocks.push({
+      text: cvOmissionLine(input.cvComparisonState),
+      style: 'note',
+    });
   }
   const conflictCount = confirmedInconsistencyCount(input);
   blocks.push({
     text:
       conflictCount === 0
-        ? `${findings} collected item(s). No confirmed inconsistency was identified. Unchecked CV claims and catalog misses are listed under CV Comparison; they are not counted as inconsistencies.`
+        ? input.cvCheck
+          ? `${findings} collected item(s). No confirmed inconsistency was identified. Unchecked CV claims and catalog misses are listed under CV Comparison; they are not counted as inconsistencies.`
+          : `${findings} collected item(s). No confirmed inconsistency was identified among compared sources. CV comparison was not performed, so this is not a finding that the expert has no CV discrepancies.`
         : `${findings} collected item(s). ${conflictCount} confirmed inconsistency(ies) are listed under Inconsistencies in Background and CV Comparison.`,
     style: 'note',
   });
@@ -1367,6 +1476,22 @@ function webSummaryLines(
     const quote = lead.quote ? ` “${lead.quote.slice(0, 120).trim()}”` : '';
     const more =
       list.length > 1 ? ` (${list.length} items in the section)` : '';
+    const possibleCount = list.filter(
+      (finding) => finding.matchLevel === 'possible',
+    ).length;
+    const strongCount = list.filter(
+      (finding) => finding.matchLevel === 'strong',
+    ).length;
+    if (
+      possibleCount > 0 &&
+      strongCount > 0 &&
+      (sectionId === 'memberships' || sectionId === 'corporate')
+    ) {
+      lines.push(
+        `${plainTitle(sectionId)}: ${strongCount} confirmed-identity listing(s); ${possibleCount} possible match(es), not treated as verified. ${lead.basisLabel}. ${lead.title}.${quote}${more}`,
+      );
+      continue;
+    }
     const possible = lead.matchLevel === 'possible' ? 'Possible match. ' : '';
     lines.push(
       `${plainTitle(sectionId)}: ${possible}${lead.basisLabel}. ${lead.title}.${quote}${more}`,
@@ -1621,12 +1746,22 @@ function cvCheckBlocks(check: CvCheck): ReportBlock[] {
   return blocks;
 }
 
+function cvOmissionLine(
+  state: 'compared' | 'not_uploaded' | 'not_read' | undefined,
+): string {
+  if (state === 'not_read') {
+    return 'A CV was uploaded but could not be read. CV comparison was not performed. That is not a finding that the expert has no CV discrepancies.';
+  }
+  return 'No CV was uploaded. CV comparison was not performed. That is not a finding that the expert has no CV discrepancies.';
+}
+
 function cvComparisonSection(
   spec: EwiReportSectionSpec,
   input: {
     discrepancies: ExpertDiscrepancy[];
     analysis?: EwiAnalysisDocument;
     cvCheck?: CvCheck | null;
+    cvComparisonState?: 'compared' | 'not_uploaded' | 'not_read';
   },
   tracker: ClaimTracker,
 ): ReportSectionModel {
@@ -1648,7 +1783,7 @@ function cvComparisonSection(
     (input.analysis?.cvDiscrepancies.length ?? 0) === 0
   ) {
     blocks.push({
-      text: 'No CV versions were collected for comparison. Multi-version CV comparison is not available from this packet.',
+      text: cvOmissionLine(input.cvComparisonState),
       style: 'note',
     });
   }
@@ -2063,6 +2198,11 @@ function claimAgainstExpert(matter: LegalMatter): boolean {
   return false;
 }
 
+function lawsuitsEmptyLine(dossier: LegalResearchDossier): string {
+  if (dossier.matters.length === 0) return EMPTY;
+  return 'Related court records were collected. None identified a lawsuit or malpractice claim against this expert. An opinion, motion, or appointment that names the expert is not a lawsuit against the expert.';
+}
+
 function legalMattersSection(
   spec: EwiReportSectionSpec,
   dossier: LegalResearchDossier,
@@ -2072,6 +2212,13 @@ function legalMattersSection(
   const matters = dossier.matters.filter(predicate);
   markLegalClaimed(tracker, matters);
   if (matters.length === 0) {
+    if (spec.id === 'lawsuits' && dossier.matters.length > 0) {
+      return {
+        id: spec.id,
+        title: spec.title,
+        blocks: [{ text: lawsuitsEmptyLine(dossier) }],
+      };
+    }
     return {
       id: spec.id,
       title: spec.title,
@@ -2399,9 +2546,9 @@ function sourceIndexSection(
     const access =
       item.access === 'restricted'
         ? 'restricted (body not stored; PDF not saved)'
-        : (item.access ?? 'public');
+        : sourceAccessLabel(item);
     blocks.push({
-      text: `${index}. [${item.sourceId}] ${item.title} — access: ${access}${sourceIndexStatus(item)}`,
+      text: `${index}. [${item.sourceId}] ${item.title} — access: ${access}`,
       style: 'item',
     });
     if (item.url) {
@@ -2844,6 +2991,17 @@ function matterBlocks(matter: LegalMatter, withHeading = true): ReportBlock[] {
   return blocks;
 }
 
+function isDepositionMentionWithoutTranscript(
+  item: ExpertEvidenceItem,
+): boolean {
+  const type = (
+    stringField(item.raw ?? {}, ['documentType', 'documentClass']) ?? ''
+  ).toLowerCase();
+  if (type === 'deposition' || type === 'testimony') return false;
+  const hay = `${item.title} ${item.summary ?? ''}`.toLowerCase();
+  return /\bdeposition\b/.test(hay);
+}
+
 function findingBlocks(item: ExpertEvidenceItem): ReportBlock[] {
   const blocks: ReportBlock[] = [
     { text: item.title, style: 'subheading' },
@@ -2855,6 +3013,12 @@ function findingBlocks(item: ExpertEvidenceItem): ReportBlock[] {
   if (item.identityMatch === 'uncertain') {
     blocks.push({
       text: 'Identity was not established. This record was not merged with the expert.',
+      style: 'note',
+    });
+  }
+  if (isDepositionMentionWithoutTranscript(item)) {
+    blocks.push({
+      text: 'Docket record. This notice mentions a deposition; the transcript was not retrieved. It is not deposition testimony.',
       style: 'note',
     });
   }

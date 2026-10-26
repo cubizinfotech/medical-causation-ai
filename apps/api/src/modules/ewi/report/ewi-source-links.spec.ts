@@ -9,6 +9,43 @@ import {
 import { EWI_REPORT_TEMPLATE_VERSION } from './ewi-report.version';
 
 describe('uniqueSourceLinks', () => {
+  it('records search-result, metadata, and read-page access from evidence', () => {
+    const links = uniqueSourceLinks({
+      evidence: [
+        {
+          sourceId: 'courtlistener',
+          category: 'legal',
+          title: 'Snippet hit',
+          url: 'https://www.courtlistener.com/opinion/1/snippet/',
+          raw: { retrievalStatus: 'snippet_only' },
+        },
+        {
+          sourceId: 'courtlistener',
+          category: 'legal',
+          title: 'Docket metadata',
+          url: 'https://www.courtlistener.com/docket/2/meta/',
+          raw: { retrievalStatus: 'metadata_only' },
+        },
+        {
+          sourceId: 'courtlistener',
+          category: 'legal',
+          title: 'Opinion text',
+          url: 'https://www.courtlistener.com/opinion/3/full/',
+          raw: { retrievalStatus: 'full_text' },
+        },
+      ],
+    });
+    expect(
+      links.find((link) => link.url.includes('/opinion/1/snippet'))?.access,
+    ).toBe('search result only');
+    expect(
+      links.find((link) => link.url.includes('/docket/2/meta'))?.access,
+    ).toBe('docket metadata only');
+    expect(
+      links.find((link) => link.url.includes('/opinion/3/full'))?.access,
+    ).toBe('page content read');
+  });
+
   it('keeps each URL once and records a source category', () => {
     const links = uniqueSourceLinks({
       evidence: [
@@ -125,12 +162,149 @@ describe('uniqueSourceLinks', () => {
     expect(links.find((link) => link.url.includes('pubmed'))?.category).toBe(
       'Publication',
     );
+    expect(links.find((link) => link.url.includes('pubmed'))?.attribution).toBe(
+      'subject',
+    );
     expect(
       links.find((link) => link.url.includes('npiregistry'))?.category,
     ).toBe('NPI Registry');
     expect(
+      links.find((link) => link.url.includes('npiregistry'))?.attribution,
+    ).toBe('possible');
+    expect(
       links.find((link) => link.url.includes('example.test'))?.category,
     ).toBe('Expert Website');
+    expect(
+      links.find((link) => link.url.includes('example.test'))?.attribution,
+    ).toBe('subject');
+  });
+
+  it('keeps an unrelated expert profile out of subject sources', () => {
+    const links = uniqueSourceLinks({
+      evidence: [
+        {
+          sourceId: 'pubmed',
+          category: 'publication',
+          title: 'Memory after pediatric TBI',
+          summary: 'PubMed record.',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/11111111/',
+        },
+      ],
+      webResearch: {
+        ranAt: '2026-10-26T12:00:00.000Z',
+        durationMs: 1,
+        partial: false,
+        partialNote: null,
+        queriesPlanned: 0,
+        queriesRun: 0,
+        providers: [],
+        pagesRead: 1,
+        pagesBlocked: [],
+        candidates: [],
+        records: [
+          {
+            id: 'other-1',
+            url: 'https://psychologytoday.com/leila-glass',
+            title: 'Leila Glass, PhD',
+            kind: 'directory',
+            snippet: null,
+            summary: 'Another neuropsychologist.',
+            publishedAt: null,
+            retrievedAt: '2026-10-26T12:00:00.000Z',
+            searchProviders: [],
+            queries: [],
+            read: 'snippet_only',
+            readNote: null,
+            match: {
+              level: 'other_person',
+              confidence: 'medium',
+              basis: ['different first name'],
+              conflicts: ['Leila Glass'],
+              quote: 'Leila Glass, PhD',
+              quoteVerified: true,
+              classifiedBy: 'rules',
+            },
+            candidateId: 'cand-other-1',
+            claims: [],
+          },
+        ],
+        registries: [],
+        limitations: [],
+      },
+    });
+    expect(
+      links.find((link) => link.url.includes('11111111'))?.attribution,
+    ).toBe('subject');
+    expect(
+      links.find((link) => link.url.includes('leila-glass'))?.attribution,
+    ).toBe('other');
+    expect(
+      links.find((link) => link.url.includes('leila-glass'))?.category,
+    ).toMatch(/not this person/i);
+  });
+
+  it('keeps a possible-match directory out of subject sources and notes snippet-only access', () => {
+    const links = uniqueSourceLinks({
+      evidence: [
+        {
+          sourceId: 'pubmed',
+          category: 'publication',
+          title: 'Memory after pediatric TBI',
+          summary: 'PubMed record.',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/11111111/',
+        },
+      ],
+      webResearch: {
+        ranAt: '2026-10-26T12:00:00.000Z',
+        durationMs: 1,
+        partial: false,
+        partialNote: null,
+        queriesPlanned: 0,
+        queriesRun: 0,
+        providers: [],
+        pagesRead: 0,
+        pagesBlocked: [],
+        candidates: [],
+        records: [
+          {
+            id: 'possible-1',
+            url: 'https://www.expertinstitute.com/experts/other-jason/',
+            title: 'Jason Other, PhD',
+            kind: 'directory',
+            snippet: 'Jason Other neuropsychologist',
+            summary: 'Directory listing.',
+            publishedAt: null,
+            retrievedAt: '2026-10-26T12:00:00.000Z',
+            searchProviders: [],
+            queries: [],
+            read: 'snippet_only',
+            readNote: null,
+            match: {
+              level: 'possible',
+              confidence: 'medium',
+              basis: ['surname'],
+              conflicts: [],
+              quote: null,
+              quoteVerified: false,
+              classifiedBy: 'rules',
+            },
+            candidateId: 'cand-possible-1',
+            claims: [],
+          },
+        ],
+        registries: [],
+        limitations: [],
+      },
+    });
+    const possible = links.find((link) =>
+      link.url.includes('expertinstitute.com'),
+    );
+    expect(possible?.attribution).toBe('possible');
+    expect(possible?.category).toMatch(/possible match/i);
+    expect(possible?.access).toBe('search result only');
+    expect(
+      links.find((link) => link.url.includes('11111111'))?.attribution,
+    ).toBe('subject');
   });
 
   it('returns an empty list when no URLs were collected', () => {
@@ -203,7 +377,8 @@ describe('source-links PDF', () => {
       modifiedAt: new Date(),
     });
     const text = parsed.pages.map((page) => page.text).join('\n');
-    expect(text).toContain('1 unique source link');
+    expect(text).toContain('1 subject source(s)');
+    expect(text).toMatch(/not proof that the page was read/i);
     expect(text).toContain('Memory after pediatric TBI');
     expect(text).toContain('Category: Publication.');
     expect(text).toContain('https://pubmed.ncbi.nlm.nih.gov/11111111');
@@ -232,7 +407,7 @@ describe('source-links PDF', () => {
       modifiedAt: new Date(),
     });
     const text = parsed.pages.map((page) => page.text).join('\n');
-    expect(text).toContain('0 unique source links');
+    expect(text).toContain('0 subject source(s)');
     expect(text).toContain('No source URLs were collected.');
   }, 20000);
 });

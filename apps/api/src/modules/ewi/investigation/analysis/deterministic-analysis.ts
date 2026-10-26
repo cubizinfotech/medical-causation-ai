@@ -376,7 +376,7 @@ function sectionNarrative(
         ? `Multiple CV/profile records collected (${findings.length}). Compare only cited finding keys.`
         : findings.length === 1
           ? 'A single CV/profile record was collected; multi-version comparison is not available from this packet.'
-          : `No CV findings were collected for comparison. Status: ${status}.`;
+          : 'No CV was uploaded. CV comparison was not performed. That is not a finding that the expert has no CV discrepancies.';
     case 'inconsistencies':
       return 'Inconsistencies are listed only when conflicting assessments appear in the packet; none are invented.';
     case 'legal_matters':

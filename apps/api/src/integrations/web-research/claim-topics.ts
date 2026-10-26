@@ -555,8 +555,14 @@ export function extractFacts(input: FactInput): WebClaim[] {
     input.kind === 'review' ||
     input.kind === 'court' ||
     input.kind === 'justia';
+  // Practice sites are often classified as "other" until a model retags
+  // them. If the page already writes the subject’s first and last name,
+  // later sentences on that page may omit the first name.
+  const pageIsSubjectProfile =
+    input.kind === 'other' && quoteNamesSubject(input.text, input.subject.name);
   const ownProfile =
-    (input.ownPage || PROFILE_KINDS.has(input.kind)) && !directoryLike;
+    (input.ownPage || PROFILE_KINDS.has(input.kind) || pageIsSubjectProfile) &&
+    !directoryLike;
 
   const claims: WebClaim[] = [];
   const perTopic = new Map<WebClaimTopic, number>();

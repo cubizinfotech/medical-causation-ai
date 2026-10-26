@@ -45,7 +45,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.6');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.7');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -97,6 +97,37 @@ describe('EWI report template', () => {
     expect(
       document.sections.find((section) => section.id === 'questions'),
     ).toBeUndefined();
+  });
+
+  it('says CV comparison was not performed when no CV was uploaded', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jason A. Demery',
+      city: 'Gainesville',
+      specialty: 'Neuropsychology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-26T00:00:00.000Z',
+      cvComparisonState: 'not_uploaded',
+    });
+    const cv =
+      document.sections
+        .find((section) => section.id === 'cv-comparison')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    const summary =
+      document.sections
+        .find((section) => section.id === 'summary')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(cv).toMatch(/No CV was uploaded/);
+    expect(cv).toMatch(/CV comparison was not performed/);
+    expect(cv).not.toMatch(/No CV versions were collected/);
+    expect(summary).toMatch(/CV comparison was not performed/);
+    expect(summary).toMatch(
+      /not a finding that the expert has no CV discrepancies/,
+    );
+    expect(summary).not.toMatch(/Unchecked CV claims/);
   });
 
   it('does not list a "could not verify" line for each source that returned nothing', () => {
