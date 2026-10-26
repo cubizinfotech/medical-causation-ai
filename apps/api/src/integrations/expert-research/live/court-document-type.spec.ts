@@ -75,6 +75,20 @@ describe('classifyCourtDocument', () => {
         snippet: 'Defendant Motion to Strike Expert',
       }),
     ).toBe('motion');
+    expect(
+      classifyCourtDocument({
+        searchKind: 'recap_document',
+        description: 'Notice of Filing',
+        snippet: 'The deposition of Jane Smith is scheduled for Monday.',
+      }),
+    ).toBe('other');
+    expect(
+      classifyCourtDocument({
+        searchKind: 'recap_document',
+        description: 'Minute Order',
+        snippet: 'The court heard testimony from the expert.',
+      }),
+    ).toBe('order');
   });
 
   it('maps filing classes onto legal document types', () => {

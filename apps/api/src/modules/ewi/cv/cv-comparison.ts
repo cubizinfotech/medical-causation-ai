@@ -469,13 +469,17 @@ function publicationTitleRows(
         lookup.authorListIncomplete === true;
       rows.push({
         topic: 'publication',
-        label: differs ? 'conflicting' : 'verified',
+        label: differs
+          ? 'conflicting'
+          : positionOpen
+            ? 'partially_verified'
+            : 'verified',
         severity: differs ? 'medium' : 'low',
         title: differs
           ? `Publication found; the expert's author position differs from the CV: ${title}`
           : positionOpen
-            ? `Verified match (author position not verifiable). Publication found with the expert as an author${place ? ` (${place})` : ''}: ${title}`
-            : `Verified match. Publication found with the expert as an author${place ? ` (${place})` : ''}: ${title}`,
+            ? `Possible match (author position not verifiable). Publication found with the expert as an author${place ? ` (${place})` : ''}: ${title}`
+            : `Consistent match. Publication found with the expert as an author${place ? ` (${place})` : ''}: ${title}`,
         cv: cvSide(claim),
         source: {
           name: lookup.catalog ?? 'OpenAlex',
@@ -515,9 +519,9 @@ function publicationTitleRows(
     } else if (lookup.status === 'author_unconfirmed') {
       rows.push({
         topic: 'publication',
-        label: 'unable_to_verify',
+        label: 'partially_verified',
         severity: 'medium',
-        title: `Partial match; manual review required. Publication found; the expert's authorship could not be confirmed from the catalogs: ${title}`,
+        title: `Possible match; manual review required. Publication found; the expert's authorship could not be confirmed from the catalogs: ${title}`,
         cv: cvSide(claim),
         source: {
           name: lookup.catalog ?? 'OpenAlex',
@@ -534,9 +538,9 @@ function publicationTitleRows(
         pubType === 'poster';
       rows.push({
         topic: 'publication',
-        label: 'not_verified',
+        label: 'unable_to_verify',
         severity: 'low',
-        title: `Not confirmed by available sources. Publication not confirmed in the catalogs searched: ${title}`,
+        title: `Unable to verify. Publication not confirmed in the catalogs searched: ${title}`,
         cv: cvSide(claim),
         source: {
           name: catalogs,
@@ -551,7 +555,7 @@ function publicationTitleRows(
           failed.length > 0
             ? `Not reached: ${failed.map((check) => check.catalog).join(', ')}.`
             : '',
-          'OpenAlex, Crossref, PubMed, and ORCID do not index every journal, chapter, or abstract. Ask the expert for a copy. This is not a finding that the publication is fabricated.',
+          'Catalog miss: unable to verify, not a discrepancy. OpenAlex, Crossref, PubMed, and ORCID do not index every journal, chapter, or abstract. Ask the expert for a copy. An expert’s own website or CV is not independent verification.',
         ]
           .filter(Boolean)
           .join(' '),
@@ -617,6 +621,7 @@ function lookupFromCollectedPublications(
     if (!['pubmed', 'openalex', 'crossref', 'orcid'].includes(item.sourceId)) {
       continue;
     }
+    // Own website / CV pages are not independent catalog verification.
     const raw = item.raw ?? {};
     const authors = authorsFromRaw(raw);
     const year = parseYear(
@@ -1040,18 +1045,31 @@ function leftoverTopic(category: CvClaim['category']): CvComparisonTopic {
   return 'education';
 }
 
-/** Opening-page count line: extracted claims vs comparison rows. */
+/** Opening-page count line: unique CV claims vs comparison rows. */
 export function cvComparisonCountSummary(check: CvCheck): string {
+  const claimIds = new Set(check.claims.map((claim) => claim.id));
   const comparedIds = new Set(
     check.comparisons
       .map((row) => row.cv?.claimId)
-      .filter((id): id is string => Boolean(id)),
+      .filter((id): id is string => typeof id === 'string' && claimIds.has(id)),
   );
-  const comparedClaims = check.claims.filter((claim) =>
-    comparedIds.has(claim.id),
+  const comparedClaims = comparedIds.size;
+  const uncompared = check.claims.length - comparedClaims;
+  const unread = check.comparisons.filter((row) =>
+    /CV page unread or partially extracted/i.test(row.title),
   ).length;
-  const combined = check.claims.length - comparedClaims;
-  const sourceOnly = check.comparisons.filter((row) => !row.cv?.claimId).length;
+  const sourceOnly = check.comparisons.filter(
+    (row) =>
+      !row.cv?.claimId &&
+      !/CV page unread or partially extracted/i.test(row.title),
+  ).length;
+  const byLabel = new Map<InconsistencyLabel, Set<string>>();
+  for (const row of check.comparisons) {
+    const key = row.cv?.claimId ?? `row:${row.id ?? row.title}`;
+    const set = byLabel.get(row.label) ?? new Set<string>();
+    set.add(key);
+    byLabel.set(row.label, set);
+  }
   const counts = (
     [
       'conflicting',
@@ -1064,21 +1082,19 @@ export function cvComparisonCountSummary(check: CvCheck): string {
   )
     .map((label) => ({
       label,
-      count: check.comparisons.filter((row) => row.label === label).length,
+      count: byLabel.get(label)?.size ?? 0,
     }))
     .filter((entry) => entry.count > 0)
     .map((entry) => `${CV_LABEL_TEXT[entry.label]}: ${entry.count}`)
     .join('; ');
   return [
-    `${check.claims.length} claim(s) were read from the uploaded CV.`,
-    `${comparedClaims} of those claims appear in the comparison below.`,
+    `${check.claims.length} unique CV claim(s) were read from the uploaded CV.`,
+    `${comparedClaims} compared, ${uncompared} uncompared, ${unread} unread page(s).`,
+    `Unique CV claims (${check.claims.length}) = compared (${comparedClaims}) + uncompared (${uncompared}).`,
     sourceOnly > 0
       ? `${sourceOnly} additional row(s) come from sources and are not CV claims.`
       : '',
-    combined > 0
-      ? `${combined} extracted claim(s) are duplicate citations already compared, or were folded into another row.`
-      : '',
-    'Not every extracted claim is independently verified. “Not searched” means no connected source covers that claim. “Not verified” means a source was checked and did not independently confirm it. “Discrepancy found” means a catalog or registry disagrees with the CV. An expert’s own CV or website is not independent verification.',
+    'Not every extracted claim is independently verified. “Unable to verify” covers not searched, a truncated author list, or a catalog miss. “Possible match” means identity or authorship is uncertain. “Discrepancy identified” means a catalog or registry disagrees with the CV. An expert’s own CV or website is not independent verification.',
     counts,
   ]
     .filter(Boolean)
@@ -1100,10 +1116,10 @@ function formatUsd(amount: number): string {
 
 /** Labels shown to attorneys. */
 export const CV_LABEL_TEXT: Record<InconsistencyLabel, string> = {
-  verified: 'Verified',
-  partially_verified: 'Partly verified',
-  conflicting: 'Discrepancy found',
-  not_verified: 'Not verified',
+  verified: 'Consistent',
+  partially_verified: 'Possible match',
+  conflicting: 'Discrepancy identified',
+  not_verified: 'Unable to verify',
   not_found: 'Not found',
-  unable_to_verify: 'Not searched',
+  unable_to_verify: 'Unable to verify',
 };

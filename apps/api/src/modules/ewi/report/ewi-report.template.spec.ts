@@ -45,7 +45,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.5');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.7');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -97,6 +97,37 @@ describe('EWI report template', () => {
     expect(
       document.sections.find((section) => section.id === 'questions'),
     ).toBeUndefined();
+  });
+
+  it('says CV comparison was not performed when no CV was uploaded', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jason A. Demery',
+      city: 'Gainesville',
+      specialty: 'Neuropsychology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-26T00:00:00.000Z',
+      cvComparisonState: 'not_uploaded',
+    });
+    const cv =
+      document.sections
+        .find((section) => section.id === 'cv-comparison')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    const summary =
+      document.sections
+        .find((section) => section.id === 'summary')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(cv).toMatch(/No CV was uploaded/);
+    expect(cv).toMatch(/CV comparison was not performed/);
+    expect(cv).not.toMatch(/No CV versions were collected/);
+    expect(summary).toMatch(/CV comparison was not performed/);
+    expect(summary).toMatch(
+      /not a finding that the expert has no CV discrepancies/,
+    );
+    expect(summary).not.toMatch(/Unchecked CV claims/);
   });
 
   it('does not list a "could not verify" line for each source that returned nothing', () => {
@@ -464,7 +495,7 @@ describe('EWI report template', () => {
     expect(text).toMatch(/confirmed first author/i);
     expect(text).toContain('https://pubmed.ncbi.nlm.nih.gov/99/');
     expect(text).toContain('CV citation:');
-    expect(text).toContain('Verified citation:');
+    expect(text).toContain('Consistent citation:');
   });
 
   it('flags a verified author-position discrepancy and does not reprint the same PubMed item', () => {
@@ -539,7 +570,7 @@ describe('EWI report template', () => {
         .join('\n') ?? '';
     expect(text).toMatch(/verified author-position discrepancy/i);
     expect(text).toContain('Catalog record:');
-    expect(text).not.toContain('Verified citation:');
+    expect(text).not.toContain('Consistent citation:');
     expect(
       text.match(/https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/11111111\//g)?.length,
     ).toBe(1);
@@ -596,7 +627,7 @@ describe('EWI report template', () => {
         ?.blocks.map((block) => block.text)
         .join('\n') ?? '';
     expect(text).toContain('Catalog record:');
-    expect(text).not.toMatch(/Verified citation:/);
+    expect(text).not.toMatch(/Consistent citation:/);
     expect(text).toMatch(/unable to verify/i);
   });
 
@@ -1098,18 +1129,18 @@ describe('EwiWordReportService', () => {
         .find((section) => section.id === 'background')
         ?.blocks.map((block) => block.text)
         .join('\n') ?? '';
-    expect(cv).toMatch(/2 claim\(s\) were read/);
-    expect(cv).toMatch(/2 of those claims appear/);
-    expect(cv).toMatch(/Verified: 1; Not searched: 1/);
-    expect(cv).toMatch(/\[Verified\]/);
+    expect(cv).toMatch(/2 unique CV claim\(s\) were read/);
+    expect(cv).toMatch(/2 compared, 0 uncompared/);
+    expect(cv).toMatch(/Consistent: 1; Unable to verify: 1/);
+    expect(cv).toMatch(/\[Consistent\]/);
     expect(cv).not.toMatch(
       /Not confirmed in the catalogs searched: Memory after pediatric TBI/,
     );
-    expect(publications).toContain('Verified citation:');
+    expect(publications).toContain('Consistent citation:');
     expect(publications).toContain('https://pubmed.ncbi.nlm.nih.gov/11111111/');
     expect(publications).toMatch(/first of 2 authors/i);
     expect(summary).toMatch(/Identity not confirmed/);
-    expect(summary).toMatch(/2 claim\(s\) were read/);
+    expect(summary).toMatch(/2 unique CV claim\(s\) were read/);
     expect(summary).toMatch(/not counted as inconsistencies/);
     expect(background).toMatch(/registry city BEVERLY HILLS/);
     expect(background).not.toMatch(/Status: Verified/);
@@ -1927,5 +1958,152 @@ describe('EWI report source coverage', () => {
     expect(document.highlights?.[2]).toBe(
       'Cross-examination questions omitted',
     );
+  });
+
+  it('prints a patient-review rating only when the retrieved page showed one', () => {
+    const webRecord = (
+      rating: string | null,
+    ): import('@integrations/web-research').WebRecord => ({
+      id: rating ? 'rated' : 'unrated',
+      url: rating
+        ? 'https://healthgrades.example/leah-rated'
+        : 'https://healthgrades.example/leah-unrated',
+      title: 'Patient reviews',
+      kind: 'review',
+      snippet: null,
+      summary: 'A review listing.',
+      publishedAt: null,
+      retrievedAt: '2026-10-26T00:00:00.000Z',
+      searchProviders: ['gemini_grounding'],
+      queries: [],
+      read: 'read',
+      readNote: null,
+      match: {
+        level: 'strong',
+        confidence: 'high',
+        basis: ['name'],
+        conflicts: [],
+        quote: 'Leah Ellenberg',
+        quoteVerified: true,
+        classifiedBy: 'rules',
+      },
+      candidateId: null,
+      claims: [
+        {
+          type: 'rating',
+          text: 'Review: patients commented on wait times',
+          quote: 'patients commented on wait times',
+          topic: 'review',
+          basis: 'third_party',
+          from: 'page',
+        },
+      ],
+      rating,
+    });
+    const dossier = (rating: string | null) => ({
+      ranAt: '2026-10-26T00:00:00.000Z',
+      durationMs: 1,
+      partial: false,
+      partialNote: null,
+      queriesPlanned: 1,
+      queriesRun: 1,
+      providers: [
+        {
+          providerId: 'gemini_grounding',
+          name: 'Gemini',
+          configured: true,
+          requests: 1,
+          failedRequests: 0,
+          hits: 1,
+          failures: [],
+        },
+      ],
+      pagesRead: 1,
+      pagesBlocked: [],
+      candidates: [],
+      records: [webRecord(rating)],
+      registries: [],
+      limitations: [],
+      topics: [{ topic: 'reviews', queries: 1, hits: 1 }],
+    });
+    const withRating = buildEwiReportDocument({
+      expertName: 'Leah Ellenberg',
+      city: 'Los Angeles',
+      specialty: 'Neuropsychology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-26T00:00:00.000Z',
+      webResearch: dossier('4.2 of 5'),
+    });
+    const withoutRating = buildEwiReportDocument({
+      expertName: 'Leah Ellenberg',
+      city: 'Los Angeles',
+      specialty: 'Neuropsychology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-26T00:00:00.000Z',
+      webResearch: dossier(null),
+    });
+    const ratedText =
+      withRating.sections
+        .find((section) => section.id === 'patient-reviews')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    const unratedText =
+      withoutRating.sections
+        .find((section) => section.id === 'patient-reviews')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(ratedText).toMatch(/Rating shown on the retrieved page: 4\.2 of 5/);
+    expect(unratedText).toMatch(/Rating not shown on the retrieved page/);
+  });
+
+  it('does not file an ordinary court opinion under Lawsuits', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jason Demery',
+      city: 'Gainesville',
+      specialty: 'Neuropsychology',
+      evidence: [
+        {
+          sourceId: 'courtlistener',
+          category: 'legal',
+          title: 'Smith v. Jones',
+          summary:
+            'The court appointed Jason Demery as the independent neuropsychological expert.',
+          url: 'https://www.courtlistener.com/opinion/9/smith-v-jones/',
+          identityMatch: 'matched',
+          raw: {
+            documentType: 'case',
+            caseName: 'Smith v. Jones',
+            evidenceReference: 'Smith v. Jones opinion',
+          },
+        },
+        {
+          sourceId: 'malpractice_records',
+          category: 'malpractice',
+          title: 'Complaint against Dr. Demery',
+          summary: 'Malpractice complaint against the expert.',
+          url: 'https://example.test/malpractice',
+          identityMatch: 'matched',
+          raw: {
+            documentType: 'malpractice',
+            caseName: 'Patient v. Demery',
+            evidenceReference: 'malpractice complaint',
+          },
+        },
+      ],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-26T00:00:00.000Z',
+    });
+    const lawsuits =
+      document.sections
+        .find((section) => section.id === 'lawsuits')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(lawsuits).toMatch(/Complaint against Dr\. Demery|malpractice/i);
+    expect(lawsuits).not.toMatch(/Smith v\. Jones/);
   });
 });

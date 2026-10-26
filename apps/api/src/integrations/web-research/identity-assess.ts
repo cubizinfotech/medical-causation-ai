@@ -231,10 +231,29 @@ function classify(
     }
   }
   // Another first name with the same surname is another person, not a conflict.
-  if (direct.length > 1 && !TITLE.test(direct)) {
+  if (direct.length > 1 && !TITLE.test(direct) && !STOP_WORDS.has(direct)) {
     return { relation: 'different_first', written };
   }
   return { relation: 'surname_only', written: last };
+}
+
+/** True when the text names the subject’s first+last or a compatible initial+last. */
+export function quoteNamesSubject(text: string, subject: PersonName): boolean {
+  return findMentions(text, subject).some(
+    (mention) => mention.relation === 'full' || mention.relation === 'initial',
+  );
+}
+
+/** True when the text names the same surname with a different first name. */
+export function quoteNamesOtherPerson(
+  text: string,
+  subject: PersonName,
+): boolean {
+  return findMentions(text, subject).some(
+    (mention) =>
+      mention.relation === 'different_first' ||
+      mention.relation === 'full_conflict',
+  );
 }
 
 export function findMentions(text: string, subject: PersonName): Mention[] {
@@ -288,6 +307,9 @@ export function assessIdentity(
   const full = mentions.filter((m) => m.relation === 'full');
   const initials = mentions.filter((m) => m.relation === 'initial');
   const conflicting = mentions.filter((m) => m.relation === 'full_conflict');
+  const differentFirst = mentions.filter(
+    (m) => m.relation === 'different_first',
+  );
   const surname = mentions.filter((m) => m.relation === 'surname_only');
 
   const conflicts: string[] = [];
@@ -295,6 +317,15 @@ export function assessIdentity(
     const sample = [...new Set(conflicting.map((m) => m.written))].slice(0, 2);
     conflicts.push(
       `The page names "${sample.join('" and "')}", with a middle name or initial that differs from ${subjectLabel(subject.name)}.`,
+    );
+  }
+  if (differentFirst.length > 0) {
+    const sample = [...new Set(differentFirst.map((m) => m.written))].slice(
+      0,
+      2,
+    );
+    conflicts.push(
+      `The page names "${sample.join('" and "')}", a different first name from ${subjectLabel(subject.name)}.`,
     );
   }
 
@@ -343,14 +374,22 @@ export function assessIdentity(
       ? quoteAround(text, bestMention.index)
       : null;
 
-  if (nameMatch === 'none' && conflicting.length > 0) {
+  if (
+    nameMatch === 'none' &&
+    (conflicting.length > 0 || differentFirst.length > 0)
+  ) {
+    const named = conflicting[0] ?? differentFirst[0];
     return {
       nameMatch,
       level: 'other_person',
       confidence: 'medium',
-      basis: ['The only full-name mentions differ from the subject.'],
+      basis: [
+        differentFirst.length > 0
+          ? 'The only named people with this surname have a different first name.'
+          : 'The only full-name mentions differ from the subject.',
+      ],
       conflicts,
-      quote: quoteAround(text, conflicting[0].index),
+      quote: named ? quoteAround(text, named.index) : null,
       corroboration: {
         npi: npiOnPage,
         city: false,
@@ -418,19 +457,38 @@ export function assessIdentity(
       );
     }
   } else {
-    level = corroborators >= 2 ? 'possible' : 'weak';
+    // Surname-only is never "possible": specialty + city next to a last name
+    // can belong to someone else (Leah vs Leila).
+    level = 'weak';
     confidence = 'low';
+    if (corroborators >= 2) {
+      basis.push(
+        'Only the surname appears. Matching specialty or city is not enough to treat this as the subject without a first name.',
+      );
+    }
   }
 
-  if (conflicting.length > 0 && full.length === 0) {
+  if (
+    (conflicting.length > 0 || differentFirst.length > 0) &&
+    full.length === 0 &&
+    initials.length === 0
+  ) {
     level = 'other_person';
     confidence = 'medium';
-    basis.push('The only full-name mentions differ from the subject.');
+    basis.push(
+      differentFirst.length > 0
+        ? 'The only named people with this surname have a different first name.'
+        : 'The only full-name mentions differ from the subject.',
+    );
   } else if (conflicting.length > 0 && level === 'strong') {
     level = 'possible';
     confidence = 'medium';
     basis.push(
       'The page also names a similarly named person with a different middle name or initial.',
+    );
+  } else if (differentFirst.length > 0 && level === 'strong') {
+    basis.push(
+      'The page also names a person with the same surname and a different first name. Credentials are attributed only when the sentence names the subject.',
     );
   }
 

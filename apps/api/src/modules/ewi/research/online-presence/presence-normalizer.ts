@@ -124,7 +124,9 @@ function recordFromItem(
           ? 'Restricted source. Transcript body was not stored.'
           : null,
     importantStatements: readStringList(raw.importantStatements),
-    rating: readString(raw.rating),
+    rating:
+      readString(raw.rating) ??
+      readString((raw.web as { rating?: unknown } | undefined)?.rating),
     reviewDate: readString(raw.reviewDate) ?? readString(raw.date),
     reviewText: restricted
       ? null

@@ -86,16 +86,68 @@ export function evidenceStatusLine(item: ExpertEvidenceItem): string {
           ? 'Verified'
           : item.informationStatus === 'unavailable'
             ? 'Not found'
-            : 'Not independently verified';
+            : item.category === 'publication' &&
+                ['pubmed', 'openalex', 'crossref', 'orcid'].includes(
+                  item.sourceId,
+                )
+              ? 'Catalog record found. This is not a comparison against an uploaded CV claim'
+              : 'Not independently verified';
   return `Status: ${status}. Source: ${item.sourceId}.`;
 }
 
-/** The status part of a source index entry. */
+const CATALOG_SOURCES = new Set([
+  'pubmed',
+  'openalex',
+  'crossref',
+  'orcid',
+  'npi_registry',
+  'open_payments',
+]);
+
+function retrievalStatusOf(item: ExpertEvidenceItem): string | undefined {
+  const raw = item.raw ?? {};
+  if (typeof raw.retrievalStatus === 'string' && raw.retrievalStatus.trim()) {
+    return raw.retrievalStatus.trim().toLowerCase();
+  }
+  const web = raw.web as { read?: string } | undefined;
+  return web?.read;
+}
+
+/**
+ * How much of the source was actually opened. A search hit or docket URL is
+ * not treated as a read page or PDF.
+ */
+export function sourceAccessLabel(item: ExpertEvidenceItem): string {
+  if (item.access === 'restricted') {
+    return 'not read (restricted)';
+  }
+  const retrieval = retrievalStatusOf(item);
+  if (retrieval === 'full_text' || retrieval === 'read') {
+    return 'page content read';
+  }
+  if (retrieval === 'snippet_only') {
+    return 'search result only';
+  }
+  if (retrieval === 'metadata_only') {
+    return 'docket metadata only';
+  }
+  if (
+    retrieval === 'restricted' ||
+    retrieval === 'failed' ||
+    retrieval === 'not_read'
+  ) {
+    return 'not read (login or bot protection)';
+  }
+  if (item.informationStatus === 'unavailable') {
+    return 'not retrieved';
+  }
+  if (CATALOG_SOURCES.has(item.sourceId)) {
+    return 'catalog record retrieved';
+  }
+  return 'page retrieved';
+}
+
+/** The status part of a source index entry. Access/read, not “verified.” */
 export function sourceIndexStatus(item: ExpertEvidenceItem): string {
-  if (item.access === 'restricted') return '; status: inaccessible';
-  const status = item.informationStatus;
-  if (status === 'verified') return '; status: verified';
-  if (status === 'conflicting') return '; status: discrepancy found';
-  if (status === 'unavailable') return '; status: not found';
-  return '; status: not independently verified';
+  return `; access: ${sourceAccessLabel(item)}`;
 }

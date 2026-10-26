@@ -72,8 +72,19 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * keeps a unique name-and-specialty author profile when institution
  * geography is not listed; a separate unique source-links PDF can be
  * exported without changing the stored report.
+ * 3.10.6: surname-only and conflicting first-name pages no longer file as
+ * the subject's credentials; CV comparison labels and unique-claim counts
+ * reconcile; NPI cover and identity wording agree; court opinions are not
+ * IME or malpractice; ratings print only from evidence.
+ * 3.10.7: no-CV investigations say comparison was not performed; source-links
+ * separate subject, possible, and other-person URLs; catalog publication
+ * records are not labelled as failed CV verification; filed Daubert motions
+ * are not counted as court opinions; source-index access distinguishes a
+ * search snippet from a read page; docket notices that mention a deposition
+ * are not transcript evidence; lawsuit empty-copy names related court records
+ * instead of “not searched.”
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.10.5';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.7';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis and other licensed PDFs are not stored unless legally permitted.';

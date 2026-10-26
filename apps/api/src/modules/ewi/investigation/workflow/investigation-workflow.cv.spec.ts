@@ -185,5 +185,51 @@ describe('investigation workflow with an uploaded CV', () => {
     );
     expect(readCv).not.toHaveBeenCalled();
     expect(outcome.result.cvCheck).toBeNull();
+    expect(
+      outcome.result.sourceStatuses?.find(
+        (status) => status.sourceId === 'cv_profile',
+      )?.message,
+    ).toMatch(/No CV was uploaded/);
+    expect(outcome.result.summary ?? '').not.toMatch(
+      /including CV comparisons/,
+    );
+  });
+
+  it('reports an explicit error when the uploaded CV cannot be read', async () => {
+    const outcome = await executeInvestigationWorkflow(
+      {
+        expertName: 'Jane Smith',
+        city: 'Phoenix',
+        specialty: 'Neurology',
+        cvDocumentId: 'doc-bad',
+      },
+      {
+        stages,
+        report: {
+          build: () =>
+            Promise.resolve({
+              fileName: 'report.pdf',
+              mimeType: 'application/octet-stream',
+              buffer: Buffer.from(''),
+              format: 'pdf' as const,
+              templateId: 'ewi/investigation-report',
+              templateVersion: '2.1.0',
+            }),
+        },
+        retryDelayMs: 0,
+        sleep: () => Promise.resolve(),
+        readCv: () => Promise.reject(new Error('parser failed')),
+        research: {
+          collectProviders: (_query, providerIds) =>
+            Promise.resolve(providerIds.map(empty)),
+        },
+      },
+    );
+    expect(outcome.result.cvCheck).toBeNull();
+    expect(
+      outcome.result.sourceStatuses?.find(
+        (status) => status.sourceId === 'cv_profile',
+      )?.message,
+    ).toMatch(/could not be read: parser failed/);
   });
 });

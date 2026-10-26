@@ -29,7 +29,7 @@ const VERIFIED_TOPICS: readonly WebClaimTopic[] = [
 ];
 
 function tied(record: WebRecord): boolean {
-  return record.match.level === 'strong' || record.match.level === 'possible';
+  return record.match.level === 'strong';
 }
 
 interface Seen {

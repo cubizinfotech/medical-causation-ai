@@ -18,6 +18,7 @@ export {
   BASIS_LABEL,
   coverageLine,
   displayStructuredCoverage,
+  findingsCoverageNote,
   isRoutedSection,
   publicSearchNote,
   routeWebFindings,

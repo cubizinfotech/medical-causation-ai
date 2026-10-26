@@ -460,7 +460,9 @@ export async function executeInvestigationWorkflow(
       ).length;
       const message =
         found.length === 0
-          ? 'No inconsistency was identified from the collected statements, including CV comparisons. Nothing was inferred.'
+          ? cvCheck
+            ? 'No inconsistency was identified from the collected statements, including CV comparisons. Nothing was inferred.'
+            : 'No inconsistency was identified from the collected statements. CV comparison was not performed because no readable CV was uploaded. That is not a finding that there are no CV discrepancies.'
           : `${found.length} inconsistency note(s) from source comparison (${cvNotes} CV-related), ${significant} significant.`;
       stageNotes.push({ label: stage.label, message });
       await report(dependencies, stage, progress, message);
@@ -738,14 +740,25 @@ async function runResearchStage(
   // never take it from the shared research cache.
   if (
     stage.providers.includes('cv_profile') &&
-    !alreadyCollected.has('cv_profile') &&
-    request.cvDocumentId &&
-    dependencies.readCv
+    !alreadyCollected.has('cv_profile')
   ) {
-    finished.set(
-      'cv_profile',
-      await readCvSource(request, dependencies, notify),
-    );
+    if (request.cvDocumentId && dependencies.readCv) {
+      finished.set(
+        'cv_profile',
+        await readCvSource(request, dependencies, notify),
+      );
+    } else if (!request.cvDocumentId) {
+      finished.set('cv_profile', {
+        sourceId: 'cv_profile',
+        status: 'unavailable',
+        outcome: 'unavailable',
+        access: 'public',
+        message:
+          'No CV was uploaded. CV comparison was not performed. That is not a finding that the expert has no CV discrepancies.',
+        retrievedAt: new Date().toISOString(),
+        items: [],
+      });
+    }
   }
 
   for (const providerId of stage.providers) {

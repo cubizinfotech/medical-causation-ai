@@ -1,5 +1,6 @@
 import {
   coverageLine,
+  findingsCoverageNote,
   institutionsIn,
   routeWebFindings,
 } from './section-router';
@@ -166,6 +167,65 @@ describe('routeWebFindings', () => {
     expect(
       social.some((item) => /not a personal profile/i.test(item.statement)),
     ).toBe(true);
+  });
+
+  it('does not file a court opinion as IME after the model retags kind to ime', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'retag',
+          'https://www.courtlistener.com/opinion/123/smith-v-jones/',
+          'ime',
+          [
+            claim(
+              'ime',
+              'The court granted a compulsory medical examination of the plaintiff',
+            ),
+            claim(
+              'education',
+              'Jason Demery earned a Ph.D. from the University of Florida',
+            ),
+          ],
+          'strong',
+          'Memorandum opinion',
+        ),
+      ]),
+    );
+    expect(routed.get('ime')).toBeUndefined();
+    expect(routed.get('education')).toBeUndefined();
+    expect(routed.get('orders')?.length).toBeGreaterThan(0);
+  });
+
+  it('does not file possible-match pages as the subject’s education', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'dir',
+          'https://directory.example/leila',
+          'directory',
+          [claim('education', 'Leila Glass, PhD, UCLA')],
+          'possible',
+          'Leila Glass',
+        ),
+      ]),
+    );
+    expect(routed.get('education')).toBeUndefined();
+  });
+
+  it('keeps a conflicting-name directory page out of the subject’s directories', () => {
+    const page = record(
+      'dir',
+      'https://directory.example/los-angeles-neuropsychologists',
+      'directory',
+      [claim('education', 'Leila Glass, PhD, earned her doctorate from UCLA')],
+      'possible',
+      'Los Angeles Neuropsychologists — Leah Ellenberg, Leila Glass',
+    );
+    page.match.conflicts = ['Leila Glass'];
+    page.match.quote = 'Leila Glass, PhD, UCLA';
+    const routed = routeWebFindings(dossier([page]));
+    expect(routed.get('directories')).toBeUndefined();
+    expect(routed.get('education')).toBeUndefined();
   });
 
   it('does not file a Justia or PACER page as board-certification or IME verification', () => {
@@ -524,13 +584,63 @@ describe('coverageLine', () => {
           'https://www.expertinstitute.com/experts/jason-demery',
           'directory',
           [],
-          'possible',
+          'strong',
           'Jason Demery, PhD',
         ),
       ]),
     );
     expect(routed.get('directories')?.[0].url).toContain('expertinstitute.com');
-    expect(routed.get('directories')?.[0].matchLevel).toBe('possible');
+    expect(routed.get('directories')?.[0].matchLevel).toBe('strong');
+  });
+
+  it('files a possible-match court order as a possible match, not as IME', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'other-case',
+          'https://www.courtlistener.com/docket/999/unrelated-v-case/',
+          'court',
+          [claim('ime', 'compulsory medical examination of a plaintiff')],
+          'possible',
+          'Order on motion in limine',
+        ),
+      ]),
+    );
+    expect(routed.get('ime')).toBeUndefined();
+    expect(routed.get('orders')?.[0].matchLevel).toBe('possible');
+  });
+
+  it('files a motion that mentions a deposition as a pleading, not a deposition', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'compel',
+          'https://ecf.flmd.uscourts.gov/doc1/compel-deposition',
+          'court',
+          [],
+          'strong',
+          'Motion to compel deposition of Dr. Jason A. Demery',
+        ),
+      ]),
+    );
+    expect(routed.get('pleadings')?.[0].url).toContain('compel-deposition');
+    expect(routed.get('depositions')).toBeUndefined();
+  });
+
+  it('does not file a possible-match directory as the subject’s directories', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'other-dir',
+          'https://www.expertinstitute.com/experts/jason-other',
+          'directory',
+          [],
+          'possible',
+          'Jason Other, PhD',
+        ),
+      ]),
+    );
+    expect(routed.get('directories')).toBeUndefined();
   });
 
   it('mentions a blocked source only when it is material to the section', () => {
@@ -598,5 +708,52 @@ describe('coverageLine', () => {
         'News is not implemented in this investigation.',
       ]),
     ).not.toMatch(/not implemented/i);
+  });
+
+  it('distinguishes lawsuit coverage from a comprehensive search claim', () => {
+    const litigationRan = dossier([], {
+      topics: [{ topic: 'litigation', queries: 1, hits: 0 }],
+    });
+    expect(coverageLine(litigationRan, 'lawsuits')).toMatch(
+      /No relevant records identified/,
+    );
+    expect(coverageLine(litigationRan, 'lawsuits')).not.toMatch(
+      /was not searched/,
+    );
+    expect(coverageLine(litigationRan, 'lawsuits')).toMatch(
+      /not a comprehensive malpractice or lawsuit search/,
+    );
+    const criminalRan = dossier([], {
+      topics: [{ topic: 'criminal', queries: 1, hits: 0 }],
+    });
+    expect(coverageLine(criminalRan, 'criminal')).toMatch(
+      /Dedicated criminal-record databases were not queried/,
+    );
+    expect(coverageLine(criminalRan, 'criminal')).toMatch(
+      /not a comprehensive criminal-records search/,
+    );
+    const identityOnly = dossier([], {
+      topics: [{ topic: 'identity', queries: 1, hits: 1 }],
+    });
+    expect(coverageLine(identityOnly, 'lawsuits')).toMatch(/was not searched/);
+    expect(coverageLine(identityOnly, 'lawsuits')).not.toMatch(
+      /No relevant records identified/,
+    );
+  });
+
+  it('keeps not-searched only when the topic was not queried', () => {
+    const globalOnly = dossier([], {
+      topics: [{ topic: 'identity', queries: 2, hits: 1 }],
+    });
+    expect(coverageLine(globalOnly, 'education')).toMatch(/was not searched/);
+    expect(findingsCoverageNote(globalOnly, 'education')).toMatch(
+      /general web search/,
+    );
+    expect(
+      findingsCoverageNote(
+        dossier([], { topics: [{ topic: 'education', queries: 1, hits: 0 }] }),
+        'education',
+      ),
+    ).toBeNull();
   });
 });

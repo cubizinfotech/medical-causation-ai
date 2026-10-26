@@ -121,6 +121,8 @@ describe('ExpertIdentityResolver', () => {
       npi: '1234567893',
       city: 'BEVERLY HILLS',
     });
+    expect(resolution.note).toMatch(/Identity is not confirmed/);
+    expect(resolution.note).toMatch(/possible NPI record/);
     expect(resolution.note).toMatch(/Los Angeles/);
     expect(resolution.note).toMatch(/BEVERLY HILLS/);
     expect(resolution.note).toMatch(/not used as a confirmed identity/);
@@ -193,6 +195,24 @@ describe('ExpertIdentityResolver', () => {
       npi: '1234567893',
     });
     expect(resolution.status).toBe('confirmed');
+  });
+
+  it('ignores NPI-2 organization records in a name search', async () => {
+    const { resolver } = resolverFor([
+      {
+        ...neurologist,
+        npi: '1234567890',
+        organization: true,
+        first: 'Jane',
+        last: 'Smith',
+      },
+      neurologist,
+    ]);
+    const { resolution, record } = await resolver.resolve(query);
+    expect(resolution.status).toBe('confirmed');
+    expect(record?.npi).toBe('1234567893');
+    expect(record?.individual).toBe(true);
+    expect(resolution.candidates).toEqual([]);
   });
 
   it('reports not found without treating it as a negative finding', async () => {

@@ -6,6 +6,8 @@ import {
   assessIdentity,
   findMentions,
   professionTerms,
+  quoteNamesOtherPerson,
+  quoteNamesSubject,
   subjectFromQuery,
   type IdentitySubject,
 } from './identity-assess';
@@ -42,7 +44,12 @@ import {
   summarizeSunbizDetail,
 } from './registries/sunbiz';
 import { SafeFetcher, type FetchedPage } from './safe-fetcher';
-import { classifyUrl } from './source-kind';
+import {
+  blockedPageDisplayTitle,
+  classifyUrl,
+  isBlockedChallengeTitle,
+  isCourtSourceUrl,
+} from './source-kind';
 import { usablePortraitCandidates } from './page-portraits';
 import { BraveSearchProvider } from './providers/brave.provider';
 import { GeminiGroundedSearchProvider } from './providers/gemini-grounded.provider';
@@ -1137,7 +1144,9 @@ export class WebResearchEngine {
       const url = classifyUrl(w.page.url, fromNewsIndex ? 'news' : 'web');
       let kind: WebSourceKind = url.kind;
       if (sunbizUrls.has(canonicalUrl(w.page.url))) kind = 'corporate';
-      else if (kind === 'other' && model?.kind) kind = model.kind;
+      else if (isCourtSourceUrl(w.page.url)) {
+        kind = url.kind === 'justia' ? 'justia' : 'court';
+      } else if (kind === 'other' && model?.kind) kind = model.kind;
       else if (
         model?.kind &&
         ['expert_website', 'advertising', 'ime', 'profile'].includes(
@@ -1148,15 +1157,23 @@ export class WebResearchEngine {
         kind = model.kind;
       }
       const ownPage = isOwnPage(kind, w.page.url, subject.name.last);
-      const tiedToSubject =
+      const claimBelongs = (text: string): boolean => {
+        if (quoteNamesOtherPerson(text, subject.name)) {
+          return quoteNamesSubject(text, subject.name);
+        }
+        return quoteNamesSubject(text, subject.name);
+      };
+      const modelClaims: WebClaim[] = (model?.claims ?? [])
+        .filter((claim) => claimBelongs(`${claim.quote ?? ''} ${claim.text}`))
+        .map((claim) => ({
+          ...claim,
+          basis:
+            claim.basis ??
+            basisFor(claim.topic ?? 'other', { url: w.page.url, ownPage }),
+        }));
+      const extractForSubject =
         merged.level === 'strong' || merged.level === 'possible';
-      const modelClaims: WebClaim[] = (model?.claims ?? []).map((claim) => ({
-        ...claim,
-        basis:
-          claim.basis ??
-          basisFor(claim.topic ?? 'other', { url: w.page.url, ownPage }),
-      }));
-      const factClaims: WebClaim[] = !tiedToSubject
+      const factClaims: WebClaim[] = !extractForSubject
         ? []
         : w.limited
           ? factsFromSnippet({
@@ -1209,7 +1226,17 @@ export class WebResearchEngine {
           w.fetched?.finalUrl && w.fetched.status === 'read'
             ? w.fetched.finalUrl
             : w.page.url,
-        title: (w.fetched?.title ?? w.page.title).slice(0, 240),
+        title: (() => {
+          const rawTitle = (w.fetched?.title ?? w.page.title).slice(0, 240);
+          if (
+            isBlockedChallengeTitle(rawTitle) ||
+            (w.fetched?.status === 'restricted' &&
+              isBlockedChallengeTitle(w.fetched.title))
+          ) {
+            return blockedPageDisplayTitle(w.page.url);
+          }
+          return rawTitle;
+        })(),
         kind,
         ...(url.platform ? { platform: url.platform } : {}),
         ...(url.directoryId ? { directoryId: url.directoryId } : {}),
@@ -1275,11 +1302,7 @@ export class WebResearchEngine {
       .slice(0, Math.max(1, settings.maxPages));
 
     const tiedIds = new Set(
-      finalRecords
-        .filter(
-          (r) => r.match.level === 'strong' || r.match.level === 'possible',
-        )
-        .map((r) => r.id),
+      finalRecords.filter((r) => r.match.level === 'strong').map((r) => r.id),
     );
     const seenTies = new Set<string>();
     const companiesOnTiedPages = tieLog.filter((tie) => {

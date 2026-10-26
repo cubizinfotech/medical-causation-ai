@@ -277,6 +277,13 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
     const documentType = legalDocumentTypeFor(docClass, challenge);
     const courtLevel = courtLevelOf(hit.court);
     const filingText = `${snippet ?? ''} ${hit.description ?? ''} ${caseName}`;
+    const visibleText = [
+      caseName,
+      snippet ?? '',
+      hit.description ?? '',
+      ...(opinionExcerpts ?? []),
+    ].join(' ');
+    const namesExpert = mentionsSubject(visibleText, name);
     const specialtyInText = specialtyMentioned(filingText, query.specialty);
     const recapSupported =
       specialtyInText || recapHasSupportingIdentity(filingText, query);
@@ -341,24 +348,35 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
         identity: {
           name: query.expertName,
           specialty: query.specialty,
-          verifiedBy: specialtyInText
-            ? 'source_match'
-            : recapSupported && npiConfirmed && searchKind === 'recap_document'
-              ? 'npi'
-              : undefined,
+          verifiedBy:
+            namesExpert && specialtyInText
+              ? 'source_match'
+              : namesExpert &&
+                  recapSupported &&
+                  npiConfirmed &&
+                  searchKind === 'recap_document'
+                ? 'npi'
+                : undefined,
           ambiguous: !(
-            specialtyInText ||
-            (recapSupported && npiConfirmed && searchKind === 'recap_document')
+            namesExpert &&
+            (specialtyInText ||
+              (recapSupported &&
+                npiConfirmed &&
+                searchKind === 'recap_document'))
           ),
-          basis: specialtyInText
-            ? ['full name in filing', 'specialty term in filing']
-            : recapSupported && npiConfirmed && searchKind === 'recap_document'
-              ? [
-                  'full name in filing',
-                  'NPI identity confirmed',
-                  'professional or place marker on filing',
-                ]
-              : ['full name in filing'],
+          basis: !namesExpert
+            ? ['search hit; first and last name not in the retrieved excerpt']
+            : specialtyInText
+              ? ['full name in filing', 'specialty term in filing']
+              : recapSupported &&
+                  npiConfirmed &&
+                  searchKind === 'recap_document'
+                ? [
+                    'full name in filing',
+                    'NPI identity confirmed',
+                    'professional or place marker on filing',
+                  ]
+                : ['full name in filing'],
         },
         documentType,
         documentClass: docClass,
@@ -396,6 +414,18 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
       },
     });
   }
+}
+
+/** First+last or initial+last in the retrieved excerpt, not only the search query. */
+function mentionsSubject(text: string, name: PersonName): boolean {
+  const hay = text.toLowerCase();
+  const last = name.last.toLowerCase();
+  const first = name.first.toLowerCase();
+  if (!hay.includes(last)) return false;
+  if (hay.includes(first)) return true;
+  const initial = first.charAt(0);
+  const escapedLast = last.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${initial}\\.?\\s+${escapedLast}\\b`, 'i').test(text);
 }
 
 function specialtyMentioned(text: string, specialty: string): boolean {

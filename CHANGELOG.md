@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-10-26): CV omission wording and source-link identity (report 3.10.7)
+
+- When no CV is uploaded, the report says CV comparison was not performed. It does not say “no CV versions were collected” or imply there are no discrepancies.
+- Source-links group subject URLs separately from possible matches and other-person pages. Unrelated directory profiles stay out of subject sections. A URL is not treated as proof the page was read.
+- CourtListener hits whose retrieved excerpt does not name the expert stay uncertain. A docket snippet that mentions a deposition is not classified as a deposition transcript. A deferred Daubert ruling is not treated as an exclusion.
+- Catalog publication rows say a record was found, not that a CV claim failed verification. Practice-site sentences after a full-name mention can be used even when the page was not retagged as the expert’s website.
+- Filed Daubert/Frye motions are counted as filed motions, not court opinions. “Not determined” states what was reviewed. A motion without a judicial decision is not an exclusion.
+- Source-index and source-links access labels distinguish search-result snippets, docket metadata, and page content that was read.
+- Docket notices that mention a deposition stay out of Depositions/Transcripts and are labelled as records whose transcript was not retrieved.
+- Lawsuit empty copy distinguishes related court records, no qualifying lawsuit against the expert, and topics that were not searched. Public web search is not described as a comprehensive malpractice or criminal search.
+- Possible memberships and affiliations stay listed, visibly separate from confirmed matches, and are not described as verified in the executive summary.
+- Not deployed. Historic client reports were not overwritten. Paid APIs were not used.
+
+### Changed (2026-10-26): same-name contamination, CV labels, court vs IME (report 3.10.6)
+
+- Surname-only and conflicting first-name pages (for example Leah Ellenberg vs Leila Glass) no longer file as the subject’s credentials. Possible matches stay out of the subject cluster. Credential sections require a strong identity match or a quote that names the subject.
+- CV comparison labels print as Consistent, Discrepancy identified, Unable to verify, and Possible match. Unique CV claim counts reconcile. A catalog miss is unable to verify, not a discrepancy. Own-site hits are not independent verification.
+- Cover and identity NPI wording agree when candidates exist (possible, not “no NPI”). Name search ignores NPI-2 organization records. NPPES licenses remain self-reported.
+- Court opinions and Justia pages are not filed as IME, education, or malpractice unless the text is a claim against the expert. Patient-review ratings print only when present on the retrieved page. CAPTCHA challenge text is not used as a title.
+- Client-ready provider table is in `docs/ewi/client-provider-assessment.md` (prices dated 22 Oct 2026 — re-verify before any client email).
+- Not deployed. Historic client reports were not overwritten. Paid APIs were not used.
+
 ### Changed (2026-10-26): catalog type labels, OpenAlex matching, source-links PDF (report 3.10.5)
 
 - Catalog publication type is printed only when classified (for example “journal article”). Unclassified records no longer show “Type: unverified”.

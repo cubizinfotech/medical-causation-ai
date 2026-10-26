@@ -139,6 +139,43 @@ describe('WebSourceProvider coverage', () => {
       ambiguous: true,
       matchLevel: 'other_person',
     });
+    expect(result.items[1].raw?.identity).not.toMatchObject({
+      verifiedBy: 'source_match',
+    });
+  });
+
+  it('does not stamp source_match or the query name on a possible web item', async () => {
+    const result = await provider(
+      'seak',
+      dossier([
+        record({
+          id: 'seak-possible',
+          url: 'https://www.seakexperts.com/possible',
+          kind: 'directory',
+          directoryId: 'seak',
+          title: 'J. Demery',
+          match: {
+            level: 'possible',
+            confidence: 'medium',
+            basis: ['surname'],
+            conflicts: [],
+            quote: null,
+            quoteVerified: false,
+            classifiedBy: 'rules',
+          },
+        }),
+      ]),
+    ).search(query);
+    expect(result.items[0].raw?.identity).toMatchObject({
+      matchLevel: 'possible',
+      ambiguous: true,
+    });
+    expect(
+      (result.items[0].raw?.identity as { verifiedBy?: string }).verifiedBy,
+    ).toBeUndefined();
+    expect(
+      (result.items[0].raw?.identity as { name?: string }).name,
+    ).toBeUndefined();
   });
 
   it('records a news empty search only when the news topic actually ran', async () => {

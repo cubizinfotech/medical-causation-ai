@@ -89,6 +89,36 @@ describe('basisFor', () => {
 });
 
 describe('extractFacts', () => {
+  it('on an untagged practice page that already names the subject, later sentences may omit the first name', () => {
+    const text =
+      'Dr. Jason A. Demery, Ph.D., ABPP is a clinical neuropsychologist in Gainesville, Florida. Dr. Demery earned his Ph.D. in Clinical Psychology from the University of Florida. He provides forensic neuropsychological evaluations and independent medical examinations for attorneys.';
+    const facts = extractFacts({
+      url: 'https://neuropsychologicalsciences.com/about',
+      kind: 'other',
+      title: 'About Dr. Demery',
+      text,
+      subject,
+      ownPage: false,
+    });
+    expect(facts.some((fact) => fact.topic === 'education')).toBe(true);
+    expect(facts.find((fact) => fact.topic === 'education')?.quote).toMatch(
+      /University of Florida/,
+    );
+    expect(facts.some((fact) => fact.topic === 'ime')).toBe(true);
+    const mixed = extractFacts({
+      url: 'https://neuropsychologicalsciences.com/about',
+      kind: 'other',
+      title: 'About Dr. Demery',
+      text: `${text} Leila Glass, PhD, earned her doctorate from UCLA.`,
+      subject,
+      ownPage: false,
+    });
+    expect(mixed.find((fact) => fact.topic === 'education')?.quote).toMatch(
+      /University of Florida/,
+    );
+    expect(mixed.some((fact) => /UCLA/.test(fact.quote ?? ''))).toBe(false);
+  });
+
   it('finds degree, board certification, address and IME statements on the expert’s page, with verbatim quotes', () => {
     const text =
       'Dr. Jason A. Demery, Ph.D., ABPP is a clinical neuropsychologist. Board Certified in Clinical Neuropsychology by the American Board of Professional Psychology (ABPP-CN). Dr. Demery earned his Ph.D. from the University of Florida. He performs independent medical examinations. Office: 8491 NW 39th Ave, Gainesville, FL 32606.';
@@ -244,6 +274,42 @@ describe('extractFacts', () => {
     expect(paper.find((f) => f.topic === 'grant')?.text).toMatch(
       /^Associated with grant-funded research:/,
     );
+  });
+
+  it('does not take Leila Glass credentials from a Leah Ellenberg directory page', () => {
+    const leah = subjectFromQuery({
+      expertName: 'Leah Ellenberg',
+      city: 'Los Angeles, CA',
+      specialty: 'Neuropsychology',
+    });
+    if (!leah) throw new Error('subject');
+    const facts = extractFacts({
+      url: 'https://directory.example/los-angeles-neuropsychologists',
+      kind: 'directory',
+      title: 'Los Angeles Neuropsychologists — Leah Ellenberg, Leila Glass',
+      text: 'Leah Ellenberg, PhD, practices pediatric neuropsychology in Los Angeles. Leila Glass, PhD, earned her doctorate from UCLA and completed a fellowship at Boston Children’s Hospital.',
+      subject: leah,
+      ownPage: false,
+    });
+    const education = facts.filter((fact) => fact.topic === 'education');
+    expect(education.every((fact) => !/Leila Glass/i.test(fact.quote))).toBe(
+      true,
+    );
+    expect(education.every((fact) => !/UCLA/i.test(fact.quote))).toBe(true);
+  });
+
+  it('drops a credential quote that names another person', () => {
+    const facts = extractFacts({
+      url: 'https://news.example/awards',
+      kind: 'news',
+      title: 'Awards',
+      text: 'Mark Demery received the Dean’s scholarship. Jason Demery testified in Gainesville.',
+      subject,
+      ownPage: false,
+    });
+    expect(
+      facts.some((fact) => fact.topic === 'award' && /Dean/i.test(fact.quote)),
+    ).toBe(false);
   });
 
   it('labels snippet-only statements as snippets', () => {

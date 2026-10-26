@@ -50,11 +50,27 @@ export function prepareEwiReportInput(
     professionalBackground: result.professionalBackground,
     identity: result.identity ?? null,
     cvCheck,
+    cvComparisonState: cvComparisonState(result),
     additionalContext: result.additionalContext ?? null,
     webResearch: result.webResearch ?? null,
     sourceStatuses: sourceStatusesForReport(result),
     questionsNote: preparedQuestions.note,
   };
+}
+
+/** Why section 8 is empty: compared, never uploaded, or uploaded but unread. */
+export type CvComparisonState = 'compared' | 'not_uploaded' | 'not_read';
+
+export function cvComparisonState(result: {
+  cvCheck?: EwiInvestigationResult['cvCheck'] | null;
+  sourceStatuses?: Array<{ sourceId: string; message?: string }>;
+}): CvComparisonState {
+  if (result.cvCheck) return 'compared';
+  const cv = result.sourceStatuses?.find(
+    (status) => status.sourceId === 'cv_profile',
+  );
+  if (/uploaded CV/i.test(cv?.message ?? '')) return 'not_read';
+  return 'not_uploaded';
 }
 
 export function questionsAreStale(

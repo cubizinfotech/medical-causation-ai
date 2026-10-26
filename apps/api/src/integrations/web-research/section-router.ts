@@ -14,6 +14,7 @@ import {
   organizationsIn,
   TOPIC_LABEL,
 } from './claim-topics';
+import { looksLikeCourtDocument } from './source-kind';
 import type {
   WebClaim,
   WebClaimBasis,
@@ -87,7 +88,30 @@ export interface RoutedFinding {
   publishedAt: string | null;
   /** Comparison with the issuing body, when this kind of claim has one. */
   verification: WebVerification | null;
+  rating?: string | null;
+  kind?: WebSourceKind;
+  searchProviders?: string[];
+  read?: WebRecord['read'];
 }
+
+const CREDENTIAL_SECTIONS: ReadonlySet<RoutedSectionId> = new Set([
+  'education',
+  'awards-military',
+  'publications',
+  'licenses',
+  'board-certifications',
+  'certification-orgs',
+]);
+
+const CREDENTIAL_TOPICS = new Set<string>([
+  'education',
+  'award',
+  'military',
+  'publication',
+  'license',
+  'board_certification',
+  'certification_org',
+]);
 
 const BASIS_ORDER: Record<WebClaimBasis | 'record', number> = {
   primary_source: 0,
@@ -292,13 +316,22 @@ function courtDocumentSection(record: WebRecord): RoutedSectionId | null {
   ) {
     return 'orders';
   }
-  if (/\b(deposition|transcript)\b/.test(text)) return 'depositions';
   if (
     /\b(motion|memorandum|complaint|petition|brief|affidavit|response in|reply)\b/.test(
       text,
     )
   ) {
     return 'pleadings';
+  }
+  if (
+    /\b(deposition of|deposition transcript|notice of deposition)\b/.test(text)
+  ) {
+    return 'depositions';
+  }
+  if (
+    /\b(trial transcript|hearing transcript|testimony transcript)\b/.test(text)
+  ) {
+    return 'depositions';
   }
   if (
     /\b(order|opinion|ruling|judgment|report and recommendation)\b/.test(text)
@@ -341,12 +374,17 @@ export function routeWebFindings(
   for (const record of dossier.records) {
     if (!tied(record)) continue;
     const matchLevel = record.match.level;
+    const courtLike = looksLikeCourtDocument(record);
     const base = {
       url: record.url,
       sourceTitle: record.title,
       matchLevel,
       retrievedAt: record.retrievedAt,
       publishedAt: record.publishedAt,
+      rating: record.rating ?? null,
+      kind: record.kind,
+      searchProviders: record.searchProviders,
+      read: record.read,
     };
     let claimedDocumentType = false;
     for (const claim of record.claims) {
@@ -366,13 +404,23 @@ export function routeWebFindings(
       }
       // A court filing that mentions "board certified" is not board-certification
       // verification, a license lookup, an IME listing, or a degree record.
+      // Applies even when the model retagged kind to news or IME.
+      if (courtLike && TOPICS_NOT_FROM_COURT_CLAIMS.has(claim.topic ?? '')) {
+        continue;
+      }
       if (
-        (record.kind === 'court' || record.kind === 'justia') &&
-        TOPICS_NOT_FROM_COURT_CLAIMS.has(claim.topic ?? '')
+        CREDENTIAL_TOPICS.has(claim.topic ?? '') &&
+        record.match.level !== 'strong'
       ) {
         continue;
       }
       for (const sectionId of sectionsFor(claim)) {
+        if (
+          CREDENTIAL_SECTIONS.has(sectionId) &&
+          record.match.level !== 'strong'
+        ) {
+          continue;
+        }
         if (['order', 'pleading', 'deposition'].includes(claim.topic ?? '')) {
           claimedDocumentType = true;
         }
@@ -427,7 +475,7 @@ export function routeWebFindings(
     // An official listing page counts for its own sections even when no
     // sentence on it matched a rule.
     const official = officialSourceFor(record.url);
-    if (official && record.read === 'read') {
+    if (official && record.read === 'read' && record.match.level === 'strong') {
       for (const topic of official.topics) {
         if (topic !== 'certification_org' && topic !== 'board_certification')
           continue;
@@ -457,6 +505,7 @@ export function routeWebFindings(
     // record even when no single sentence matched a publication rule.
     if (
       record.kind === 'publication' &&
+      record.match.level === 'strong' &&
       !record.claims.some((claim) => claim.topic === 'publication')
     ) {
       push({
@@ -473,10 +522,7 @@ export function routeWebFindings(
     }
 
     // Court pages: file by document type when no statement already did.
-    if (
-      (record.kind === 'court' || record.kind === 'justia') &&
-      !claimedDocumentType
-    ) {
+    if (courtLike && !claimedDocumentType) {
       const sectionId = courtDocumentSection(record);
       if (sectionId) {
         push({
@@ -493,6 +539,13 @@ export function routeWebFindings(
       }
     }
 
+    // Possible and other-person pages belong under Other people, not the
+    // subject's directories, reviews, news, or advertising sections.
+    // Social listings may still appear as possible matches.
+    if (record.match.level !== 'strong' && record.kind !== 'social') {
+      continue;
+    }
+
     if (record.kind === 'social') {
       const institutional = /\/company\/|\/school\//i.test(record.url);
       const platform = record.platform
@@ -507,10 +560,10 @@ export function routeWebFindings(
             ? `${platform} profile`
             : short(record.title, 90),
         statement: institutional
-          ? 'A search result listed this as an official or employer social account connected to the expert’s work. It is not a personal profile of the expert. The page was not opened because it is shown only to signed-in users.'
+          ? 'A search result listed this as an official or employer social account connected to the expert’s work. It is not a personal profile of the expert. Profile URL found; the page was not read (login-gated).'
           : record.read === 'read'
-            ? record.summary
-            : 'A search result listed this profile. The page was not opened because it is shown only to signed-in users.',
+            ? `Page was read. ${record.summary}`.trim()
+            : 'Profile URL found. The page was not read because it is shown only to signed-in users.',
         quote: record.match.quote ?? record.snippet,
         basis: 'record',
         basisLabel: BASIS_LABEL.record,
@@ -551,9 +604,28 @@ export function routeWebFindings(
     }
     if (
       (record.kind === 'advertising' || record.kind === 'ime') &&
+      !courtLike &&
       !alreadyFiled('ime')
     ) {
       push(recordFinding('ime', short(record.title, 140)));
+    }
+    if (record.kind === 'review' && !alreadyFiled('patient-reviews')) {
+      push(recordFinding('patient-reviews', short(record.title, 140)));
+    }
+    if (
+      (record.kind === 'news' || record.kind === 'blog') &&
+      !alreadyFiled('news')
+    ) {
+      const newsFrom = record.read === 'read' ? 'page' : 'snippet';
+      const newsStatement =
+        newsFrom === 'page'
+          ? `Article text was read. ${record.summary}`.trim()
+          : `RSS/GDELT listing. Article text was not read. ${record.summary}`.trim();
+      push({
+        ...recordFinding('news', short(record.title, 140)),
+        statement: newsStatement,
+        from: newsFrom,
+      });
     }
     const officialPage = officialSourceFor(record.url);
     if (officialPage?.topics.includes('patent') && !alreadyFiled('patents')) {
@@ -769,8 +841,10 @@ const PUBLIC_SEARCH_LIMIT: Partial<Record<RoutedSectionId, string>> = {
   directories:
     'Public directory pages were searched. Login-gated member databases, including the DRI members-only area, were not accessed.',
   ime: 'A public search for IME, forensic, and expert-services advertising was performed. Paid expert-referral databases were not accessed.',
+  lawsuits:
+    'A public web search for court records naming the expert was performed. That is not a comprehensive malpractice or lawsuit search. Paid docket databases were not queried.',
   criminal:
-    'A public news and web search for criminal-record mentions was performed. Dedicated criminal-record databases were not queried.',
+    'A public news and web search for criminal-record mentions was performed. Dedicated criminal-record databases were not queried. This is not a comprehensive criminal-records search.',
   depositions:
     'A public web search for deposition or testimony transcripts was performed. Paid transcript databases were not accessed.',
   'testimony-inconsistencies':
@@ -877,6 +951,18 @@ export function publicSearchNote(
   return PUBLIC_SEARCH_LIMIT[sectionId] ?? null;
 }
 
+/** Shown when a section has findings from the global run but no dedicated topic search. */
+export function findingsCoverageNote(
+  dossier: WebResearchDossier | null | undefined,
+  sectionId: string,
+): string | null {
+  if (!dossier || !isRoutedSection(sectionId) || !webRunWorked(dossier)) {
+    return null;
+  }
+  if (topicQueriesForSection(dossier, sectionId) > 0) return null;
+  return 'These pages were found during the general web search. A dedicated search for this topic was not run.';
+}
+
 export function coverageLine(
   dossier: WebResearchDossier | null | undefined,
   sectionId: string,
@@ -900,7 +986,13 @@ export function coverageLine(
     parts.push(SEARCH_INCOMPLETE);
   } else if (display.length === 0) {
     if (queried) {
-      parts.push(TOPIC_SEARCHED_EMPTY);
+      if (sectionId === 'lawsuits') {
+        parts.push(
+          'No relevant records identified that qualify as a lawsuit or malpractice claim against this expert. An opinion, motion, or appointment that names the expert is not a lawsuit against the expert.',
+        );
+      } else {
+        parts.push(TOPIC_SEARCHED_EMPTY);
+      }
       if (sectionId === 'videos') parts.push(PRIOR_NOT_REUSED);
     } else {
       parts.push(omitted ? BUDGET_OMITTED : NOT_SEARCHED);

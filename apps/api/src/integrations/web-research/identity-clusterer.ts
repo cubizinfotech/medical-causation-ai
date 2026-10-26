@@ -113,6 +113,7 @@ export function clusterRecords(
   subjectLabel: string,
 ): { candidates: WebCandidate[]; records: WebRecord[] } {
   const subjectRecords: WebRecord[] = [];
+  const possibleRecords: WebRecord[] = [];
   const groups = new Map<
     string,
     { label: string; basis: string[]; records: WebRecord[] }
@@ -121,8 +122,12 @@ export function clusterRecords(
 
   for (const record of records) {
     if (record.match.level === 'none') continue;
-    if (record.match.level === 'strong' || record.match.level === 'possible') {
+    if (record.match.level === 'strong') {
       subjectRecords.push(record);
+      continue;
+    }
+    if (record.match.level === 'possible') {
+      possibleRecords.push(record);
       continue;
     }
     const fingerprint = fingerprints.get(record.id);
@@ -170,6 +175,18 @@ export function clusterRecords(
         `${subjectRecords.length} page${subjectRecords.length === 1 ? '' : 's'} match the name together with the profession, place, NPI or intake-note details given.`,
       ],
       recordIds: subjectRecords.map((r) => r.id),
+    });
+  }
+  if (possibleRecords.length > 0) {
+    candidates.push({
+      id: 'cand-possible',
+      label: `Possible match pages for ${subjectLabel.split(',')[0]} (not treated as confirmed credentials)`,
+      role: 'other',
+      confidence: 'medium',
+      basis: [
+        'These pages only partly agree with the name, profession or place given. They are listed as possible matches and are not treated as the subject’s credentials.',
+      ],
+      recordIds: possibleRecords.map((r) => r.id),
     });
   }
   let index = 0;

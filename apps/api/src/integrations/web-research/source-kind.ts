@@ -155,6 +155,48 @@ const PUBLICATION_DOMAINS = [
   'nih.gov',
 ];
 
+const BLOCKED_TITLE =
+  /^(just a moment|attention required|access denied|please (verify|wait)|captcha|checking your browser|enable javascript|are you (a |human)|cloudflare|sorry, you have been blocked|one more step)/i;
+
+/** Titles copied from a login wall or bot challenge must not appear as findings. */
+export function isBlockedChallengeTitle(
+  title: string | null | undefined,
+): boolean {
+  const value = (title ?? '').replace(/\s+/g, ' ').trim();
+  if (!value) return false;
+  return BLOCKED_TITLE.test(value) || /\bcaptcha\b/i.test(value);
+}
+
+export function blockedPageDisplayTitle(url: string): string {
+  let hostname = url;
+  try {
+    hostname = new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    hostname = url;
+  }
+  return `${hostname} — not read (login or bot protection)`;
+}
+
+/** True when the URL is a court docket, opinion host, or Justia case page. */
+export function isCourtSourceUrl(url: string): boolean {
+  const kind = classifyUrl(url, 'web').kind;
+  return kind === 'court' || kind === 'justia';
+}
+
+export function looksLikeCourtDocument(input: {
+  kind: WebSourceKind;
+  url: string;
+  title?: string | null;
+  summary?: string | null;
+}): boolean {
+  if (input.kind === 'court' || input.kind === 'justia') return true;
+  if (isCourtSourceUrl(input.url)) return true;
+  const text = `${input.title ?? ''} ${input.summary ?? ''}`;
+  return /\b(united states district court|memorandum opinion|order on motion|court of appeals?)\b/i.test(
+    text,
+  );
+}
+
 /** Deterministic first guess from the address. The model may refine it. */
 export function classifyUrl(
   url: string,

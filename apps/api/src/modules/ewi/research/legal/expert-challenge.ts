@@ -161,6 +161,7 @@ export function validateChallengeReading(
     return undetermined;
   }
   if (!normalizedQuote.includes(surname.toLowerCase())) return undetermined;
+  if (/\bdefer(?:red|s|ring)?\b/i.test(quote)) return undetermined;
   if (outcome === 'not_challenged') {
     return role === 'other' ? { outcome, role, quote } : undetermined;
   }
