@@ -55,6 +55,8 @@ const DIRECTORIES: Array<{ id: string; domains: string[] }> = [
       'forensisgroup.com',
       'testifyingexpert.com',
       'expertinstitute.com',
+      'expertwitnessprofiler.com',
+      'theaacn.org',
       'thelitigationconsultant.com',
       'trialsmith.com',
       'litigationexperts.com',
@@ -321,6 +323,10 @@ export const WEB_RESEARCH_SOURCE_IDS = [
   'corporate_affiliations',
   'university',
   'state_court_records',
+  'patents',
+  'trademarks',
+  'awards',
+  'military_claims',
 ] as const;
 
 export type WebResearchSourceId = (typeof WEB_RESEARCH_SOURCE_IDS)[number];
@@ -354,4 +360,8 @@ export const WEB_SOURCE_LABEL: Record<string, string> = {
   justia: 'Justia pages',
   university: 'university or faculty pages',
   state_court_records: 'court records',
+  patents: 'patents',
+  trademarks: 'trademarks',
+  awards: 'awards and honors',
+  military_claims: 'military-service claims',
 };

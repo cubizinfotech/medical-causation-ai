@@ -54,8 +54,16 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * evidence-based questions with a shortfall explanation.
  * 3.10.1: question shortfall names the extra evidence that would be needed;
  * truncated catalog author lists are “unable to verify,” not first author.
+ * 3.10.2: public web search of patents, IME advertising, DRI, expert
+ * directories, awards and military claims is no longer labelled
+ * “not implemented”; official-database verification is still incomplete
+ * unless a dedicated source ran.
+ * 3.10.3: CV comparison, publications, and the executive summary use the
+ * same publication status; claim counts account for uncompared rows; a
+ * possible NPI in another city is not treated as a confirmed identity;
+ * opening-page wording states the source basis instead of over-claiming.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.10.1';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.3';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis and other licensed PDFs are not stored unless legally permitted.';

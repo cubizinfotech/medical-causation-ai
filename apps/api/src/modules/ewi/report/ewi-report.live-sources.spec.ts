@@ -287,23 +287,16 @@ describe('EWI report with live sources', () => {
     },
   });
 
-  it('puts the NPI record in background and its licenses under Licenses', () => {
-    expect(sectionText(document, 'background')).toMatch(
-      /NPI Registry: Jane A\. Smith, MD/,
-    );
+  it('does not treat a possible NPI record as a verified identity or license', () => {
+    const background = sectionText(document, 'background');
+    expect(background).toMatch(/Identity not confirmed — one possible NPI record/);
+    expect(background).toMatch(/Possible record: NPI 1234567893/);
+    expect(background).toMatch(/registry city PHOENIX/);
+    expect(background).toMatch(/not a confirmed identity/i);
+    expect(background).not.toMatch(/Status: Verified/);
     const licenses = sectionText(document, 'licenses');
-    expect(licenses).toMatch(/self-reported/);
-    expect(licenses).toMatch(/Licenses reported to the NPI Registry/);
-    expect(licenses).toMatch(/AZ 12345 \(primary\)/);
-    expect(licenses).toMatch(/not official license verification/i);
-  });
-
-  it('shows the identity result in the background section', () => {
-    const text = sectionText(document, 'background');
-    expect(text).toMatch(/Identity not confirmed — one possible NPI record/);
-    expect(text).toMatch(
-      /Possible record: NPI 1234567893 — Jane A\. Smith, MD/,
-    );
+    expect(licenses).not.toMatch(/Licenses reported to the NPI Registry/);
+    expect(licenses).not.toMatch(/AZ 12345 \(primary\)/);
   });
 
   it('lists admissibility challenges with the court’s words', () => {

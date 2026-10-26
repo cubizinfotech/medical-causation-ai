@@ -210,6 +210,33 @@ describe('WebResearchEngine', () => {
     expect(dossier.queriesRun).toBeGreaterThan(serper.requests.filter((r) => (r.page ?? 1) === 1).length);
   });
 
+  it('sends patent, IME and directory queries when the budget cannot run every search', async () => {
+    const provider = fakeProvider('fake_search', allHits, { budget: 35 });
+    await new WebResearchEngine({
+      settings: { ...settings, maxQueries: 35 },
+      providers: [provider],
+      fetcher: fakeFetcher(),
+    }).run(query);
+    const queries = provider.requests.map((request) => request.query).join('\n');
+    expect(queries).toMatch(/site:patents\.google\.com/);
+    expect(queries).toMatch(/independent medical examination/);
+    expect(queries).toMatch(/site:dri\.org/);
+    expect(queries).toMatch(/site:expertinstitute\.com/);
+  });
+
+  it('records omitted topics when the query budget is smaller than the plan', async () => {
+    const provider = fakeProvider('fake_search', allHits, { budget: 8 });
+    const dossier = await new WebResearchEngine({
+      settings: { ...settings, maxQueries: 8 },
+      providers: [provider],
+      fetcher: fakeFetcher(),
+    }).run(query);
+    expect(dossier.omittedTopics?.length).toBeGreaterThan(0);
+    expect(dossier.limitations.join(' ')).toMatch(
+      /query budget or time limit was reached/i,
+    );
+  });
+
   it('stops calling Serper after a credit failure, including news-lead resolution', async () => {
     let serperCalls = 0;
     const serper = fakeProvider('serper', [], {

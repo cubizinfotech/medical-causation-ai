@@ -262,7 +262,10 @@ describe('Demery report regression', () => {
     const accreditation = sectionText(document, 'university-accreditation');
     expect(accreditation).not.toMatch(/University of Florida/);
     expect(accreditation).not.toMatch(/not checked against an accreditor/);
-    expect(accreditation).toMatch(/was not searched|not implemented/i);
+    expect(accreditation).toMatch(
+      /dedicated search for this topic ran|Public accreditation listings were searched/i,
+    );
+    expect(accreditation).not.toMatch(/not implemented/i);
   });
 
   it('files the article, the company, the address and the court documents', () => {

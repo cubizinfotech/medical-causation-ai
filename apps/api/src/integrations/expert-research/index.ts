@@ -24,7 +24,7 @@ export {
 } from './live/case-caption';
 export type { CaptionStatus } from './live/case-caption';
 export type { AuthorPosition } from './live/author-position';
-export { articleTitle, sameTitle } from './live/publication-lookup';
+export { articleTitle, sameTitle, yearsAgree } from './live/publication-lookup';
 export {
   classifyPublicationType,
   normalizeDoi,

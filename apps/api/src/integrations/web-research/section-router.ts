@@ -518,6 +518,56 @@ export function routeWebFindings(
         verification: null,
       });
     }
+
+    const alreadyFiled = (sectionId: RoutedSectionId): boolean => {
+      const prefix = `${sectionId}|${record.url}|`;
+      for (const key of seen) {
+        if (key.startsWith(prefix)) return true;
+      }
+      return false;
+    };
+    const recordFinding = (
+      sectionId: RoutedSectionId,
+      title: string,
+    ): RoutedFinding => ({
+      ...base,
+      sectionId,
+      title,
+      statement: record.summary,
+      quote: record.match.quote ?? record.snippet,
+      basis: 'record',
+      basisLabel: BASIS_LABEL.record,
+      from: record.read === 'read' ? 'page' : 'snippet',
+      verification: verificationFor(sectionId),
+    });
+    if (record.kind === 'directory' && !alreadyFiled('directories')) {
+      push(recordFinding('directories', short(record.title, 140)));
+    }
+    if (
+      (record.kind === 'video' || record.kind === 'presentation') &&
+      !alreadyFiled('videos')
+    ) {
+      push(recordFinding('videos', short(record.title, 140)));
+    }
+    if (
+      (record.kind === 'advertising' || record.kind === 'ime') &&
+      !alreadyFiled('ime')
+    ) {
+      push(recordFinding('ime', short(record.title, 140)));
+    }
+    const officialPage = officialSourceFor(record.url);
+    if (
+      officialPage?.topics.includes('patent') &&
+      !alreadyFiled('patents')
+    ) {
+      push(recordFinding('patents', short(record.title, 140)));
+    }
+    if (
+      officialPage?.topics.includes('military') &&
+      !alreadyFiled('awards-military')
+    ) {
+      push(recordFinding('awards-military', short(record.title, 140)));
+    }
   }
 
   // One entry per certification organization, however many pages name it.
@@ -630,7 +680,7 @@ const SECTION_SEARCH: Record<
   patents: { what: 'a patent or trademark', topics: ['patents'] },
   'awards-military': {
     what: 'an award, honor or military service',
-    topics: ['awards'],
+    topics: ['awards', 'military_claims'],
   },
   ime: {
     what: 'IME or expert-services advertising',
@@ -709,6 +759,27 @@ const TOPIC_SEARCHED_EMPTY =
   'A dedicated search for this topic ran and returned no matching public result. That is not proof that none exist.';
 const PRIOR_NOT_REUSED =
   'Results from other investigations are not reused or revalidated here.';
+const BUDGET_OMITTED =
+  'This category was planned but not searched because the query budget or time limit was reached. That is not proof that nothing exists.';
+const NOT_IMPLEMENTED_LINE =
+  /is not implemented in this investigation/i;
+
+/** Public search ran; official database login or dedicated API was not used. */
+const PUBLIC_SEARCH_LIMIT: Partial<Record<RoutedSectionId, string>> = {
+  patents:
+    'A public web search for patents and trademarks was performed. Official USPTO verification through a dedicated database login was not completed.',
+  'awards-military':
+    'A public web search for awards, medals and military-service claims was performed. Official military verification was not completed.',
+  directories:
+    'Public directory pages were searched. Login-gated member databases, including the DRI members-only area, were not accessed.',
+  ime: 'A public search for IME, forensic, and expert-services advertising was performed. Paid expert-referral databases were not accessed.',
+  criminal:
+    'A public news and web search for criminal-record mentions was performed. Dedicated criminal-record databases were not queried.',
+  depositions:
+    'A public web search for deposition or testimony transcripts was performed. Paid transcript databases were not accessed.',
+  'university-accreditation':
+    'Public accreditation listings were searched when an institution was identified. That is not a complete official accreditation file.',
+};
 
 function blockedNote(
   dossier: WebResearchDossier,
@@ -742,6 +813,12 @@ function topicQueriesForSection(
   dossier: WebResearchDossier,
   sectionId: RoutedSectionId,
 ): number {
+  if (sectionId === 'university-accreditation') {
+    const hosts = (dossier.executedQueries ?? []).filter((entry) =>
+      /site:chea\.org|site:ope\.ed\.gov/.test(entry.query),
+    ).length;
+    if (hosts > 0) return hosts;
+  }
   if (!dossier.topics) return 0;
   const wanted = SECTION_SEARCH[sectionId].topics;
   return dossier.topics
@@ -749,10 +826,46 @@ function topicQueriesForSection(
     .reduce((sum, entry) => sum + entry.queries, 0);
 }
 
+function topicOmittedForSection(
+  dossier: WebResearchDossier,
+  sectionId: RoutedSectionId,
+): boolean {
+  const wanted = SECTION_SEARCH[sectionId].topics;
+  if (wanted.length === 0) return false;
+  return (dossier.omittedTopics ?? []).some((entry) =>
+    wanted.includes(entry.topic),
+  );
+}
+
+export function displayStructuredCoverage(
+  dossier: WebResearchDossier | null | undefined,
+  sectionId: string,
+  structured: string[],
+): string[] {
+  if (!isRoutedSection(sectionId)) return structured;
+  const queried =
+    !!dossier &&
+    webRunWorked(dossier) &&
+    topicQueriesForSection(dossier, sectionId) > 0;
+  if (!queried) return structured;
+  return structured.filter((line) => !NOT_IMPLEMENTED_LINE.test(line));
+}
+
 /**
  * Empty-section copy. A global web run is not treated as a search of every
  * category. Dedicated source lines (structured) speak for themselves.
  */
+export function publicSearchNote(
+  dossier: WebResearchDossier | null | undefined,
+  sectionId: string,
+): string | null {
+  if (!dossier || !isRoutedSection(sectionId) || !webRunWorked(dossier)) {
+    return null;
+  }
+  if (topicQueriesForSection(dossier, sectionId) === 0) return null;
+  return PUBLIC_SEARCH_LIMIT[sectionId] ?? null;
+}
+
 export function coverageLine(
   dossier: WebResearchDossier | null | undefined,
   sectionId: string,
@@ -768,16 +881,24 @@ export function coverageLine(
   const worked = Boolean(dossier && webRunWorked(dossier));
   const queried =
     !!dossier && worked && topicQueriesForSection(dossier, sectionId) > 0;
+  const omitted = Boolean(dossier && topicOmittedForSection(dossier, sectionId));
+  const display = displayStructuredCoverage(dossier, sectionId, structured);
   if (attempted && !worked) {
     parts.push(SEARCH_INCOMPLETE);
-  } else if (structured.length === 0) {
-    parts.push(queried ? TOPIC_SEARCHED_EMPTY : NOT_SEARCHED);
-    if (queried && sectionId === 'videos') parts.push(PRIOR_NOT_REUSED);
+  } else if (display.length === 0) {
+    if (queried) {
+      parts.push(TOPIC_SEARCHED_EMPTY);
+      if (sectionId === 'videos') parts.push(PRIOR_NOT_REUSED);
+    } else {
+      parts.push(omitted ? BUDGET_OMITTED : NOT_SEARCHED);
+    }
   }
+  const limit = publicSearchNote(dossier, sectionId);
+  if (limit) parts.push(limit);
   if (dossier) {
     const blocked = blockedNote(dossier, sectionId);
     if (blocked) parts.push(blocked);
   }
-  parts.push(...structured);
+  parts.push(...display);
   return parts.join(' ');
 }

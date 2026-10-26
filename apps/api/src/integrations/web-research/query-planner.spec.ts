@@ -1,6 +1,10 @@
 import { parsePersonName } from '../expert-research/live/person-name';
 import type { IdentitySubject } from './identity-assess';
-import { planFollowUps, planQueries } from './query-planner';
+import {
+  planFollowUps,
+  planQueries,
+  selectQueriesForBudget,
+} from './query-planner';
 
 const subject = (over: Partial<IdentitySubject> = {}): IdentitySubject => ({
   name: parsePersonName('Jason A. Demery') as NonNullable<
@@ -38,6 +42,7 @@ describe('planQueries', () => {
       'grants',
       'patents',
       'awards',
+      'military_claims',
       'ime',
       'criminal',
     ]) {
@@ -70,7 +75,12 @@ describe('planQueries', () => {
     expect(socialQueries.some((q) => q.includes('site:bsky.app'))).toBe(true);
     expect(plans.some((plan) => plan.request.query.includes('site:dri.org') && /speaker|conference/.test(plan.request.query))).toBe(true);
     expect(plans.some((plan) => plan.request.query.includes('site:abpp.org'))).toBe(true);
+    expect(plans.some((plan) => plan.request.query.includes('site:theaacn.org'))).toBe(true);
     expect(plans.some((plan) => plan.request.query.includes('site:hgexperts.com'))).toBe(true);
+    expect(plans.some((plan) => plan.request.query.includes('site:expertinstitute.com'))).toBe(true);
+    expect(plans.some((plan) => plan.request.query.includes('site:expertwitnessprofiler.com'))).toBe(true);
+    expect(plans.some((plan) => plan.request.query.includes('site:patents.google.com'))).toBe(true);
+    expect(plans.some((plan) => plan.request.query.includes('site:valor.defense.gov'))).toBe(true);
     const identity = plans.find((plan) => plan.topic === 'identity');
     expect(identity?.paginate).toBe(true);
     expect(identity?.request.num).toBe(20);
@@ -174,6 +184,9 @@ describe('planQueries', () => {
     expect(queries.some((q) => q.includes('site:expertwitness.com'))).toBe(
       true,
     );
+    expect(queries.some((q) => q.includes('site:expertinstitute.com'))).toBe(
+      true,
+    );
   });
 
   it('gives every query a unique id', () => {
@@ -199,6 +212,21 @@ describe('planFollowUps', () => {
     expect(license?.official?.topics).toContain('license');
     const abpp = plans.find((plan) => plan.official?.label === 'abpp.org');
     expect(abpp?.official?.topics).toContain('board_certification');
+  });
+
+  it('searches extra license states named on a page', () => {
+    const plans = planFollowUps(subject(), {
+      acronyms: [],
+      state: 'FL',
+      licenseStates: ['TX', 'GA'],
+    });
+    const licenseQueries = plans
+      .filter((plan) => plan.topic === 'license')
+      .map((plan) => plan.request.query)
+      .join('\n');
+    expect(licenseQueries).toMatch(/mqa-internet\.doh\.state\.fl\.us/);
+    expect(licenseQueries).toMatch(/TX/);
+    expect(licenseQueries).toMatch(/GA/);
   });
 
   it('does not point a non-Florida expert at the Florida lookup', () => {
@@ -246,6 +274,27 @@ describe('planQueries order', () => {
     const topics = planQueries(subject()).map((plan) => plan.topic);
     expect(topics.indexOf('grants')).toBeLessThan(topics.indexOf('news'));
     expect(topics.indexOf('ime')).toBeLessThan(topics.indexOf('reviews'));
+    expect(topics.indexOf('patents')).toBeLessThan(topics.indexOf('news'));
     expect(topics.indexOf('criminal')).toBeLessThan(topics.indexOf('video'));
+  });
+});
+
+describe('selectQueriesForBudget', () => {
+  it('keeps patents, IME and directories when the budget cannot run every query', () => {
+    const { selected, omitted } = selectQueriesForBudget(
+      planQueries(subject()),
+      35,
+    );
+    const topics = new Set(selected.map((plan) => plan.topic));
+    expect(topics.has('patents')).toBe(true);
+    expect(topics.has('ime')).toBe(true);
+    expect(topics.has('advertising')).toBe(true);
+    expect(topics.has('directories')).toBe(true);
+    expect(topics.has('military_claims')).toBe(true);
+    expect(
+      omitted.some(
+        (plan) => plan.topic === 'reviews' || plan.topic === 'news',
+      ),
+    ).toBe(true);
   });
 });

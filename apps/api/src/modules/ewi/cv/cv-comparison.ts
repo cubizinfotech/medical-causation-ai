@@ -1,9 +1,13 @@
 import {
   articleTitle,
+  authorPositionIn,
   describePosition,
+  parsePersonName,
+  parseYear,
   sameTitle,
   stateName,
   taxonomyMatches,
+  yearsAgree,
   type ExpertEvidenceItem,
   type ExpertIdentityResolution,
   type ExpertResearchSourceResult,
@@ -25,7 +29,6 @@ import type {
 
 /** Open Payments totals at or above this, missing from the CV, are flagged. */
 const UNDISCLOSED_PAYMENT_USD = 1000;
-const MAX_EDUCATION_ROWS = 8;
 
 export interface CvComparisonInput {
   extraction: CvExtraction;
@@ -33,6 +36,7 @@ export interface CvComparisonInput {
   sourceResults: ExpertResearchSourceResult[];
   identity: ExpertIdentityResolution | null;
   publications: PublicationLookupResult[];
+  expertName?: string;
 }
 
 type Row = Omit<CvComparison, 'id'>;
@@ -50,13 +54,16 @@ export function compareCv(input: CvComparisonInput): CvCheck {
     ...licenseRows(claims, input),
     ...boardRows(claims),
     ...publicationCountRows(claims, input.evidence),
-    ...publicationTitleRows(claims, input.publications),
+    ...publicationTitleRows(claims, input),
     ...unreadPageRows(extraction),
     ...industryRows(claims, input),
     ...appointmentRows(claims, input.evidence),
     ...expertWitnessRows(claims, input.evidence),
     ...educationRows(claims),
+    ...membershipRows(claims),
+    ...awardRows(claims),
   ];
+  rows.push(...leftoverClaimRows(claims, rows));
   return {
     document: extraction.document,
     status: extraction.status,
@@ -79,6 +86,8 @@ const TOPIC_FIELD: Record<CvComparisonTopic, VerificationField> = {
   appointment: 'university_affiliation',
   expert_witness: 'cv',
   education: 'education',
+  membership: 'membership',
+  award: 'award',
 };
 
 /**
@@ -380,12 +389,13 @@ function publicationCountRows(
 
 function publicationTitleRows(
   claims: CvClaim[],
-  lookups: PublicationLookupResult[],
+  input: CvComparisonInput,
 ): Row[] {
   const rows: Row[] = [];
   const seen: string[] = [];
+  const lookups = input.publications;
   for (const claim of byCategory(claims, 'publication')) {
-    const title = claim.details.title;
+    const title = claim.details.title || articleTitle(claim.statement);
     if (!title) continue;
     const identityKey =
       claim.details.doi?.toLowerCase() ?? claim.details.pmid ?? title;
@@ -397,7 +407,9 @@ function publicationTitleRows(
       continue;
     }
     seen.push(identityKey);
-    const lookup = lookups.find((entry) => matchesLookup(entry, claim));
+    const catalogLookup = lookups.find((entry) => matchesLookup(entry, claim));
+    const evidenceLookup = lookupFromCollectedPublications(claim, input);
+    const lookup = preferPublicationLookup(catalogLookup, evidenceLookup);
     const catalogs = lookup ? checkedCatalogs(lookup) : '';
     const failed = (lookup?.checks ?? []).filter(
       (check) => check.outcome === 'error',
@@ -550,10 +562,14 @@ function matchesLookup(
   entry: PublicationLookupResult,
   claim: CvClaim,
 ): boolean {
-  const title = claim.details.title ?? '';
+  const title = claim.details.title || articleTitle(claim.statement);
+  const catalogTitle = entry.work?.title ?? entry.title;
   if (
-    sameTitle(entry.title, title) ||
-    sameTitle(articleTitle(entry.title), articleTitle(title))
+    (title &&
+      (sameTitle(entry.title, title) ||
+        sameTitle(articleTitle(entry.title), articleTitle(title)) ||
+        sameTitle(articleTitle(catalogTitle), articleTitle(title)))) ||
+    (claim.statement && sameTitle(articleTitle(claim.statement), catalogTitle))
   ) {
     return true;
   }
@@ -567,6 +583,132 @@ function matchesLookup(
   return Boolean(
     claim.details.pmid && entry.pmid && claim.details.pmid === entry.pmid,
   );
+}
+
+function preferPublicationLookup(
+  catalog: PublicationLookupResult | undefined,
+  evidence: PublicationLookupResult | undefined,
+): PublicationLookupResult | undefined {
+  if (catalog && catalog.status !== 'not_found' && catalog.status !== 'unavailable') {
+    return catalog;
+  }
+  if (evidence) return evidence;
+  return catalog;
+}
+
+function lookupFromCollectedPublications(
+  claim: CvClaim,
+  input: CvComparisonInput,
+): PublicationLookupResult | undefined {
+  const expert =
+    parsePersonName(input.expertName ?? '') ??
+    parsePersonName(input.identity?.identity?.name ?? '');
+  const claimYear =
+    parseYear(claim.details.year) ?? parseYear(claim.statement);
+  for (const item of input.evidence) {
+    if (item.category !== 'publication') continue;
+    if (item.identityMatch === 'uncertain') continue;
+    if (!['pubmed', 'openalex', 'crossref', 'orcid'].includes(item.sourceId)) {
+      continue;
+    }
+    const raw = item.raw ?? {};
+    const authors = authorsFromRaw(raw);
+    const year = parseYear(stringField(raw, ['pubdate', 'year', 'publicationDate']));
+    const doi =
+      typeof raw.doi === 'string' ? raw.doi : undefined;
+    const pmid =
+      typeof raw.pmid === 'string'
+        ? raw.pmid
+        : typeof raw.pmid === 'number'
+          ? String(raw.pmid)
+          : undefined;
+    const title = item.title;
+    const claimTitle = claim.details.title || articleTitle(claim.statement);
+    const doiHit =
+      Boolean(claim.details.doi && doi) &&
+      claim.details.doi!.toLowerCase() === doi!.toLowerCase();
+    const pmidHit = Boolean(claim.details.pmid && pmid && claim.details.pmid === pmid);
+    const titleHit =
+      Boolean(claimTitle) &&
+      (sameTitle(claimTitle, title) ||
+        sameTitle(articleTitle(claimTitle), articleTitle(title)) ||
+        sameTitle(articleTitle(claim.statement), articleTitle(title)));
+    if (!doiHit && !pmidHit && !titleHit) continue;
+    if (titleHit && !doiHit && !pmidHit && !yearsAgree(claimYear, year)) {
+      continue;
+    }
+    const place = expert ? authorPositionIn(authors, expert) : null;
+    const listed =
+      place ??
+      (typeof raw.authorPosition === 'string' &&
+      typeof raw.authorIndex === 'number' &&
+      typeof raw.authorCount === 'number'
+        ? {
+            position: raw.authorPosition as NonNullable<
+              PublicationLookupResult['authorPosition']
+            >,
+            index: raw.authorIndex,
+            count: raw.authorCount,
+          }
+        : null);
+    const catalog =
+      item.sourceId === 'pubmed'
+        ? 'PubMed'
+        : item.sourceId === 'crossref'
+          ? 'Crossref'
+          : item.sourceId === 'orcid'
+            ? 'ORCID'
+            : 'OpenAlex';
+    return {
+      title: claimTitle,
+      status: listed ? 'authored' : 'author_unconfirmed',
+      catalog,
+      work: {
+        title,
+        url: item.url ?? '',
+        year,
+        authors,
+      },
+      doi,
+      pmid,
+      venue:
+        typeof raw.journal === 'string' ? raw.journal : undefined,
+      matchMethod: doiHit ? 'doi' : pmidHit ? 'pmid' : 'title',
+      authorPosition: listed?.position,
+      authorIndex: listed?.index,
+      authorCount: listed?.count ?? authors.length,
+      checks: [
+        {
+          catalog,
+          outcome: 'found',
+          authorCount: authors.length,
+        },
+      ],
+    };
+  }
+  return undefined;
+}
+
+function authorsFromRaw(raw: Record<string, unknown>): string[] {
+  for (const key of ['authors', 'authorList', 'authorNames']) {
+    const value = raw[key];
+    if (Array.isArray(value) && value.every((entry) => typeof entry === 'string')) {
+      return value.map((entry) => entry.trim()).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function stringField(
+  raw: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = raw[key];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (typeof value === 'number') return String(value);
+  }
+  return undefined;
 }
 
 function unreadPageRows(extraction: CvExtraction): Row[] {
@@ -734,31 +876,38 @@ function appointmentRows(
         (value): value is string => typeof value === 'string',
       )
     : [];
-  if (institutions.length === 0) return [];
-  return byCategory(claims, 'appointment')
-    .filter((claim) => claim.details.institution)
-    .flatMap((claim) => {
-      const match = institutions.find((institution) =>
-        sameCompany(institution, claim.details.institution!),
-      );
-      return match
-        ? [
-            {
-              topic: 'appointment' as const,
-              label: 'partially_verified' as const,
-              severity: 'low' as const,
-              title: `Affiliation with ${claim.details.institution} appears in OpenAlex`,
-              cv: cvSide(claim),
-              source: {
-                name: 'OpenAlex',
-                statement: `Last known institution: ${match}.`,
-                url: profile?.url,
-              },
-              note: 'OpenAlex shows the institution on publications, not the title or dates of the position.',
-            },
-          ]
-        : [];
-    });
+  return byCategory(claims, 'appointment').map((claim) => {
+    const institution = claim.details.institution;
+    const match = institution
+      ? institutions.find((entry) => sameCompany(entry, institution))
+      : undefined;
+    if (match) {
+      return {
+        topic: 'appointment' as const,
+        label: 'partially_verified' as const,
+        severity: 'low' as const,
+        title: `Affiliation with ${institution} appears in OpenAlex`,
+        cv: cvSide(claim),
+        source: {
+          name: 'OpenAlex',
+          statement: `Last known institution: ${match}.`,
+          url: profile?.url,
+        },
+        note: 'OpenAlex shows the institution on publications, not the title or dates of the position.',
+      };
+    }
+    return {
+      topic: 'appointment' as const,
+      label: 'unable_to_verify' as const,
+      severity: 'low' as const,
+      title: `Appointment: ${claim.statement}`,
+      cv: cvSide(claim),
+      source: null,
+      note: institutions.length === 0
+        ? 'No OpenAlex author profile was matched, so this appointment was not compared. That is not a finding that the position is false.'
+        : 'This institution was not on the matched OpenAlex profile. OpenAlex lists publication affiliations, not every appointment.',
+    };
+  });
 }
 
 function expertWitnessRows(
@@ -787,9 +936,8 @@ function expertWitnessRows(
 }
 
 function educationRows(claims: CvClaim[]): Row[] {
-  return [...byCategory(claims, 'education'), ...byCategory(claims, 'training')]
-    .slice(0, MAX_EDUCATION_ROWS)
-    .map((claim) => ({
+  return [...byCategory(claims, 'education'), ...byCategory(claims, 'training')].map(
+    (claim) => ({
       topic: 'education' as const,
       label: 'unable_to_verify' as const,
       severity: 'low' as const,
@@ -797,7 +945,134 @@ function educationRows(claims: CvClaim[]): Row[] {
       cv: cvSide(claim),
       source: null,
       note: 'No education source is connected. Check the school registrar, the residency program, or the state board profile.',
-    }));
+    }),
+  );
+}
+
+function membershipRows(claims: CvClaim[]): Row[] {
+  return byCategory(claims, 'membership').map((claim) => ({
+    topic: 'membership' as const,
+    label: 'unable_to_verify' as const,
+    severity: 'low' as const,
+    title: `Membership: ${claim.statement}`,
+    cv: cvSide(claim),
+    source: null,
+    note: 'No membership directory is connected for this claim. A missing comparison is not proof the membership is false.',
+  }));
+}
+
+function awardRows(claims: CvClaim[]): Row[] {
+  return byCategory(claims, 'award').map((claim) => ({
+    topic: 'award' as const,
+    label: 'unable_to_verify' as const,
+    severity: 'low' as const,
+    title: `Award: ${claim.statement}`,
+    cv: cvSide(claim),
+    source: null,
+    note: 'No awards source is connected for this claim. A missing comparison is not proof the award is false.',
+  }));
+}
+
+function leftoverClaimRows(claims: CvClaim[], rows: Row[]): Row[] {
+  const used = new Set(
+    rows
+      .map((row) => row.cv?.claimId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const comparedTitles = claims
+    .filter(
+      (claim) => used.has(claim.id) && claim.category === 'publication',
+    )
+    .map((claim) => claim.details.title || articleTitle(claim.statement));
+  return claims.flatMap((claim) => {
+    if (used.has(claim.id)) return [];
+    if (
+      claim.category === 'publication' &&
+      comparedTitles.some((title) =>
+        sameTitle(title, claim.details.title || articleTitle(claim.statement)),
+      )
+    ) {
+      return [];
+    }
+    const topic = leftoverTopic(claim.category);
+    return [
+      {
+        topic,
+        label: 'unable_to_verify' as const,
+        severity: 'low' as const,
+        title: claim.statement,
+        cv: cvSide(claim),
+        source: null,
+        note: 'This CV claim was read but was not compared with a connected source. It is not verified and is not treated as false.',
+      },
+    ];
+  });
+}
+
+function leftoverTopic(category: CvClaim['category']): CvComparisonTopic {
+  if (category === 'training') return 'education';
+  if (
+    category === 'license' ||
+    category === 'specialty' ||
+    category === 'board_certification' ||
+    category === 'publications_count' ||
+    category === 'publication' ||
+    category === 'industry_relationship' ||
+    category === 'appointment' ||
+    category === 'expert_witness' ||
+    category === 'education' ||
+    category === 'membership' ||
+    category === 'award'
+  ) {
+    return category;
+  }
+  return 'education';
+}
+
+/** Opening-page count line: extracted claims vs comparison rows. */
+export function cvComparisonCountSummary(check: CvCheck): string {
+  const comparedIds = new Set(
+    check.comparisons
+      .map((row) => row.cv?.claimId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const comparedClaims = check.claims.filter((claim) =>
+    comparedIds.has(claim.id),
+  ).length;
+  const combined =
+    check.claims.length - comparedClaims;
+  const sourceOnly = check.comparisons.filter((row) => !row.cv?.claimId).length;
+  const counts = (
+    [
+      'conflicting',
+      'not_found',
+      'not_verified',
+      'partially_verified',
+      'verified',
+      'unable_to_verify',
+    ] as const
+  )
+    .map((label) => ({
+      label,
+      count: check.comparisons.filter((row) => row.label === label).length,
+    }))
+    .filter((entry) => entry.count > 0)
+    .map((entry) => `${CV_LABEL_TEXT[entry.label]}: ${entry.count}`)
+    .join('; ');
+  return [
+    `${check.claims.length} claim(s) were read from the uploaded CV.`,
+    `${comparedClaims} of those claims appear in the comparison below.`,
+    sourceOnly > 0
+      ? `${sourceOnly} additional row(s) come from sources and are not CV claims.`
+      : '',
+    combined > 0
+      ? `${combined} extracted claim(s) are duplicate citations already compared, or were folded into another row.`
+      : '',
+    'Not every extracted claim is independently verified. “Not checked” means no connected source covers that claim.',
+    counts,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 function stateLabel(code: string | undefined): string {

@@ -79,7 +79,9 @@ export type CvComparisonTopic =
   | 'industry_relationship'
   | 'appointment'
   | 'expert_witness'
-  | 'education';
+  | 'education'
+  | 'membership'
+  | 'award';
 
 /** A CV statement set against what a source shows. */
 export interface CvComparison {

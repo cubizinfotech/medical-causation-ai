@@ -582,7 +582,7 @@ describe('investigation workflow', () => {
   it('caches safe public results and avoids a second provider call', async () => {
     const cache = new PublicResearchCache(60_000);
     const stages = EWI_WORKFLOW_STAGES.filter((stage) =>
-      ['identify-expert', 'patents', 'report'].includes(stage.id),
+      ['identify-expert', 'grants', 'report'].includes(stage.id),
     );
     let calls = 0;
     const research = {

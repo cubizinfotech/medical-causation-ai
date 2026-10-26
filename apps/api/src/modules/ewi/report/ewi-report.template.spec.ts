@@ -45,6 +45,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.3');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -463,6 +464,61 @@ describe('EWI report template', () => {
     expect(text).toMatch(/confirmed first author/i);
     expect(text).toContain('https://pubmed.ncbi.nlm.nih.gov/99/');
     expect(text).toContain('CV citation:');
+    expect(text).toContain('Verified citation:');
+  });
+
+  it('does not label an unverified catalog hit as a verified citation', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-09-23T00:00:00.000Z',
+      cvCheck: {
+        document: {
+          id: 'cv1',
+          name: 'Doe-CV.pdf',
+          pageCount: 4,
+          unreadablePages: [],
+          ocrPages: [],
+        },
+        status: 'completed',
+        claims: [],
+        warnings: [],
+        comparisons: [
+          {
+            id: 'p-partial',
+            topic: 'publication',
+            label: 'unable_to_verify',
+            severity: 'medium',
+            title:
+              'Partial match; manual review required. Publication found; the expert\'s authorship could not be confirmed from the catalogs: Verbal learning following mild traumatic brain injury',
+            cv: {
+              statement:
+                'Demery, J.A. (1999). Verbal learning following mild traumatic brain injury [Abstract].',
+              page: 1,
+            },
+            source: {
+              name: 'OpenAlex',
+              statement:
+                'Verbal Learning Strategy Following Mild Traumatic Brain Injury (2011). Authors: Elizabeth Geary.',
+              url: 'https://doi.org/10.1017/s1355617711000646',
+            },
+            note: 'This is not a finding that the expert did not write it.',
+          },
+        ],
+      },
+    });
+    const text =
+      document.sections
+        .find((section) => section.id === 'publications')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(text).toContain('Catalog record:');
+    expect(text).not.toMatch(/Verified citation:/);
+    expect(text).toMatch(/unable to verify/i);
   });
 
   it('does not call a truncated catalog list confirmed first authorship', () => {
@@ -840,6 +896,152 @@ describe('EwiWordReportService', () => {
     expect(text).toContain('https://example.test/license');
     expect(text).not.toMatch(/finding f1|collected record/i);
   });
+
+  it('keeps CV comparison and publications in agreement for a PubMed-backed citation', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Leah Ellenberg',
+      city: 'Los Angeles',
+      specialty: 'Neuropsychology',
+      evidence: [
+        {
+          sourceId: 'pubmed',
+          category: 'publication',
+          title: 'Memory after pediatric TBI.',
+          summary:
+            'PubMed lists “Memory after pediatric TBI.” Authors: Ellenberg L, Smith J. Listed as first author.',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/11111111/',
+          informationStatus: 'unverified',
+          identityMatch: 'matched',
+          raw: {
+            pmid: '11111111',
+            authors: ['Ellenberg L', 'Smith J'],
+            authorPosition: 'first',
+            authorIndex: 0,
+            authorCount: 2,
+            pubdate: '1999 Jan',
+          },
+        },
+      ],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-26T00:00:00.000Z',
+      identity: {
+        status: 'ambiguous',
+        identity: null,
+        basis: [],
+        note: 'No NPI Registry record matches the name and specialty in Los Angeles. 1 record(s) match the name and specialty in another city (NPI 1234567893 in BEVERLY HILLS, CA). The city entered for this investigation is not the registry practice city, so the record was not used as a confirmed identity.',
+        notes: [],
+        candidates: [
+          {
+            npi: '1234567893',
+            name: 'Leah Ellenberg, PhD',
+            credential: 'PhD',
+            taxonomy: 'Clinical Neuropsychologist',
+            city: 'BEVERLY HILLS',
+            state: 'CA',
+            url: 'https://npiregistry.cms.hhs.gov/provider-view/1234567893',
+          },
+        ],
+      },
+      cvCheck: {
+        document: {
+          id: 'cv1',
+          name: 'ellenberg-cv.pdf',
+          pageCount: 6,
+          unreadablePages: [],
+          ocrPages: [],
+        },
+        status: 'completed',
+        claims: [
+          {
+            id: 'cv-p',
+            category: 'publication',
+            statement: 'Ellenberg L (1999). Memory after pediatric TBI.',
+            details: { title: 'Memory after pediatric TBI' },
+            page: 2,
+            quote: 'Memory after pediatric TBI',
+          },
+          {
+            id: 'cv-m',
+            category: 'membership',
+            statement: 'AACN member',
+            details: { name: 'AACN' },
+            page: 1,
+            quote: 'AACN member',
+          },
+        ],
+        warnings: [],
+        comparisons: [
+          {
+            id: 'cvc-1',
+            topic: 'publication',
+            label: 'verified',
+            severity: 'low',
+            title:
+              'Verified match. Publication found with the expert as an author (first of 2 authors): Memory after pediatric TBI',
+            cv: {
+              claimId: 'cv-p',
+              statement: 'Ellenberg L (1999). Memory after pediatric TBI.',
+              page: 2,
+            },
+            source: {
+              name: 'PubMed',
+              statement:
+                'Memory after pediatric TBI (1999). Authors: Ellenberg L, Smith J. PMID 11111111',
+              url: 'https://pubmed.ncbi.nlm.nih.gov/11111111/',
+            },
+            note: 'PubMed lists the expert as first of 2 authors.',
+          },
+          {
+            id: 'cvc-2',
+            topic: 'membership',
+            label: 'unable_to_verify',
+            severity: 'low',
+            title: 'Membership: AACN member',
+            cv: { claimId: 'cv-m', statement: 'AACN member', page: 1 },
+            source: null,
+            note: 'No membership directory is connected for this claim.',
+          },
+        ],
+      },
+    });
+    const cv =
+      document.sections
+        .find((section) => section.id === 'cv-comparison')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    const publications =
+      document.sections
+        .find((section) => section.id === 'publications')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    const summary =
+      document.sections
+        .find((section) => section.id === 'summary')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    const background =
+      document.sections
+        .find((section) => section.id === 'background')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(cv).toMatch(/2 claim\(s\) were read/);
+    expect(cv).toMatch(/2 of those claims appear/);
+    expect(cv).toMatch(/Verified: 1; Not checked: 1/);
+    expect(cv).toMatch(/\[Verified\]/);
+    expect(cv).not.toMatch(/Not confirmed in the catalogs searched: Memory after pediatric TBI/);
+    expect(publications).toContain('Verified citation:');
+    expect(publications).toContain('https://pubmed.ncbi.nlm.nih.gov/11111111/');
+    expect(publications).toMatch(/first of 2 authors/i);
+    expect(summary).toMatch(/Identity not confirmed/);
+    expect(summary).toMatch(/2 claim\(s\) were read/);
+    expect(summary).toMatch(/not counted as inconsistencies/);
+    expect(background).toMatch(/registry city BEVERLY HILLS/);
+    expect(background).not.toMatch(/Status: Verified/);
+    expect(document.sections.find((section) => section.id === 'city')?.blocks[0]?.text).toBe(
+      'Los Angeles',
+    );
+  });
 });
 
 describe('EWI report web research section', () => {
@@ -1143,6 +1345,61 @@ describe('EWI report source coverage', () => {
         .join(' ') ?? '';
     expect(depositions).toMatch(/not implemented/i);
     expect(depositions).not.toMatch(/CourtListener/i);
+  });
+
+  it('does not call a public patent search unimplemented', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Doe',
+      city: 'Boston',
+      specialty: 'Neurology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-26T00:00:00.000Z',
+      sourceStatuses: [
+        {
+          sourceId: 'patents',
+          status: 'unavailable',
+          coverage: 'not_implemented',
+          itemCount: 0,
+          checked: false,
+        },
+      ],
+      webResearch: {
+        ranAt: '2026-10-26T00:00:00.000Z',
+        durationMs: 1,
+        partial: false,
+        partialNote: null,
+        queriesPlanned: 4,
+        queriesRun: 4,
+        providers: [
+          {
+            providerId: 'gemini_grounding',
+            name: 'Gemini',
+            configured: true,
+            requests: 4,
+            failedRequests: 0,
+            hits: 0,
+            failures: [],
+          },
+        ],
+        pagesRead: 0,
+        pagesBlocked: [],
+        candidates: [],
+        records: [],
+        registries: [],
+        limitations: [],
+        topics: [{ topic: 'patents', queries: 2, hits: 0 }],
+      } as never,
+    });
+    const patents =
+      document.sections
+        .find((section) => section.id === 'patents')
+        ?.blocks.map((block) => block.text)
+        .join(' ') ?? '';
+    expect(patents).toMatch(/dedicated search for this topic ran/i);
+    expect(patents).toMatch(/public web search for patents/i);
+    expect(patents).not.toMatch(/not implemented/i);
   });
 
   it('prints pending, never-sent Lexis, explicit no-results, and an access wall differently', () => {

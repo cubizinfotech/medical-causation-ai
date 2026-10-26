@@ -337,6 +337,11 @@ export interface WebResearchDossier {
    * no hits. Used to tell a dedicated directory search from a generic run.
    */
   executedQueries?: readonly { topic: string; query: string }[];
+  /**
+   * Planned topics that never ran because the query budget or deadline was
+   * reached. The report should say these categories were not searched.
+   */
+  omittedTopics?: readonly { topic: string; reason: 'budget' | 'deadline' }[];
   /** Businesses named on pages that name the subject. */
   companies?: WebCompanyTie[];
   /** Credential claims compared with the issuing bodies. */

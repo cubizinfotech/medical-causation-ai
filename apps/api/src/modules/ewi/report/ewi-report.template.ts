@@ -21,7 +21,7 @@ import {
   presentableSummaryLines,
 } from '../investigation/analysis/summary-lines';
 import type { CvCheck, CvComparison } from '../cv/cv.types';
-import { CV_LABEL_TEXT } from '../cv/cv-comparison';
+import { CV_LABEL_TEXT, cvComparisonCountSummary } from '../cv/cv-comparison';
 import {
   evidenceStatusLine,
   findingLabel,
@@ -67,8 +67,10 @@ import type {
 } from '@integrations/web-research';
 import {
   coverageLine,
+  displayStructuredCoverage,
   isRoutedSection,
   isWebCoverageSummary,
+  publicSearchNote,
   routeWebFindings,
   sectionVerification,
 } from '@integrations/web-research';
@@ -446,7 +448,7 @@ export function buildEwiReportDocument(input: {
           titleHints: ['accredit'],
         });
       case 'licenses':
-        return licensesSection(spec, tracker);
+        return licensesSection(spec, tracker, input.identity ?? null);
       case 'board-actions':
         return boardActionsSection(spec, tracker);
       case 'board-certifications':
@@ -470,10 +472,11 @@ export function buildEwiReportDocument(input: {
           ['membership'],
         );
       case 'publications':
-        return withCvStatements(
-          publicationsSection(spec, tracker, input.expertName, input.cvCheck),
+        return publicationsSection(
+          spec,
+          tracker,
+          input.expertName,
           input.cvCheck,
-          ['publication'],
         );
       case 'grants':
         return professionalGroupSection(
@@ -801,6 +804,7 @@ const SECTION_SOURCES: Partial<Record<RoutedSectionId, string[]>> = {
     'expertlaw',
     'expertpages',
     'expertwitness_com',
+    'other_expert_directories',
   ],
   ime: ['ime_websites', 'ime_advertising', 'advertising'],
   videos: ['youtube', 'presentations'],
@@ -971,7 +975,13 @@ function withWebFindings(
       style: 'note',
     });
   } else {
-    for (const line of coverage) {
+    const limit = publicSearchNote(dossier, section.id);
+    if (limit) blocks.push({ text: limit, style: 'note' });
+    for (const line of displayStructuredCoverage(
+      dossier,
+      section.id,
+      coverage,
+    )) {
       if (/returned records in other sections/i.test(line)) continue;
       blocks.push({ text: line, style: 'note' });
     }
@@ -1018,6 +1028,10 @@ function backgroundSection(
     categories: ['identity', 'profile', 'specialty', 'location'],
     providers: ['web_search', 'orcid'],
     excludeHints: ['web research coverage'],
+  }).filter((item) => {
+    if (item.sourceId !== 'npi_registry') return true;
+    if (!identity) return true;
+    return identity.status === 'confirmed';
   });
   const blocks = identityBlocks(identity);
   if (items.length > 0) {
@@ -1083,7 +1097,7 @@ function identityBlocks(
   }
   for (const candidate of identity.candidates) {
     blocks.push({
-      text: `Possible record: NPI ${candidate.npi} — ${candidate.name}${candidate.taxonomy ? `, ${candidate.taxonomy}` : ''}${candidate.city ? `, ${candidate.city}${candidate.state ? `, ${candidate.state}` : ''}` : ''}`,
+      text: `Possible record: NPI ${candidate.npi} — ${candidate.name}${candidate.taxonomy ? `, ${candidate.taxonomy}` : ''}${candidate.city ? `, registry city ${candidate.city}${candidate.state ? `, ${candidate.state}` : ''}` : ''}. This is not a confirmed identity.`,
     });
   }
   if (record?.url) {
@@ -1178,6 +1192,9 @@ function summarySection(
     analysis?: EwiAnalysisDocument;
     evidence: ExpertEvidenceItem[];
     webLines?: string[];
+    identity?: ExpertIdentityResolution | null;
+    cvCheck?: CvCheck | null;
+    discrepancies: ExpertDiscrepancy[];
   },
 ): ReportSectionModel {
   const text =
@@ -1201,12 +1218,37 @@ function summarySection(
     )
     .filter(Boolean)
     .map((line) => ({ text: line }));
+  if (input.identity && input.identity.status !== 'confirmed') {
+    blocks.unshift({
+      text: `${identityHeading(input.identity)}. ${input.identity.note}`,
+      style: 'note',
+    });
+  }
+  if (input.cvCheck) {
+    blocks.push({
+      text: cvComparisonCountSummary(input.cvCheck),
+      style: 'note',
+    });
+  }
+  const conflictCount =
+    input.discrepancies.length + (input.analysis?.conflicts.length ?? 0);
+  blocks.push({
+    text:
+      conflictCount === 0
+        ? `${findings} collected item(s). No confirmed inconsistency was identified. Unchecked CV claims and catalog misses are listed under CV Comparison; they are not counted as inconsistencies.`
+        : `${findings} collected item(s). ${conflictCount} confirmed inconsistency(ies) are listed under Inconsistencies in Background.`,
+    style: 'note',
+  });
   const webLines = input.webLines ?? [];
-  // "No information was confirmed" would contradict the web findings below it.
-  const own =
-    webLines.length > 0
-      ? blocks.filter((block) => block.text !== NO_RECORDS_LINE)
-      : blocks;
+  const hasSubstance =
+    webLines.length > 0 ||
+    Boolean(input.cvCheck) ||
+    Boolean(input.identity) ||
+    findings > 0;
+  // "No information was confirmed" would contradict findings below it.
+  const own = hasSubstance
+    ? blocks.filter((block) => block.text !== NO_RECORDS_LINE)
+    : blocks;
   blocks.splice(0, blocks.length, ...own);
   if (blocks.length === 0 && webLines.length === 0) {
     blocks.push({
@@ -1253,6 +1295,14 @@ function plainTitle(sectionId: string): string {
   return (spec?.title ?? sectionId).replace(/^\d+\.\s*/, '');
 }
 
+const WEB_BASIS_RANK: Record<RoutedFinding['basis'], number> = {
+  primary_source: 0,
+  subject_stated: 1,
+  third_party: 2,
+  allegation: 3,
+  record: 4,
+};
+
 /** One line per section the web research filled, with who stands behind it. */
 function webSummaryLines(
   routed: Map<RoutedSectionId, RoutedFinding[]>,
@@ -1262,16 +1312,26 @@ function webSummaryLines(
   for (const sectionId of WEB_SUMMARY_ORDER) {
     const list = routed.get(sectionId);
     if (!list || list.length === 0) continue;
-    const lead = list[0];
-    const quote = lead.quote ? ` “${lead.quote.slice(0, 150).trim()}”` : '';
+    const lead = [...list].sort((left, right) => {
+      const match =
+        Number(right.matchLevel === 'strong') -
+        Number(left.matchLevel === 'strong');
+      if (match !== 0) return match;
+      return WEB_BASIS_RANK[left.basis] - WEB_BASIS_RANK[right.basis];
+    })[0];
+    const quote = lead.quote ? ` “${lead.quote.slice(0, 120).trim()}”` : '';
     const more =
       list.length > 1 ? ` (${list.length} items in the section)` : '';
-    lines.push(`${plainTitle(sectionId)}: ${lead.title}.${quote}${more}`);
+    const possible =
+      lead.matchLevel === 'possible' ? 'Possible match. ' : '';
+    lines.push(
+      `${plainTitle(sectionId)}: ${possible}${lead.basisLabel}. ${lead.title}.${quote}${more}`,
+    );
   }
   for (const verification of dossier?.verifications ?? []) {
     if (verification.status === 'confirmed') {
       lines.push(
-        `${verification.claim}: confirmed on ${verification.confirmedBy?.name ?? 'the issuing body'}.`,
+        `${verification.claim}: listed on ${verification.confirmedBy?.name ?? 'the issuing body’s directory'}. A directory listing is not a separate official credentials file.`,
       );
     } else {
       lines.push(
@@ -1429,8 +1489,9 @@ function cvComparisonBlocks(row: CvComparison): ReportBlock[] {
     { text: `[${CV_LABEL_TEXT[row.label]}] ${row.title}`, style: 'subheading' },
   ];
   if (row.cv) {
+    const quote = compactCvText(row.cv.quote ?? row.cv.statement);
     blocks.push({
-      text: `CV${row.cv.page ? ` (page ${row.cv.page})` : ''}: “${row.cv.quote ?? row.cv.statement}”`,
+      text: `CV${row.cv.page ? ` (page ${row.cv.page})` : ''}: “${quote}”`,
     });
   }
   if (row.source) {
@@ -1456,9 +1517,9 @@ function cvComparedSourcesLine(check: CvCheck): string {
     ),
   ];
   if (names.length === 0) {
-    return 'were not compared with a catalog that actually ran for these claims.';
+    return 'No catalog that actually ran was compared with these claims.';
   }
-  return `compared with ${names.join(', ')}.`;
+  return `Compared with ${names.join(', ')}.`;
 }
 
 function cvCoverageLine(check: CvCheck): string {
@@ -1477,10 +1538,20 @@ function cvCoverageLine(check: CvCheck): string {
   return 'CV extraction was partial; some pages were not finished.';
 }
 
+function compactCvText(value: string, limit = 180): string {
+  const text = value.replace(/\s+/g, ' ').trim();
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit - 1).trim()}…`;
+}
+
 function cvCheckBlocks(check: CvCheck): ReportBlock[] {
   const blocks: ReportBlock[] = [
     {
-      text: `Uploaded CV: ${check.document.name} (${check.document.pageCount} page${check.document.pageCount === 1 ? '' : 's'}). ${check.claims.length} claim(s) were read, each with its page and an exact quote, and ${cvComparedSourcesLine(check)} ${cvCoverageLine(check)} "Not checked" means no connected source covers the claim; it is not a finding against the expert. A missing catalog result is not a confirmed discrepancy.`,
+      text: `Uploaded CV: ${check.document.name} (${check.document.pageCount} page${check.document.pageCount === 1 ? '' : 's'}). ${cvComparedSourcesLine(check)} ${cvCoverageLine(check)} A missing catalog result is not a confirmed discrepancy.`,
+      style: 'note',
+    },
+    {
+      text: cvComparisonCountSummary(check),
       style: 'note',
     },
     ...check.warnings.map((warning) => ({
@@ -1488,17 +1559,6 @@ function cvCheckBlocks(check: CvCheck): ReportBlock[] {
       style: 'note' as const,
     })),
   ];
-  const counts = CV_LABEL_ORDER.map((label) => ({
-    label,
-    count: check.comparisons.filter((row) => row.label === label).length,
-  })).filter((entry) => entry.count > 0);
-  if (counts.length > 0) {
-    blocks.push({
-      text: counts
-        .map((entry) => `${CV_LABEL_TEXT[entry.label]}: ${entry.count}`)
-        .join('; '),
-    });
-  }
   for (const label of CV_LABEL_ORDER) {
     for (const row of check.comparisons.filter(
       (item) => item.label === label,
@@ -2388,7 +2448,7 @@ function withCvStatements(
   for (const claim of claims.slice(0, 40)) {
     blocks.push({ text: claim.statement, style: 'subheading' });
     blocks.push({
-      text: `Uploaded CV, page ${claim.page}: “${claim.quote}”`,
+      text: `Uploaded CV, page ${claim.page}: “${compactCvText(claim.quote, 160)}”`,
     });
     blocks.push({
       text: 'Stated on the uploaded CV. This is not an independent verification.',
@@ -2401,6 +2461,7 @@ function withCvStatements(
 function licensesSection(
   spec: EwiReportSectionSpec,
   tracker: ClaimTracker,
+  identity: ExpertIdentityResolution | null,
 ): ReportSectionModel {
   const items = claimEvidence(tracker, {
     categories: ['license', 'state_license'],
@@ -2412,12 +2473,17 @@ function licensesSection(
   const official = licenseItems.filter(
     (item) => item.sourceId === 'state_license',
   );
-  const nppes = licenseItems.filter((item) => item.sourceId === 'npi_registry');
+  const nppes = licenseItems.filter((item) => {
+    if (item.sourceId !== 'npi_registry') return false;
+    if (!identity) return true;
+    return identity.status === 'confirmed';
+  });
   const other = licenseItems.filter(
     (item) =>
       item.sourceId !== 'state_license' && item.sourceId !== 'npi_registry',
   );
-  if (licenseItems.length === 0) {
+  const shown = [...official, ...other, ...nppes];
+  if (shown.length === 0) {
     return {
       id: spec.id,
       title: spec.title,
@@ -2430,7 +2496,7 @@ function licensesSection(
       style: 'note',
     },
   ];
-  for (const item of [...official, ...other, ...nppes]) {
+  for (const item of shown) {
     blocks.push(...findingBlocks(item));
   }
   return { id: spec.id, title: spec.title, blocks };
@@ -3025,10 +3091,12 @@ function firstAuthorComparisonBlocks(
     const klass = firstAuthorClass(row);
     blocks.push({ text: `${klass}: ${row.title}` });
     if (row.cv?.statement) {
-      blocks.push({ text: `CV citation: ${row.cv.statement}` });
+      blocks.push({ text: `CV citation: ${compactCvText(row.cv.statement)}` });
     }
     if (row.source?.statement) {
-      blocks.push({ text: `Verified citation: ${row.source.statement}` });
+      const catalogLabel =
+        row.label === 'verified' ? 'Verified citation' : 'Catalog record';
+      blocks.push({ text: `${catalogLabel}: ${row.source.statement}` });
     }
     if (row.source?.url) {
       blocks.push({

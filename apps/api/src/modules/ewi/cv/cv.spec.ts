@@ -515,6 +515,92 @@ describe('CV comparison', () => {
       ),
     ).toEqual([]);
   });
+
+  it('uses a collected PubMed record when catalog title search missed the same citation', () => {
+    const check = compareCv({
+      extraction: {
+        ...extraction,
+        claims: [
+          claim(
+            'cv-p',
+            'publication',
+            'Ellenberg L (1999). Memory after pediatric TBI. JINS, 5, 139.',
+            {
+              title: 'Memory after pediatric TBI',
+              year: '1999',
+              journal: 'JINS',
+            },
+          ),
+        ],
+      },
+      evidence: [
+        {
+          sourceId: 'pubmed',
+          category: 'publication',
+          title: 'Memory after pediatric TBI.',
+          summary: 'PubMed lists Memory after pediatric TBI.',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/11111111/',
+          identityMatch: 'matched',
+          raw: {
+            pmid: '11111111',
+            doi: '10.1000/ellenberg-memory',
+            authors: ['Ellenberg L', 'Smith J'],
+            authorPosition: 'first',
+            authorIndex: 0,
+            authorCount: 2,
+            journal: 'JINS',
+            pubdate: '1999 Jan',
+          },
+        },
+      ],
+      sourceResults,
+      identity,
+      publications: [
+        { title: 'Memory after pediatric TBI', status: 'not_found' },
+      ],
+      expertName: 'Leah Ellenberg',
+    });
+    const row = check.comparisons.find((item) =>
+      item.title.includes('Memory after pediatric TBI'),
+    );
+    expect(row?.label).toBe('verified');
+    expect(row?.source?.url).toBe(
+      'https://pubmed.ncbi.nlm.nih.gov/11111111/',
+    );
+    expect(row?.note).toMatch(/first of 2/);
+    expect(row?.title).not.toMatch(/not confirmed in the catalogs/i);
+  });
+
+  it('accounts for every extracted claim in the comparison counts', () => {
+    const check = compareCv({
+      extraction: {
+        ...extraction,
+        claims: [
+          claim('cv-p', 'publication', 'A listed paper', {
+            title: 'A listed paper',
+          }),
+          claim('cv-m', 'membership', 'AACN member', { name: 'AACN' }),
+          claim('cv-a', 'award', 'Dean scholarship', { name: 'Dean' }),
+        ],
+      },
+      evidence,
+      sourceResults,
+      identity,
+      publications: [{ title: 'A listed paper', status: 'not_found' }],
+    });
+    const compared = new Set(
+      check.comparisons
+        .map((row) => row.cv?.claimId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    expect([...compared].sort()).toEqual(['cv-a', 'cv-m', 'cv-p']);
+    expect(
+      check.comparisons.filter((row) => row.cv?.claimId === 'cv-p')[0]?.label,
+    ).toBe('not_verified');
+    expect(
+      check.comparisons.filter((row) => row.label === 'unable_to_verify'),
+    ).toHaveLength(2);
+  });
 });
 
 describe('extractBibliographyClaims', () => {

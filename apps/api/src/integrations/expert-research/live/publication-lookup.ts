@@ -168,6 +168,19 @@ interface CatalogAnswer {
   work?: CatalogWork;
 }
 
+/** Online-first vs print can differ by a year; a 12-year gap is a different paper. */
+export function yearsAgree(
+  left?: number | null,
+  right?: number | null,
+): boolean {
+  if (left == null || right == null) return true;
+  return Math.abs(left - right) <= 1;
+}
+
+function yearsCompatible(query: PublicationQuery, work: CatalogWork): boolean {
+  return yearsAgree(query.year, work.year);
+}
+
 function matchesQuery(query: PublicationQuery, work: CatalogWork): boolean {
   const phrase = articleTitle(query.title);
   const titleHit =
@@ -176,18 +189,11 @@ function matchesQuery(query: PublicationQuery, work: CatalogWork): boolean {
       ? sameTitle(articleTitle(query.citation), work.title)
       : false);
   if (titleHit) {
-    if (
-      query.year &&
-      work.year &&
-      Math.abs(query.year - work.year) > 1 &&
-      !similarVenue(query.journal, work.venue)
-    ) {
-      return false;
-    }
-    return true;
+    return yearsCompatible(query, work);
   }
   const overlap = titleOverlap(phrase, work.title);
   if (overlap < 0.5) return false;
+  if (!yearsCompatible(query, work)) return false;
   let score = overlap;
   if (query.year && work.year && query.year === work.year) score += 0.2;
   if (similarVenue(query.journal, work.venue)) score += 0.15;

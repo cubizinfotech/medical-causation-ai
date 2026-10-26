@@ -1,4 +1,8 @@
-import { extractResearchLeads, institutionsFromText } from './research-leads';
+import {
+  extractResearchLeads,
+  institutionsFromText,
+  licenseStatesFromText,
+} from './research-leads';
 
 describe('extractResearchLeads', () => {
   it('picks named programs, funders and institutions from Gemini prose', () => {
@@ -16,5 +20,15 @@ describe('institutionsFromText', () => {
     expect(
       institutionsFromText('University of Florida. He later moved.'),
     ).toEqual(['University of Florida']);
+  });
+});
+
+describe('licenseStatesFromText', () => {
+  it('reads license jurisdictions from page prose', () => {
+    expect(
+      licenseStatesFromText(
+        'Dr. Demery is licensed in Florida and holds a TX psychology license.',
+      ),
+    ).toEqual(expect.arrayContaining(['FL', 'TX']));
   });
 });

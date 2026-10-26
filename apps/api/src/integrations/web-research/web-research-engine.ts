@@ -25,8 +25,16 @@ import {
   organizationsIn,
   sentencesOf,
 } from './claim-topics';
-import { planFollowUps, planQueries, type PlannedQuery } from './query-planner';
-import { extractResearchLeads } from './research-leads';
+import {
+  planFollowUps,
+  planQueries,
+  selectQueriesForBudget,
+  type PlannedQuery,
+} from './query-planner';
+import {
+  extractResearchLeads,
+  licenseStatesFromText,
+} from './research-leads';
 import { extractSocialLeads } from './social-leads';
 import { verifyClaims, type SearchedSource } from './verify-claims';
 import { parseCityState } from '../expert-research/live/location';
@@ -261,7 +269,21 @@ const IMPORTANT_KINDS: ReadonlySet<WebSourceKind> = new Set([
   'corporate',
   'review',
   'expert_website',
+  'advertising',
+  'ime',
 ]);
+
+const FETCH_PRIORITY_HOSTS =
+  /(?:^|\.)(?:patents\.google\.com|uspto\.gov|dri\.org|expertinstitute\.com|theaacn\.org|expertwitnessprofiler\.com|valor\.defense\.gov|seakexperts\.com|jurispro\.com)$/;
+
+function fetchHostBoost(url: string): number {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+    return FETCH_PRIORITY_HOSTS.test(host) ? 4 : 0;
+  } catch {
+    return 0;
+  }
+}
 
 export class WebResearchEngine {
   private readonly providers: SearchProvider[];
@@ -436,15 +458,13 @@ export class WebResearchEngine {
     let deadlineHit = false;
 
     // 1. Search.
-    // The attorney's own note is never cut by the query limit.
+    // The attorney's own note is never cut by the query limit. Remaining
+    // slots go to high-value topics (directories, IME, patents) before news.
     const planned = planQueries(subject);
-    const fromNote = planned.filter((plan) => plan.topic === 'context');
-    const plans = [
-      ...planned
-        .filter((plan) => plan.topic !== 'context')
-        .slice(0, Math.max(settings.maxQueries - fromNote.length, 8)),
-      ...fromNote,
-    ];
+    const { selected: plans } = selectQueriesForBudget(
+      planned,
+      settings.maxQueries,
+    );
     const reports = new Map<string, WebProviderReport>();
     const pool = new Map<string, Page>();
     const configured = this.providers.filter((p) => p.isConfigured());
@@ -542,14 +562,16 @@ export class WebResearchEngine {
     await Promise.all(
       configured.map(async (provider) => {
         const report = reports.get(provider.id) as WebProviderReport;
-        const queue: PlannedQuery[] = plans
-          .filter(
-            (plan) =>
-              provider.kinds.includes(plan.request.kind) &&
-              (!plan.only || plan.only.includes(provider.id)) &&
-              !plan.except?.includes(provider.id),
-          )
-          .slice(0, provider.budget);
+        const eligible = plans.filter(
+          (plan) =>
+            provider.kinds.includes(plan.request.kind) &&
+            (!plan.only || plan.only.includes(provider.id)) &&
+            !plan.except?.includes(provider.id),
+        );
+        const queue: PlannedQuery[] = selectQueriesForBudget(
+          eligible,
+          provider.budget,
+        ).selected;
         queriesPlanned += queue.length;
         let disabled = false;
         let consecutive = 0;
@@ -673,6 +695,16 @@ export class WebResearchEngine {
       }
       if (sunbizUrls.has(canonicalUrl(page.url))) priority += 3;
       if (suppliedKeys.has(canonicalUrl(page.url))) priority += 20;
+      priority += fetchHostBoost(page.url);
+      if (
+        [...page.queries].some((q) =>
+          /site:dri\.org|independent medical|site:patents\.google|site:expertinstitute|site:theaacn|site:valor\.defense/.test(
+            q,
+          ),
+        )
+      ) {
+        priority += 2;
+      }
       page.priority = priority;
     }
     pages.sort((a, b) => b.priority - a.priority);
@@ -777,10 +809,24 @@ export class WebResearchEngine {
       }
       // Registry sites often refuse automated readers; a web search for the
       // company still finds the registry listing and other business records.
+      const finderStillUsable = (id: string): boolean => {
+        const r = reports.get(id);
+        if (!r) return false;
+        if (r.failures.some((f) => f.kind === 'quota' || f.kind === 'auth')) {
+          return false;
+        }
+        return r.requests === 0 || r.failedRequests < r.requests;
+      };
       const finder =
         configured.find(
-          (p) => p.kinds.includes('web') && p.id !== 'gemini_grounding',
-        ) ?? configured.find((p) => p.kinds.includes('web'));
+          (p) =>
+            p.kinds.includes('web') &&
+            p.id !== 'gemini_grounding' &&
+            finderStillUsable(p.id),
+        ) ??
+        configured.find(
+          (p) => p.kinds.includes('web') && finderStillUsable(p.id),
+        );
       if (finder && companies.length > 0 && this.now() < fetchBy) {
         const report = reports.get(finder.id) as WebProviderReport;
         await mapWithLimit(companies.slice(0, 2), 2, async (company) => {
@@ -846,6 +892,7 @@ export class WebResearchEngine {
         institutions: [
           ...new Set([...fromContext.institutions, ...leads.institutions]),
         ],
+        licenseStates: licenseStatesFromText(pageTexts.join('\n')),
         searchNih: true,
       });
       const followProviders = configured
@@ -868,7 +915,9 @@ export class WebResearchEngine {
       await Promise.all(
         followProviders.map(async (provider) => {
           const report = reports.get(provider.id) as WebProviderReport;
+          let disabled = false;
           await mapWithLimit(followPlans, 2, async (plan) => {
+            if (disabled) return;
             if (this.now() > followBy) {
               deadlineHit = true;
               return;
@@ -881,6 +930,10 @@ export class WebResearchEngine {
               );
               report.hits += hits.length;
               bumpTopic(plan.topic, hits.length);
+              executedQueries.push({
+                topic: plan.topic,
+                query: plan.request.query,
+              });
               answered.add(plan.id);
               for (const hit of hits) {
                 const known = pool.has(canonicalUrl(hit.url));
@@ -900,6 +953,7 @@ export class WebResearchEngine {
               if (!report.failures.some((f) => f.message === message)) {
                 report.failures.push({ kind, message });
               }
+              if (kind === 'quota' || kind === 'auth') disabled = true;
             }
           });
         }),
@@ -1290,6 +1344,24 @@ export class WebResearchEngine {
         `${droppedNoMention} search result${droppedNoMention === 1 ? '' : 's'} did not mention the subject's surname and were left out.`,
       );
     }
+    const ranTopics = new Set(executedQueries.map((entry) => entry.topic));
+    const omittedTopics = [
+      ...new Set(
+        planned
+          .map((plan) => plan.topic)
+          .filter((topic) => topic !== 'context' && !ranTopics.has(topic)),
+      ),
+    ].map((topic) => ({
+      topic,
+      reason: deadlineHit ? ('deadline' as const) : ('budget' as const),
+    }));
+    if (omittedTopics.length > 0 && executedQueries.length > 0) {
+      limitations.push(
+        `These research topics were not searched because the query budget or time limit was reached: ${omittedTopics
+          .map((entry) => entry.topic)
+          .join(', ')}. That is not proof that nothing exists.`,
+      );
+    }
     limitations.push(
       'A web search cannot prove that something does not exist. "Not found" means not found in what these search engines returned today.',
     );
@@ -1327,6 +1399,7 @@ export class WebResearchEngine {
         hits: stat.hits,
       })),
       executedQueries,
+      omittedTopics,
       companies: companiesOnTiedPages,
       verifications: verifyClaims(finalRecords, [
         ...searchedSources,

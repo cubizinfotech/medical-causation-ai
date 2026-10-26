@@ -110,7 +110,7 @@ export class ExpertIdentityResolver {
     if (!hasCity && !comparesSpecialty && confirmed.length > 0) {
       return ambiguous(
         confirmed,
-        `${confirmed.length} NPI Registry record(s) match the name. No city was given and the specialty could not be compared, so identity was not confirmed. Add the expert’s NPI or a city to narrow it.`,
+        `${confirmed.length} NPI Registry record(s) match the name. No city was given and the specialty could not be compared, so identity was not confirmed. Public sources were still searched without merging these records. An NPI number or a city would narrow the match; neither is required to keep searching public records.`,
       );
     }
     if (confirmed.length === 1) {
@@ -137,7 +137,7 @@ export class ExpertIdentityResolver {
     if (confirmed.length > 1) {
       return ambiguous(
         confirmed,
-        `${confirmed.length} NPI Registry records match the name${hasCity ? ', practice city' : ''}${comparesSpecialty ? ', and specialty' : ''}. Identity was not confirmed. Add the expert’s NPI to the investigation to confirm it.`,
+        `${confirmed.length} NPI Registry records match the name${hasCity ? ', practice city' : ''}${comparesSpecialty ? ', and specialty' : ''}. Identity was not confirmed. Each record is listed separately and was not merged. Public sources were still searched. An NPI number would confirm which record is the expert; it is not required to keep searching public records.`,
       );
     }
 
@@ -145,31 +145,19 @@ export class ExpertIdentityResolver {
     const sameSpecialty = comparesSpecialty
       ? sameName.filter((record) => hasSpecialty(record, query.specialty))
       : [];
-    if (sameSpecialty.length === 1 && name.middle.length > 0) {
-      const record = sameSpecialty[0];
-      if (inState(record, location.state)) {
-        const where = record.locations[0];
-        const listedCity = where?.city ?? 'not listed';
-        return {
-          record,
-          resolution: {
-            status: 'confirmed',
-            identity: candidateOf(record),
-            basis: ['full name', 'specialty', 'state'],
-            note: `NPI ${record.npi} (${describe(record)}) is the only NPI Registry record that matches the full name and specialty in ${location.state}. The practice city on the registry is ${listedCity}${hasCity ? `, not ${location.city}` : ''}.`,
-            notes: [
-              ...nameVariantNote(record, name),
-              `${hasCity ? `The city entered was ${location.city}. ` : ''}Other public records are attributed to this one NPI because the full name, specialty, and state match a single registry record. Taxonomy is self-reported and is not board certification.`,
-            ],
-            candidates: [],
-          },
-        };
-      }
-    }
     if (sameSpecialty.length > 0) {
+      const listed = sameSpecialty
+        .slice(0, 3)
+        .map((record) => {
+          const where = record.locations[0];
+          const city = where?.city ?? 'an unlisted city';
+          const state = where?.state ? `, ${where.state}` : '';
+          return `NPI ${record.npi} in ${city}${state}`;
+        })
+        .join('; ');
       return ambiguous(
         sameSpecialty,
-        `No NPI Registry record matches the name and specialty${inPlace}, but ${sameSpecialty.length} record(s) match the name and specialty elsewhere. Each NPI is listed separately and was not merged. Identity was not confirmed. Add the expert’s NPI to confirm it.`,
+        `No NPI Registry record matches the name and specialty${inPlace}. ${sameSpecialty.length} record(s) match the name and specialty in another city (${listed}). The city entered for this investigation is not the registry practice city, so the record was not used as a confirmed identity and was not merged into other findings. Public sources were still searched. An NPI number would confirm whether this is the same person; it is not required to keep searching public records.`,
       );
     }
     const sameCity = hasCity
@@ -178,7 +166,7 @@ export class ExpertIdentityResolver {
     if (sameCity.length > 0) {
       return ambiguous(
         sameCity,
-        `${sameCity.length} NPI Registry record(s) match the name${inPlace}, but the registry taxonomy does not match “${query.specialty}”. Identity was not confirmed. Add the expert’s NPI to confirm it.`,
+        `${sameCity.length} NPI Registry record(s) match the name${inPlace}, but the registry taxonomy does not match “${query.specialty}”. Identity was not confirmed. The record was not merged into other findings. Public sources were still searched. An NPI number would confirm whether this is the same person; it is not required to keep searching public records.`,
       );
     }
     const nicknames = pool.filter(
@@ -192,7 +180,7 @@ export class ExpertIdentityResolver {
     if (nicknames.length > 0) {
       return ambiguous(
         nicknames,
-        `The NPI Registry lists ${nicknames.length} record(s)${inPlace} with the same last name and specialty but a different first name (for example a nickname). Identity was not confirmed. Add the expert’s NPI to confirm it.`,
+        `The NPI Registry lists ${nicknames.length} record(s)${inPlace} with the same last name and specialty but a different first name (for example a nickname). Identity was not confirmed. The record was not merged into other findings. Public sources were still searched. An NPI number would confirm whether this is the same person; it is not required to keep searching public records.`,
       );
     }
     return unresolved(

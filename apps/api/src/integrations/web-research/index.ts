@@ -17,7 +17,9 @@ export { assessIdentity, subjectFromQuery } from './identity-assess';
 export {
   BASIS_LABEL,
   coverageLine,
+  displayStructuredCoverage,
   isRoutedSection,
+  publicSearchNote,
   routeWebFindings,
   sectionVerification,
   type RoutedFinding,

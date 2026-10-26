@@ -1,3 +1,5 @@
+import { stateCode } from '../expert-research/live/location';
+
 /**
  * Named programs, funders and institutions taken from Gemini's grounded
  * answer and from pages already read. These are search leads only: nothing
@@ -57,6 +59,25 @@ export function institutionsFromText(text: string): string[] {
   for (const match of text.matchAll(INSTITUTION_OF)) take(match[0]);
   for (const match of text.matchAll(INSTITUTION_NAMED)) take(match[0]);
   return [...found.values()];
+}
+
+/** Two-letter states mentioned as license jurisdictions in already-read text. */
+export function licenseStatesFromText(text: string): string[] {
+  const found: string[] = [];
+  const add = (value: string | null) => {
+    if (value && !found.includes(value)) found.push(value);
+  };
+  for (const match of text.matchAll(
+    /\b(?:licensed in|license(?:d)? in|licensure in)\s+([A-Za-z][A-Za-z .]{1,24}?)(?:,|\.|;| and |\n|$)/gi,
+  )) {
+    add(stateCode(match[1].trim()));
+  }
+  for (const match of text.matchAll(
+    /\b([A-Z]{2})\s+(?:psychology |medical )?license(?:\s+number|\s+no\.?|:)?\b/g,
+  )) {
+    add(stateCode(match[1]));
+  }
+  return found.slice(0, 6);
 }
 
 export function extractResearchLeads(texts: readonly string[]): ResearchLeads {

@@ -312,6 +312,101 @@ describe('publication title lookup', () => {
     expect(result.work?.year).toBe(1999);
   });
 
+  it('does not treat a later similar-titled paper as the CV citation', async () => {
+    const fake = fakeFetch([
+      {
+        match: (url) => url.host === 'api.openalex.org',
+        respond: () => ({
+          results: [
+            {
+              id: 'https://openalex.org/Wgeary',
+              doi: 'https://doi.org/10.1017/s1355617711000646',
+              title:
+                'Verbal Learning Strategy Following Mild Traumatic Brain Injury',
+              publication_year: 2011,
+              primary_location: {
+                source: {
+                  display_name:
+                    'Journal of the International Neuropsychological Society',
+                },
+              },
+              authorships: [
+                { author: { display_name: 'Elizabeth Geary' } },
+                { author: { display_name: 'Marilyn F. Kraus' } },
+                { author: { display_name: 'Leah H. Rubin' } },
+                { author: { display_name: 'Neil H. Pliskin' } },
+                { author: { display_name: 'Deborah M. Little' } },
+              ],
+            },
+          ],
+        }),
+      },
+      {
+        match: (url) => url.host === 'api.crossref.org',
+        respond: () => ({ message: { items: [] } }),
+      },
+      {
+        match: (url) => url.host.includes('ncbi.nlm.nih.gov'),
+        respond: () => ({ esearchresult: { idlist: [] } }),
+      },
+    ]);
+    const lookup = new PublicationTitleLookup(
+      new OpenAlexClient({ timeoutMs: 1000, fetchImpl: fake.fetch }),
+      { timeoutMs: 1000, fetchImpl: fake.fetch },
+      new CrossrefClient({ timeoutMs: 1000, fetchImpl: fake.fetch }),
+    );
+    const [result] = await lookup.lookup('Jason A. Demery', [
+      {
+        title: 'Verbal learning following mild traumatic brain injury',
+        citation:
+          'Demery, J.A., Duchek, J.M., & Hanlon, R.E. (1999). Verbal learning following mild traumatic brain injury [Abstract]. Journal of the International Neuropsychological Society, 5 (2), 139.',
+        journal: 'Journal of the International Neuropsychological Society',
+        year: 1999,
+        type: 'abstract',
+      },
+    ]);
+    expect(result.status).toBe('not_found');
+    expect(result.doi).toBeUndefined();
+    expect(result.work).toBeUndefined();
+  });
+
+  it('still matches when print year is one year off the CV year', async () => {
+    const fake = fakeFetch([
+      {
+        match: (url) => url.host === 'api.openalex.org',
+        respond: () => ({
+          results: [
+            {
+              id: 'https://openalex.org/Wyear',
+              doi: 'https://doi.org/10.1000/axial',
+              title:
+                'Axial movements are relatively preserved in closed head injury',
+              publication_year: 2000,
+              authorships: [
+                { author: { display_name: 'Robert E. Hanlon' } },
+                { author: { display_name: 'Jason A. Demery' } },
+              ],
+            },
+          ],
+        }),
+      },
+    ]);
+    const lookup = new PublicationTitleLookup(
+      new OpenAlexClient({ timeoutMs: 1000, fetchImpl: fake.fetch }),
+    );
+    const [result] = await lookup.lookup('Jason A. Demery', [
+      {
+        title: 'Axial movements are relatively preserved in closed head injury',
+        citation:
+          'Hanlon RE, Demery JA (1999). Axial movements are relatively preserved in closed head injury. Brain Injury, 13, 1-9.',
+        journal: 'Brain Injury',
+        year: 1999,
+      },
+    ]);
+    expect(result.status).toBe('authored');
+    expect(result.work?.year).toBe(2000);
+  });
+
   it('does not query PubMed for a book chapter and does not invent a journal match', async () => {
     const fake = fakeFetch([
       {

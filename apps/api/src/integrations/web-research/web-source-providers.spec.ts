@@ -207,6 +207,41 @@ describe('WebSourceProvider coverage', () => {
     expect(seak.message).not.toMatch(/not searched as a dedicated source/i);
   });
 
+  it('treats a patents topic with no hits as an empty public search, not unimplemented', async () => {
+    const empty = dossier([], {
+      topics: [{ topic: 'patents', queries: 2, hits: 0 }],
+      executedQueries: [
+        {
+          topic: 'patents',
+          query: '"Jason Demery" site:patents.google.com',
+        },
+      ],
+    });
+    const patents = await provider('patents', empty).search(query);
+    expect(patents.status).toBe('no_result');
+    expect(patents.outcome).toBe('no_result');
+    expect(patents.message).toMatch(/cannot prove that none exist/i);
+    expect(patents.message).not.toMatch(/not searched as a dedicated source/i);
+  });
+
+  it('assigns a Google Patents URL to the patents catalog source', async () => {
+    const result = await provider(
+      'patents',
+      dossier([
+        record({
+          id: 'gp',
+          url: 'https://patents.google.com/patent/US123',
+          kind: 'other',
+          title: 'US123 Demery',
+        }),
+      ]),
+    ).search(query);
+    expect(result.status).toBe('ok');
+    expect(result.items[0].sourceId).toBe('patents');
+    expect(result.items[0].category).toBe('patent');
+    expect(result.items[0].url).toContain('patents.google.com');
+  });
+
   it('files a forensic practice site under advertising when the page markets those services', async () => {
     const practice = dossier([
       record({
@@ -234,5 +269,32 @@ describe('WebSourceProvider coverage', () => {
     expect(ads.items[0].url).toContain('neuropsychologicalsciences.com');
     const site = await provider('expert_website', practice).search(query);
     expect(site.items[0].url).toContain('neuropsychologicalsciences.com');
+  });
+
+  it('files an expert-directory page that markets IME services under IME advertising', async () => {
+    const listing = dossier([
+      record({
+        id: 'ei',
+        url: 'https://www.expertinstitute.com/experts/jason-demery',
+        kind: 'directory',
+        directoryId: 'other_expert_directories',
+        title: 'Jason Demery, Independent Medical Examinations',
+        summary:
+          'Available for independent medical examinations and forensic evaluations.',
+        claims: [
+          {
+            type: 'forensic',
+            text: 'IME',
+            quote: 'independent medical examinations',
+            topic: 'ime',
+            basis: 'third_party',
+            from: 'page',
+          },
+        ],
+      }),
+    ]);
+    const ime = await provider('ime_advertising', listing).search(query);
+    expect(ime.status).toBe('ok');
+    expect(ime.items[0].url).toContain('expertinstitute.com');
   });
 });

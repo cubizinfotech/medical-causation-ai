@@ -65,7 +65,8 @@ describe('ExpertIdentityResolver', () => {
       '1234567893',
       '1457767758',
     ]);
-    expect(resolution.note).toMatch(/Add the expert’s NPI/);
+    expect(resolution.note).toMatch(/NPI number/);
+    expect(resolution.note).toMatch(/not required to keep searching public records/);
   });
 
   it('confirms a single name and specialty match when no city is given', async () => {
@@ -102,18 +103,26 @@ describe('ExpertIdentityResolver', () => {
     expect(resolution.note).not.toMatch(/practice city/);
   });
 
-  it('confirms one full-name match in the same state when only the city differs', async () => {
-    const { resolver } = resolverFor([{ ...neurologist, city: 'Scottsdale' }]);
+  it('does not confirm a full-name match when the registry city is not the city entered', async () => {
+    const { resolver } = resolverFor([
+      { ...neurologist, city: 'Beverly Hills', state: 'CA' },
+    ]);
     const { resolution, record } = await resolver.resolve({
-      ...query,
       expertName: 'Jane Ann Smith',
+      city: 'Los Angeles, CA',
+      specialty: 'Neurology',
     });
-    expect(resolution.status).toBe('confirmed');
-    expect(record?.npi).toBe('1234567893');
-    expect(resolution.basis).toEqual(['full name', 'specialty', 'state']);
-    expect(resolution.note).toMatch(/SCOTTSDALE/);
-    expect(resolution.note).toMatch(/not Phoenix/);
-    expect(resolution.candidates).toEqual([]);
+    expect(resolution.status).toBe('ambiguous');
+    expect(record).toBeNull();
+    expect(resolution.identity).toBeNull();
+    expect(resolution.candidates[0]).toMatchObject({
+      npi: '1234567893',
+      city: 'BEVERLY HILLS',
+    });
+    expect(resolution.note).toMatch(/Los Angeles/);
+    expect(resolution.note).toMatch(/BEVERLY HILLS/);
+    expect(resolution.note).toMatch(/not used as a confirmed identity/);
+    expect(resolution.note).toMatch(/not required to keep searching public records/);
   });
 
   it('keeps a same-specialty record in another city as a candidate only', async () => {
@@ -124,7 +133,7 @@ describe('ExpertIdentityResolver', () => {
       npi: '1234567893',
       city: 'SCOTTSDALE',
     });
-    expect(resolution.note).toMatch(/listed separately and was not merged/);
+    expect(resolution.note).toMatch(/not used as a confirmed identity/);
   });
 
   it('matches "St. Louis" to the registry spelling "SAINT LOUIS"', async () => {

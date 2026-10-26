@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-10-26): opening-page CV, identity, and summary consistency (report 3.10.3)
+
+- CV comparison now reuses collected PubMed/OpenAlex records when a catalog title search missed the same citation, so the publications section and CV comparison no longer disagree on status.
+- Extracted CV claim counts name how many claims were compared, how many are source-only, and which rows are Not checked. Membership and award claims are listed instead of disappearing from the total.
+- An NPI record in a different city than the investigation city stays a possible match. It is not confirmed and is not copied into licenses or other findings as verified.
+- The executive summary states the source basis (own website, directory, issuing body) and does not count catalog misses as inconsistencies.
+- Not deployed. Historic client reports were not overwritten.
+
+### Changed (2026-10-26): public-web coverage for patents, IME ads, and directories (report 3.10.2)
+
+- Targeted public searches now include Google Patents / USPTO, DRI speaker pages, Expert Institute, AACN, Expert Witness Profiler, awards, and military-service claims. High-value topics are kept when a provider budget cannot run every query; omitted topics are recorded instead of silently dropped.
+- Report coverage no longer labels a category “not implemented” when a public search ran. Official USPTO, DRI member-database, or military verification is still described as incomplete when those logins were not used.
+- Directory pages that advertise IME or forensic services file under IME advertising. Patent and valor.defense.gov pages file under the matching report sections. Extra license states mentioned on already-read pages are searched in the follow-up round.
+- Catalog title matching no longer treats a same-journal paper from a different decade as the CV citation. A 1999 JINS abstract is not matched to a 2011 article with a similar title. Unverified catalog records are labelled “Catalog record,” not “Verified citation.”
+- Not deployed. Historic client reports were not overwritten. Paid USPTO (ID.me), PACER, and transcript databases were not added.
+
 ### Changed (2026-10-23): always search for an expert profile photograph
 
 - Every investigation now runs a dedicated staff/faculty/practice photo search. A photo is used only when the page is already about this person, it is a practice, faculty, directory or review page (not news, court, video or social), and the image names the person or is marked as a headshot. Tracking pixels and site logos are skipped. If no such photo can be read, the report says so.

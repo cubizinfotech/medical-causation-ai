@@ -455,6 +455,79 @@ describe('coverageLine', () => {
     expect(line).not.toMatch(/was not searched in this investigation/i);
   });
 
+  it('does not label a public patent search as not implemented', () => {
+    const line = coverageLine(
+      dossier([], { topics: [{ topic: 'patents', queries: 2, hits: 0 }] }),
+      'patents',
+      ['Patents is not implemented in this investigation.'],
+    );
+    expect(line).toMatch(/dedicated search for this topic ran/i);
+    expect(line).toMatch(/public web search for patents/i);
+    expect(line).toMatch(/Official USPTO verification/i);
+    expect(line).not.toMatch(/not implemented/i);
+  });
+
+  it('records when a planned category was dropped by the query budget', () => {
+    const line = coverageLine(
+      dossier([], {
+        topics: [{ topic: 'identity', queries: 4, hits: 1 }],
+        omittedTopics: [{ topic: 'patents', reason: 'budget' }],
+      }),
+      'patents',
+    );
+    expect(line).toMatch(/query budget or time limit/i);
+    expect(line).not.toMatch(/not implemented/i);
+  });
+
+  it('files a Google Patents page under patents even without a claim sentence', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'patent',
+          'https://patents.google.com/patent/US1234567',
+          'other',
+          [],
+          'strong',
+          'US1234567 — Demery apparatus',
+        ),
+      ]),
+    );
+    expect(routed.get('patents')?.[0].url).toContain('patents.google.com');
+  });
+
+  it('files a YouTube page under videos even without a claim sentence', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'yt',
+          'https://www.youtube.com/watch?v=dQPVnCi9EyQ',
+          'video',
+          [],
+          'strong',
+          'State Expert Dr. Jason Demery testimony',
+        ),
+      ]),
+    );
+    expect(routed.get('videos')?.[0].url).toContain('youtube.com');
+  });
+
+  it('files an expert-directory listing under directories', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'ei',
+          'https://www.expertinstitute.com/experts/jason-demery',
+          'directory',
+          [],
+          'possible',
+          'Jason Demery, PhD',
+        ),
+      ]),
+    );
+    expect(routed.get('directories')?.[0].url).toContain('expertinstitute.com');
+    expect(routed.get('directories')?.[0].matchLevel).toBe('possible');
+  });
+
   it('mentions a blocked source only when it is material to the section', () => {
     const patents = coverageLine(
       dossier([], {

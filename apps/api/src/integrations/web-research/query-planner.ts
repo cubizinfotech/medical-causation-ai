@@ -34,6 +34,7 @@ export type QueryTopic =
   | 'grants'
   | 'patents'
   | 'awards'
+  | 'military_claims'
   | 'ime'
   | 'criminal'
   | 'university_rules'
@@ -65,6 +66,8 @@ const PAGINATE_TOPICS = new Set<QueryTopic>([
   'litigation',
   'court_documents',
   'publications',
+  'ime',
+  'patents',
 ]);
 
 const SOCIAL_SITES: ReadonlyArray<{ host: string; label: string }> = [
@@ -83,7 +86,77 @@ const EXTRA_DIRECTORY_HOSTS = [
   'experts.com',
   'witness.net',
   'freereferral.com',
+  'expertinstitute.com',
+  'expertwitnessprofiler.com',
 ] as const;
+
+/**
+ * Lower is earlier. Used when a provider or global budget cannot run every
+ * planned query so patents, IME advertising and directories are not the first
+ * topics dropped.
+ */
+export const QUERY_PRIORITY: Record<QueryTopic, number> = {
+  identity: 1,
+  portrait: 2,
+  license: 3,
+  certification: 4,
+  certification_org: 5,
+  education: 6,
+  follow_up: 8,
+  directories: 10,
+  ime: 11,
+  advertising: 12,
+  grants: 13,
+  patents: 14,
+  awards: 15,
+  military_claims: 16,
+  litigation: 17,
+  court_documents: 18,
+  depositions: 19,
+  criminal: 20,
+  discipline: 21,
+  publications: 22,
+  memberships: 23,
+  social: 24,
+  video: 25,
+  business: 26,
+  university_rules: 30,
+  news: 40,
+  news_adverse: 41,
+  reviews: 42,
+  places: 43,
+  context: 99,
+};
+
+export function queryPriority(topic: QueryTopic): number {
+  return QUERY_PRIORITY[topic] ?? 50;
+}
+
+export function prioritizeQueries(
+  plans: readonly PlannedQuery[],
+): PlannedQuery[] {
+  return [...plans].sort((a, b) => {
+    const delta = queryPriority(a.topic) - queryPriority(b.topic);
+    if (delta !== 0) return delta;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/** Keeps attorney-note queries, then the highest-priority topical searches. */
+export function selectQueriesForBudget(
+  plans: readonly PlannedQuery[],
+  budget: number,
+): { selected: PlannedQuery[]; omitted: PlannedQuery[] } {
+  const context = plans.filter((plan) => plan.topic === 'context');
+  const rest = prioritizeQueries(
+    plans.filter((plan) => plan.topic !== 'context'),
+  );
+  const room = Math.max(0, budget - context.length);
+  return {
+    selected: [...rest.slice(0, room), ...context],
+    omitted: rest.slice(room),
+  };
+}
 
 export interface FollowUpSignals {
   acronyms: readonly string[];
@@ -170,6 +243,10 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
   add('certification_org', {
     query: `${clause} site:abpp.org`,
     prompt: `Find the American Board of Professional Psychology (ABPP) directory page for ${subjectLine}, if one exists. A missing listing is not proof the person is not certified. Prefer the official ABPP page over a mention on another site.`,
+  });
+  add('certification_org', {
+    query: `${clause} site:theaacn.org`,
+    prompt: `Find the American Academy of Clinical Neuropsychology (AACN) member directory or profile for ${subjectLine}, if one exists. A missing listing is not proof the person is not a member. Prefer theaacn.org over a mention on another site.`,
   });
   add('education', {
     query: `${clause} ${profession} (PhD OR "Ph.D." OR MD OR PsyD OR degree OR graduated OR fellowship OR residency OR internship OR "curriculum vitae") University`,
@@ -296,6 +373,38 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${clause} ${profession} (LLC OR "P.A." OR PLLC OR Inc OR corporation OR "registered agent" OR sunbiz OR opencorporates)${where}`,
     prompt: `Find business registry or company records (Secretary of State, Sunbiz, OpenCorporates, Bizapedia) and company websites where ${subjectLine} is an officer, owner, registered agent or practice principal.`,
   });
+  add('patents', {
+    query: `${clause} (patent OR inventor OR "patent application") ${profession}`,
+    prompt: `Find patents or patent applications that list ${subjectLine} as inventor or owner. Prefer Google Patents or USPTO pages. A missing listing is not proof that none exist.`,
+  });
+  add('patents', {
+    query: `${clause} site:patents.google.com`,
+    prompt: `Find Google Patents records that list ${subjectLine} as inventor or assignee. A missing listing is not proof that none exist.`,
+  });
+  add('patents', {
+    query: `${clause} (trademark OR "trade mark" OR "service mark") (USPTO OR TESS OR "serial number")`,
+    prompt: `Find trademarks or service marks that list ${subjectLine} as owner or applicant on USPTO or other public pages. A missing listing is not proof that none exist.`,
+  });
+  add('awards', {
+    query: `${clause} ${profession} (award OR honor OR "award recipient" OR "honored with" OR medal)`,
+    prompt: `Find awards, honors or medals claimed by or reported about ${subjectLine}. Give the page URL for each. Do not treat a missing listing as proof that none exist.`,
+  });
+  add('military_claims', {
+    query: `${clause} (veteran OR "military service" OR "U.S. Army" OR "U.S. Navy" OR "U.S. Air Force" OR "Marine Corps" OR "Purple Heart" OR "Bronze Star")`,
+    prompt: `Find public pages that claim ${subjectLine} served in the U.S. military or received a military medal. Give the page URL. Do not invent service or treat a missing listing as proof of none.`,
+  });
+  add('military_claims', {
+    query: `${clause} site:valor.defense.gov`,
+    prompt: `Find a public Military Times / valor.defense.gov listing for ${subjectLine}, if one exists. The authenticated valor search is not used. A missing listing is not proof of no service or medal.`,
+  });
+  add('video', {
+    query: `${clause} ${profession} (site:youtube.com OR site:vimeo.com OR podcast OR webinar OR lecture OR presentation)`,
+    prompt: `Find public videos, podcasts, webinars, lectures or slide presentations featuring ${subjectLine}.`,
+  });
+  add('video', {
+    query: `${clause} (interview OR podcast OR transcript OR "grand rounds" OR webinar) ${profession}`,
+    prompt: `Find interviews, podcasts, grand rounds or webinars featuring ${subjectLine}, including any public transcript or a direct audio or video file (mp3, mp4) that can be opened without a login. Give the original URL.`,
+  });
   add('news', {
     query: clause,
     kind: 'news',
@@ -309,25 +418,9 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     },
     { except: NEWS_ONLY },
   );
-  add('video', {
-    query: `${clause} ${profession} (site:youtube.com OR site:vimeo.com OR podcast OR webinar OR lecture OR presentation)`,
-    prompt: `Find public videos, podcasts, webinars, lectures or slide presentations featuring ${subjectLine}.`,
-  });
-  add('video', {
-    query: `${clause} (interview OR podcast OR transcript OR "grand rounds" OR webinar) ${profession}`,
-    prompt: `Find interviews, podcasts, grand rounds or webinars featuring ${subjectLine}, including any public transcript or a direct audio or video file (mp3, mp4) that can be opened without a login. Give the original URL.`,
-  });
   add('reviews', {
     query: `${clause} ${profession} reviews OR ratings OR complaints (healthgrades OR vitals OR ratemds OR yelp OR google OR bbb OR avvo)`,
     prompt: `Find public patient, client or customer reviews, ratings and complaints for ${subjectLine} (Healthgrades, Vitals, RateMDs, Yelp, Google reviews, BBB, Avvo and similar). Include the rating and number of reviews when shown.`,
-  });
-  add('patents', {
-    query: `${clause} (patent OR inventor OR "patent application" OR trademark) ${profession}`,
-    prompt: `Find patents, patent applications or trademarks with ${subjectLine} as inventor or owner (Google Patents, USPTO).`,
-  });
-  add('awards', {
-    query: `${clause} ${profession} (award OR honor OR medal OR "veteran" OR "military service" OR "U.S. Army" OR "U.S. Navy")`,
-    prompt: `Find awards, honors and any military service claimed by or reported about ${subjectLine}. Give the page URL for each.`,
   });
   add('places', {
     query: `${base}${where}`,

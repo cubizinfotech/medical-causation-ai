@@ -1035,6 +1035,7 @@ async function buildCvCheck(
     sourceResults,
     identity: identityFromResearch(request, sourceResults, evidence),
     publications,
+    expertName: request.expertName,
   });
 }
 

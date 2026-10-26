@@ -132,6 +132,12 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
     topics: ['patent'],
   },
   {
+    id: 'military_valor',
+    name: 'Military Valor awards',
+    hosts: ['valor.defense.gov'],
+    topics: ['military'],
+  },
+  {
     id: 'pubmed',
     name: 'PubMed / PubMed Central',
     hosts: [

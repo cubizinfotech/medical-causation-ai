@@ -54,6 +54,10 @@ export const DEDICATED_SOURCE_TOPICS: Record<string, string[]> = {
   corporate_affiliations: ['business'],
   university: ['education', 'university_rules'],
   state_court_records: ['litigation', 'court_documents'],
+  patents: ['patents'],
+  trademarks: ['patents'],
+  awards: ['awards'],
+  military_claims: ['military_claims', 'awards'],
 };
 
 /**
@@ -96,7 +100,29 @@ const PRACTICE_PAGE_KINDS = new Set([
   'ime',
   'profile',
   'other',
+  'directory',
 ]);
+
+const PATENT_HOSTS = [
+  'patents.google.com',
+  'uspto.gov',
+  'ppubs.uspto.gov',
+  'wipo.int',
+];
+const MILITARY_HOSTS = ['valor.defense.gov'];
+
+function recordHost(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+function hostMatches(url: string, domains: readonly string[]): boolean {
+  const value = recordHost(url);
+  return domains.some((d) => value === d || value.endsWith(`.${d}`));
+}
 
 /**
  * A practice or IME page can also answer the advertising catalog sources
@@ -107,7 +133,6 @@ export function recordServesCatalogSource(
   record: WebRecord,
   sourceId: string,
 ): boolean {
-  if (!PRACTICE_PAGE_KINDS.has(record.kind)) return false;
   if (record.match.level !== 'strong' && record.match.level !== 'possible') {
     return false;
   }
@@ -119,6 +144,32 @@ export function recordServesCatalogSource(
   ]
     .join(' ')
     .toLowerCase();
+  if (sourceId === 'patents' || sourceId === 'trademarks') {
+    if (hostMatches(record.url, PATENT_HOSTS)) {
+      return sourceId === 'trademarks'
+        ? /trademark|service mark/.test(hay) || /trademark/i.test(record.url)
+        : !/trademark/i.test(record.url);
+    }
+    return sourceId === 'trademarks'
+      ? /trademark|service mark/.test(hay)
+      : claims.some((claim) => claim.topic === 'patent') || /\bpatent/.test(hay);
+  }
+  if (sourceId === 'awards') {
+    return (
+      claims.some((claim) => claim.topic === 'award') ||
+      /\b(award recipient|honou?red with|medal)\b/.test(hay)
+    );
+  }
+  if (sourceId === 'military_claims') {
+    return (
+      hostMatches(record.url, MILITARY_HOSTS) ||
+      claims.some((claim) => claim.topic === 'military') ||
+      /\b(veteran|military service|u\.s\.\s(?:army|navy|air force)|marine corps)\b/.test(
+        hay,
+      )
+    );
+  }
+  if (!PRACTICE_PAGE_KINDS.has(record.kind)) return false;
   const ime =
     /\bindependent medical\b|\bime\b|\bcompulsory examination\b|\brule 35\b|\bforensic evaluat/.test(
       hay,
@@ -139,6 +190,12 @@ export function recordServesCatalogSource(
 /** Catalog source a web record belongs to. */
 export function sourceIdForRecord(record: WebRecord): string {
   if (record.place) return 'google_maps';
+  if (hostMatches(record.url, PATENT_HOSTS)) {
+    return /trademark/i.test(`${record.url} ${record.title}`)
+      ? 'trademarks'
+      : 'patents';
+  }
+  if (hostMatches(record.url, MILITARY_HOSTS)) return 'military_claims';
   return catalogSourceFor(record.kind, record.directoryId).sourceId;
 }
 
@@ -190,7 +247,10 @@ function itemFor(
       : '';
   return {
     sourceId: definition.id,
-    category: mapped.category,
+    category:
+      definition.category && definition.category !== 'website'
+        ? definition.category
+        : mapped.category,
     title: record.title,
     summary: `${caveat}${record.summary}`.trim(),
     url: record.url,
