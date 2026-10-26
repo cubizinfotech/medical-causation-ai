@@ -305,13 +305,6 @@ function inCity(record: NpiRecord, city: string): boolean {
   return record.locations.some((location) => citiesMatch(location.city, city));
 }
 
-function inState(record: NpiRecord, state: string | null): boolean {
-  if (!state) return false;
-  return record.locations.some(
-    (location) => location.state?.toUpperCase() === state.toUpperCase(),
-  );
-}
-
 function hasSpecialty(record: NpiRecord, specialty: string): boolean {
   return record.taxonomies.some((taxonomy) =>
     taxonomyMatches(specialty, taxonomy.description),
