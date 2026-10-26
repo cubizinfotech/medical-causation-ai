@@ -14,9 +14,7 @@ import { subjectFromQuery } from '@integrations/web-research/identity-assess';
 import type { WebRecord, WebResearchDossier } from '@integrations/web-research';
 import { compareCv } from '../cv/cv-comparison';
 import type { CvClaim } from '../cv/cv.types';
-import type { ExpertDiscrepancy } from '../research/discrepancy-analyzer';
 import { buildLegalResearchDossier } from '../research/legal';
-import type { EwiInvestigationResult } from '../investigation/jobs/ewi-investigation-job.types';
 import { EwiPdfReportService } from './ewi-pdf-report.service';
 import { prepareEwiReportInput } from './ewi-report-input';
 import { buildEwiReportDocument } from './ewi-report.template';
@@ -437,8 +435,18 @@ describe('EWI 3.10.7 fixture validation', () => {
           title: 'Publication not found in the catalogs checked: Missing paper',
           description: 'Catalog miss',
           severity: 'low',
+          evidenceIds: [],
+          relatedUrls: [],
+          label: 'not_found',
+          previousValue: 'Missing paper',
+          currentValue: null,
+          change: null,
+          cvDate: null,
+          cvSource: 'Uploaded CV: fixture-cv.pdf',
+          supportingSource: 'OpenAlex',
+          priority: 3,
           sources: [],
-        } as ExpertDiscrepancy,
+        },
       ],
       questions: [],
       questionCount: 0,
@@ -449,8 +457,10 @@ describe('EWI 3.10.7 fixture validation', () => {
       summary: '',
       analysis: undefined as never,
       legalResearch,
+      onlinePresence: undefined as never,
+      professionalBackground: undefined as never,
       cvCheck: null,
-    } as EwiInvestigationResult);
+    });
     expect(prepared.cvComparisonState).toBe('not_uploaded');
     expect(
       prepared.discrepancies.some((row) =>
