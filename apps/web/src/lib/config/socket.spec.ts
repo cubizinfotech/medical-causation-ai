@@ -17,5 +17,9 @@ describe("socketTarget", () => {
       url: "http://157.230.156.87/medical-analysis",
       path: "/api/socket.io",
     });
+    expect(socketTarget("ewi", "https://157.230.156.87/api")).toEqual({
+      url: "https://157.230.156.87/ewi",
+      path: "/api/socket.io",
+    });
   });
 });

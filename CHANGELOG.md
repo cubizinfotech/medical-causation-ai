@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-10-27): Caddy HTTPS for the public IP and for domains
+
+- Production IP Caddyfile serves HTTP on port 80 and Let's Encrypt HTTPS on the public IP using the shortlived ACME profile (about 6 days). HTTP is not redirected until HTTPS is confirmed. Domain Caddyfile keeps split-host routing and leaves HSTS off until then.
+- Local development is unchanged: `http://localhost:3000` / `http://localhost:3001` without Caddy. Optional `Caddyfile.local` uses Caddy's internal CA only.
+- Deploy script requires `APP_IP` for `Caddyfile.ip`, checks HTTP through Caddy, and warns if HTTPS is not issued yet.
+
 ### Changed (2026-10-26): CV omission wording and source-link identity (report 3.10.7)
 
 - When no CV is uploaded, the report says CV comparison was not performed. It does not say “no CV versions were collected” or imply there are no discrepancies.

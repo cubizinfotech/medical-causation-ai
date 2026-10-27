@@ -95,23 +95,30 @@ services:
     networks:
       - mca-network
 
-  # HTTPS for the website and API (Let's Encrypt). Needs APP_DOMAIN, API_DOMAIN
-  # and ACME_EMAIL in .env and DNS for both names. See DEPLOYMENT.md, "HTTPS".
+  # Reverse proxy in front of the host Node apps. Not started by docker:infra.
+  # IP HTTPS:    CADDYFILE=Caddyfile.ip APP_IP=<public IPv4> ACME_EMAIL=...
+  # Domain HTTPS: CADDYFILE=Caddyfile (default) APP_DOMAIN API_DOMAIN ACME_EMAIL
+  # Optional local HTTPS (internal CA only): CADDYFILE=Caddyfile.local
   # Start with: docker compose --profile https up -d caddy
+  # Caddy 2.10.2+ is required for Let's Encrypt IP certificates. See DEPLOYMENT.md.
   caddy:
     image: caddy:2-alpine
     container_name: mca-caddy
     profiles: ["https"]
     restart: unless-stopped
     # Host networking: Caddy listens on ports 80 and 443 and reaches the PM2
-    # apps on 127.0.0.1:3000 and 127.0.0.1:3001.
+    # apps on 127.0.0.1:3000 and 127.0.0.1:3001. Linux only; do not rely on
+    # this on Docker Desktop for Windows.
     network_mode: host
     environment:
       APP_DOMAIN: ${APP_DOMAIN:-}
       API_DOMAIN: ${API_DOMAIN:-}
+      APP_IP: ${APP_IP:-}
       ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
-      # Caddyfile (HTTPS with domains) or Caddyfile.ip (port 80 on the IP, no domain yet)
+      # Empty CADDYFILE falls back to the domain file. Set Caddyfile.ip on the
+      # droplet until DNS names exist. Do not leave CADDYFILE pointing at a
+      # missing file.
       - ./docker/caddy/${CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config

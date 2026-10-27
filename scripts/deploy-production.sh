@@ -152,13 +152,27 @@ if [[ "$web_code" != "200" && "$web_code" != "304" ]]; then
   exit 1
 fi
 
-# Caddy serves the site on port 80 by IP (CADDYFILE=Caddyfile.ip) or with
-# HTTPS for a domain (APP_DOMAIN). Recreated so a changed setting applies;
-# certificates stay in the mca-caddy-data volume.
+# Caddy: Caddyfile.ip (HTTP + IP HTTPS) or Caddyfile (domain HTTPS).
+# Recreated so a changed Caddyfile applies; certificates stay in mca-caddy-data.
 env_setting() { grep -E "^$1=" .env | tail -n 1 | cut -d= -f2- | tr -d '\r"'; }
-if [[ -n "$(env_setting CADDYFILE)" || -n "$(env_setting APP_DOMAIN)" ]]; then
+caddyfile="$(env_setting CADDYFILE)"
+app_domain="$(env_setting APP_DOMAIN)"
+app_ip="$(env_setting APP_IP)"
+if [[ "$caddyfile" == "Caddyfile.local" ]]; then
+  echo "CADDYFILE=Caddyfile.local is Caddy's internal CA for a laptop. Do not use it on the droplet."
+  exit 1
+fi
+if [[ "$caddyfile" == "Caddyfile.ip" && -z "$app_ip" ]]; then
+  echo "CADDYFILE=Caddyfile.ip requires APP_IP in .env (the droplet public IPv4)."
+  exit 1
+fi
+if [[ -n "$caddyfile" || -n "$app_domain" ]]; then
+  if [[ -z "$(env_setting ACME_EMAIL)" ]]; then
+    echo "ACME_EMAIL in .env is required before starting Caddy (Let's Encrypt account contact)."
+    exit 1
+  fi
   docker compose --profile https up -d --force-recreate caddy
-  if [[ "$(env_setting CADDYFILE)" == "Caddyfile.ip" ]]; then
+  if [[ "$caddyfile" == "Caddyfile.ip" ]]; then
     proxied=0
     for _ in $(seq 1 15); do
       if curl -fsS "http://127.0.0.1/api/health" >/dev/null; then
@@ -169,9 +183,21 @@ if [[ -n "$(env_setting CADDYFILE)" || -n "$(env_setting APP_DOMAIN)" ]]; then
     done
     if [[ "$proxied" != "1" ]]; then
       echo "Caddy check failed (port 80). See: docker logs mca-caddy"
+      echo "If logs show connection refused on 127.0.0.1:3000 or :3001, PM2 is down"
+      echo "or BIND_HOST is not reachable from Caddy. Check: pm2 status; ss -ltnp | grep -E ':3000|:3001'"
       exit 1
     fi
     echo "Site on port 80: OK"
+    if [[ -n "$app_ip" ]]; then
+      if curl -fsS --max-time 20 "https://${app_ip}/api/health" >/dev/null; then
+        echo "HTTPS on ${app_ip}: OK"
+      else
+        echo "HTTPS on ${app_ip} is not ready. HTTP still works; Caddy obtains the"
+        echo "certificate in the background. This is not proof of issuance."
+        echo "Watch: docker logs -f mca-caddy"
+        echo "Look for: certificate obtained successfully"
+      fi
+    fi
   fi
 fi
 

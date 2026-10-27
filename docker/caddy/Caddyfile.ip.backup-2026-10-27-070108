@@ -1,0 +1,35 @@
+# Port 80 on the server's IP address, for while there is no domain. Plain
+# HTTP: nothing is encrypted, so do not upload real patient records this way.
+# Selected with CADDYFILE=Caddyfile.ip in .env. See DEPLOYMENT.md, "HTTPS".
+#
+# One address for both apps: the website at /, the API at /api. Caddy removes
+# the /api prefix, so the API sees its usual paths (/ewi/jobs, /socket.io/...).
+# Set NEXT_PUBLIC_API_URL and API_PUBLIC_URL to http://<IP>/api.
+{
+	auto_https off
+}
+
+:80 {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+		-X-Powered-By
+	}
+
+	# API and WebSocket progress updates (NestJS, PM2 app mca-api)
+	handle_path /api/* {
+		# Medical record uploads can be large.
+		request_body {
+			max_size 100MB
+		}
+		reverse_proxy 127.0.0.1:3001
+	}
+
+	# Website (Next.js, PM2 app mca-web)
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

@@ -1,0 +1,34 @@
+# Optional local HTTPS using Caddy's internal CA. Not publicly trusted.
+# Do not use this file on the droplet. Local development does not need it:
+# http://localhost:3000 and http://localhost:3001 remain the default.
+#
+# Docker host networking is a Linux feature. On Docker Desktop for Windows
+# it does not reach Node processes on the Windows host, so run Caddy on the
+# host if you want this, or skip local HTTPS.
+#
+#   CADDYFILE=Caddyfile.local
+#   docker compose --profile https up -d caddy
+#
+# Browsers will warn until they trust Caddy's local root (pki/authorities/local).
+# skip_install_trust keeps the container from trying to change the host store.
+{
+	local_certs
+	skip_install_trust
+	auto_https disable_redirects
+}
+
+localhost, 127.0.0.1 {
+	tls internal
+	encode zstd gzip
+
+	handle_path /api/* {
+		request_body {
+			max_size 100MB
+		}
+		reverse_proxy 127.0.0.1:3001
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

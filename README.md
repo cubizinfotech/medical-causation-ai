@@ -114,5 +114,5 @@ MCA and EWI never import each other; both use `platform/` and the shared library
 - Sign-ins last 12 hours and end on the server when the user signs out. `JWT_SECRET` must be 32+ characters.
 - Login, job starts, and uploads are rate-limited, and each user can start at most `JOB_DAILY_LIMIT_PER_USER` paid AI jobs per day.
 - Views, downloads, and deletes of case data are written to `platform.audit_events`.
-- Production must run behind HTTPS (Caddy). Until a domain is set up, the IP site is plain HTTP; see [DEPLOYMENT.md](./DEPLOYMENT.md).
+- Production must run behind HTTPS (Caddy). The droplet can use a Let's Encrypt certificate for the public IP (short-lived, no domain) or for DNS names; local development stays on `http://localhost:3000`. See [DEPLOYMENT.md](./DEPLOYMENT.md) section 21.
 - Backups contain patient data; `scripts/backup.sh` encrypts them when a GPG key or passphrase is configured and only copies encrypted backups off the server.

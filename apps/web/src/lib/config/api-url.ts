@@ -3,7 +3,7 @@
  *
  * Next.js inlines NEXT_PUBLIC_API_URL at build time, so it must be written
  * here as process.env.NEXT_PUBLIC_API_URL. Set it to the HTTPS API address
- * in production (for example https://api.example.com) and rebuild the site.
+ * in production (https://<APP_IP>/api or https://<API_DOMAIN>) and rebuild.
  */
 const LOCAL_API_URL = "http://localhost:3001";
 

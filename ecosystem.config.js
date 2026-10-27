@@ -14,7 +14,7 @@
  *
  * BIND_HOST in .env decides who can reach ports 3000 and 3001:
  *   0.0.0.0    anyone (only without Caddy, on ports 3000 and 3001)
- *   127.0.0.1  only Caddy on this server (port 80 by IP, or HTTPS)
+ *   127.0.0.1  only Caddy on this server (port 80 and 443)
  */
 const fs = require('fs');
 const path = require('path');

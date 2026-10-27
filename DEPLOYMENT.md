@@ -17,9 +17,9 @@ Preferred checkout path: `/var/www/medical-causation-ai`. The deploy script also
 | `mca-postgres` | Docker, volume `mca-postgres-data` | `127.0.0.1:5432` |
 | `mca-redis` | Docker, volume `mca-redis-data` | `127.0.0.1:6379` |
 | `mca-pgadmin` | Docker, optional profile `tools` | `127.0.0.1:5050` |
-| `mca-caddy` | Docker, profile `https` | port `80` (and `443` with HTTPS) |
+| `mca-caddy` | Docker, profile `https` | port `80` and, with HTTPS, `443` |
 
-`BIND_HOST` in `.env` is `127.0.0.1`: only Caddy reaches ports 3000 and 3001, and visitors use port 80 (`CADDYFILE=Caddyfile.ip`) or HTTPS. `0.0.0.0` is only for running without Caddy. Public firewall ports: `22` and `80`, plus `443` once HTTPS is on. Leave `3000`, `3001`, `5432`, `6379`, and `5050` closed. pgAdmin and the database are reached through an SSH tunnel, not the public internet.
+`BIND_HOST` in `.env` is `127.0.0.1` once Caddy is in front: only Caddy reaches ports 3000 and 3001. Visitors use port 80 and 443 (`CADDYFILE=Caddyfile.ip` on the public IP, or `CADDYFILE=Caddyfile` with domain names). `0.0.0.0` is only for running without Caddy. Public firewall ports: `22`, `80`, and `443`. Leave `3000`, `3001`, `5432`, `6379`, and `5050` closed. pgAdmin and the database are reached through an SSH tunnel, not the public internet.
 
 PM2 keeps the API and web running after you log out of SSH. `pm2 startup` plus `pm2 save` starts them again after a reboot. Docker `restart: unless-stopped` does the same for Postgres and Redis.
 
@@ -74,7 +74,7 @@ nano .env
 
 The file must be named `.env` in the repository root. The API loads it from that path. Next.js loads it from the same file when `npm run build:web` runs (`apps/web/next.config.ts`).
 
-Production values that differ from a laptop:
+Production values that differ from a laptop. The URLs below are the no-Caddy bootstrap (ports 3000 and 3001). After Caddy is on, use the addresses in [21. HTTPS](#21-https-on-the-public-ip-or-with-a-domain) and rebuild the website.
 
 ```env
 NODE_ENV=production
@@ -307,7 +307,7 @@ curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000
 
 `/health` is liveness (the same path the old API container used). `/health/ready` checks Postgres and Redis and returns 503 when either is down. The web command should print `200`.
 
-From a browser: `http://157.230.156.87:3000`. The site calls `NEXT_PUBLIC_API_URL`.
+From a browser without Caddy: `http://157.230.156.87:3000`. With Caddy: `http://157.230.156.87` or `https://157.230.156.87` once the certificate is issued. The site calls `NEXT_PUBLIC_API_URL`, which is baked in at build time.
 
 ## 15. Logs
 
@@ -402,7 +402,7 @@ Passages marked `*` count as relevant. When fewer than `RAG_MIN_RELEVANT_CHUNKS`
 Records that attorneys upload on the MCA case form are stored in `CASE_RECORDS_PATH` (default `/var/www/medical-causation-ai/data/case-records`), with their page text in PostgreSQL. The folder is ignored by Git, so deploys never touch it. These are patient records:
 
 - Back up the folder together with the database. A database backup without the files, or the files without the database, cannot be restored on its own. `scripts/backup.sh` does both; see [22. Backups](#22-backups).
-- Serve the site over HTTPS before real records are uploaded; the IP demo sends them unencrypted. See [21. Port 80 without a domain, then HTTPS with a domain](#21-port-80-without-a-domain-then-https-with-a-domain).
+- Serve the site over HTTPS before real records are uploaded. See [21. HTTPS](#21-https-on-the-public-ip-or-with-a-domain).
 - The chronology sends record text to the configured `AI_PROVIDER`. Use a provider the firm has approved for patient data.
 
 Expert CVs uploaded on the EWI intake form follow the same rules in `EWI_DOCUMENTS_PATH` (default `data/ewi-documents`): owner-only, deleted with the investigation, and included in `scripts/backup.sh`.
@@ -550,64 +550,119 @@ Leave these off on the public server until you decide otherwise:
 
 Login is always required; there is no switch to turn it off.
 
-## 21. Port 80 without a domain, then HTTPS with a domain
+## 21. HTTPS on the public IP, or with a domain
 
-### Port 80 on the IP (no domain yet)
+Caddy (`caddy:2-alpine`, Compose profile `https`, `network_mode: host`) sits in front of the PM2 apps. It proxies `/` to `127.0.0.1:3000` and `/api/*` to `127.0.0.1:3001`, stripping `/api` so Nest still sees `/ewi/jobs` and `/socket.io/`. The 100 MB request-body limit on the API path is unchanged. WebSocket progress updates use the same `/api` prefix in the browser (`/api/socket.io`) and are passed through.
 
-Serves the whole site on port 80, so a firewall only needs ports 22, 80, and 443 open. Caddy answers on port 80 and passes the website (`/`) to port 3000 and the API (`/api`, prefix removed) to port 3001, including the WebSocket progress updates. The configuration is [docker/caddy/Caddyfile.ip](./docker/caddy/Caddyfile.ip). This is still plain HTTP: use a domain with HTTPS (below) before uploading real patient records.
+Local development does **not** use Caddy. Keep `npm run docker:infra`, `npm run dev:api`, and `npm run dev:web`, then open `http://localhost:3000` and `http://localhost:3001`. Optional local HTTPS is [Caddyfile.local](./docker/caddy/Caddyfile.local) (`tls internal` only — not a public certificate) and is unused unless you set `CADDYFILE=Caddyfile.local`.
 
-1. In `.env` (`.env.live` already has these):
+Pick **one** production Caddyfile with `CADDYFILE` in the server `.env`. An empty value mounts the domain file. Do not leave `CADDYFILE` pointing at a file that does not exist under `docker/caddy/`.
+
+### Firewall
+
+Let's Encrypt must reach the droplet on TCP 80 (HTTP-01) and TCP 443 (TLS-ALPN-01 and HTTPS). In the DigitalOcean Cloud Firewall, allow inbound TCP 22, 80, and 443 to this droplet. Leave 3000, 3001, 5432, 6379, and 5050 closed. If ufw is also enabled:
+
+```bash
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw status
+```
+
+### IP HTTPS without a domain
+
+Let's Encrypt issues publicly trusted certificates for IP addresses when the ACME client requests the **shortlived** profile. Those certificates last **160 hours** (just over six days). Caddy 2.10.2+ supports `profile shortlived` on the `acme` issuer. ZeroSSL is not used here; it does not issue IP certificates over ACME.
+
+This is **not** `tls internal` and **not** a self-signed certificate. A valid Caddyfile does not mean a certificate has been issued. Wait for `certificate obtained successfully` in `docker logs mca-caddy`. Until then, keep using HTTP; this Caddyfile does **not** redirect HTTP to HTTPS.
+
+[docker/caddy/Caddyfile.ip](./docker/caddy/Caddyfile.ip) serves HTTP on port 80 (any Host, so `curl http://127.0.0.1/api/health` still works) and HTTPS on `https://<APP_IP>`.
+
+1. In the **server** `.env` (do not put these values in the laptop `.env` you use for `npm run dev:web`):
 
    ```env
-   NEXT_PUBLIC_API_URL=http://157.230.156.87/api
-   FRONTEND_URL=http://157.230.156.87
-   API_PUBLIC_URL=http://157.230.156.87/api
-   BIND_HOST=127.0.0.1
+   APP_IP=157.230.156.87
+   ACME_EMAIL=you@example.com
    CADDYFILE=Caddyfile.ip
+   BIND_HOST=127.0.0.1
+   FRONTEND_URL=https://157.230.156.87,http://157.230.156.87
+   NEXT_PUBLIC_API_URL=https://157.230.156.87/api
+   API_PUBLIC_URL=https://157.230.156.87/api
    ```
 
-2. Run `bash scripts/deploy-production.sh`. It rebuilds the website for the new API address, restarts PM2 with the apps listening only on 127.0.0.1, starts Caddy, and checks `http://127.0.0.1/api/health`.
-3. Open `http://157.230.156.87` (no port). Ports 3000 and 3001 are no longer reachable from outside; remove any firewall rules for them.
+   `ACME_EMAIL` is required (Let's Encrypt account contact). `APP_DOMAIN` and `API_DOMAIN` are not required for this file. `FRONTEND_URL` lists both origins while HTTP and HTTPS are served together (CORS). After you enable redirects, you can drop the `http://` origin.
+
+2. Open ports 80 and 443 as above. Confirm nothing else is bound to them (`sudo ss -ltnp | grep -E ':80|:443'`).
+
+3. Recreate Caddy (the `mca-caddy-data` volume is kept; do not delete it):
+
+   ```bash
+   cd /var/www/medical-causation-ai
+   docker compose --profile https pull caddy
+   docker compose --profile https up -d --force-recreate caddy
+   docker exec mca-caddy caddy version    # 2.10.2 or newer
+   docker exec mca-caddy caddy validate --config /etc/caddy/Caddyfile
+   docker logs -f mca-caddy
+   ```
+
+   Wait for `certificate obtained successfully` for `157.230.156.87`, then Ctrl+C. If you only see retries, HTTPS is not up; HTTP on port 80 should still work.
+
+4. Rebuild the website so the browser bundle uses the HTTPS API address, then reload PM2:
+
+   ```bash
+   npm run build:web
+   pm2 restart ecosystem.config.js --update-env
+   ```
+
+   Changing `NEXT_PUBLIC_API_URL` without this rebuild leaves the old URL in the JavaScript. `pm2 restart` alone is not enough.
+
+5. Checks (issuance cannot be proven from a laptop Caddy validate):
+
+   ```bash
+   curl -fsS http://127.0.0.1/api/health
+   curl -fsS https://157.230.156.87/api/health
+   curl -fsS -o /dev/null -w "%{http_code}\n" https://157.230.156.87
+   echo | openssl s_client -connect 157.230.156.87:443 -servername 157.230.156.87 2>/dev/null | openssl x509 -noout -issuer -dates -ext subjectAltName
+   ```
+
+   The certificate subject must be the IP, the issuer Let's Encrypt, and `notAfter` about six days out. Caddy renews in the background; keep the container running. A 6-day cert that is not renewed expires. Do not delete `mca-caddy-data`.
+
+6. After HTTPS is confirmed, enable redirects by removing `auto_https disable_redirects` from [docker/caddy/Caddyfile.ip](./docker/caddy/Caddyfile.ip), recreate Caddy, and drop `http://157.230.156.87` from `FRONTEND_URL`. Do not add HSTS until you are sure you will keep HTTPS.
+
+`bash scripts/deploy-production.sh` starts Caddy when `CADDYFILE` or `APP_DOMAIN` is set, requires `APP_IP` for `Caddyfile.ip`, checks HTTP on port 80, and **warns** (does not fail) if HTTPS is not ready yet.
 
 ### HTTPS with a domain
 
-Required before real medical records are uploaded. Over the IP address, everything, including uploaded records and sign-in tokens, travels unencrypted.
-
-Caddy runs in Docker in front of the two PM2 apps, gets Let's Encrypt certificates, renews them, and redirects HTTP to HTTPS. The configuration is [docker/caddy/Caddyfile](./docker/caddy/Caddyfile).
+Use this when you have DNS names. It is the longer-lived (about 90 days) Let's Encrypt default, not the IP shortlived profile. The configuration is [docker/caddy/Caddyfile](./docker/caddy/Caddyfile). HTTP is not redirected until you remove `auto_https disable_redirects`. HSTS stays commented until HTTPS is confirmed.
 
 1. Point two DNS names at the server (A records to `157.230.156.87`), for example `app.example.com` for the website and `api.example.com` for the API. Wait until `ping app.example.com` shows the server IP.
-2. Allow web traffic. With ufw (`sudo ufw status`):
-
-   ```bash
-   sudo ufw allow 80/tcp
-   sudo ufw allow 443/tcp
-   ```
-
-   With a DigitalOcean cloud firewall, add the same rules there.
-3. In `.env` (remove `CADDYFILE` or leave it empty):
+2. Allow TCP 80 and 443 as in the firewall section above.
+3. In `.env` (`CADDYFILE` empty or `CADDYFILE=Caddyfile`; do not keep `Caddyfile.ip`):
 
    ```env
+   CADDYFILE=Caddyfile
    APP_DOMAIN=app.example.com
    API_DOMAIN=api.example.com
    ACME_EMAIL=you@example.com
-   FRONTEND_URL=https://app.example.com
+   FRONTEND_URL=https://app.example.com,http://app.example.com
    NEXT_PUBLIC_API_URL=https://api.example.com
    API_PUBLIC_URL=https://api.example.com
    BIND_HOST=127.0.0.1
    ```
 
-4. Start Caddy, rebuild the website (`NEXT_PUBLIC_API_URL` is built into the browser bundle), and restart (`--update-env` picks up `BIND_HOST`):
+   The API is on its own host, so these URLs have no `/api` prefix. Rebuild the website after changing `NEXT_PUBLIC_API_URL`.
+
+4. Start Caddy, wait for the certificates, rebuild, restart:
 
    ```bash
    cd /var/www/medical-causation-ai
-   docker compose --profile https up -d caddy
+   docker compose --profile https up -d --force-recreate caddy
    docker logs -f mca-caddy        # wait for "certificate obtained successfully", then Ctrl+C
    npm run build:web
    pm2 restart ecosystem.config.js --update-env
    ```
 
 5. Open `https://app.example.com`, sign in, and start an investigation. Live progress uses a WebSocket, which Caddy passes through.
-6. Close the plain-HTTP ports as well (with `BIND_HOST=127.0.0.1` they are already unreachable from outside; this is a second lock):
+6. After HTTPS works, remove `auto_https disable_redirects`, uncomment HSTS if you want it, recreate Caddy, and drop the `http://` CORS origin. Close 3000/3001 in the firewall if they were ever opened:
 
    ```bash
    sudo ufw deny 3000/tcp
@@ -616,9 +671,52 @@ Caddy runs in Docker in front of the two PM2 apps, gets Let's Encrypt certificat
 
    The deploy script checks health on `127.0.0.1`, so it keeps working.
 
-Caddy adds HSTS, `X-Frame-Options: DENY`, `nosniff`, and a referrer policy to every response. The API adds its own strict headers (helmet), and the website sends a frame-blocking Content-Security-Policy.
+Caddy sends `X-Frame-Options: DENY`, `nosniff`, and a referrer policy. The API adds its own headers (helmet), and the website sends a frame-blocking Content-Security-Policy.
 
-Keep the `mca-caddy-data` volume. It holds the certificates; deleting it forces new ones and can hit Let's Encrypt rate limits. `docker compose up -d postgres redis` in the deploy script does not touch Caddy.
+Keep the `mca-caddy-data` volume. It holds certificates and the ACME account; deleting it forces new ones and can hit Let's Encrypt rate limits. `docker compose up -d postgres redis` in the deploy script does not touch Caddy.
+
+### Reload Caddy without losing certificates
+
+```bash
+docker compose --profile https up -d --force-recreate caddy
+# or, if only the Caddyfile changed and the container is already current:
+docker exec mca-caddy caddy reload --config /etc/caddy/Caddyfile
+```
+
+`--force-recreate` replaces the container. Named volumes stay. Do not add `-v` and do not `docker volume rm mca-caddy-data`.
+
+### Connection refused on 127.0.0.1:3000 or 3001
+
+Caddy logs `connection refused` when the proxy cannot open the upstream. That is separate from TLS. Do not hide it. On the droplet:
+
+```bash
+pm2 status
+curl -fsS http://127.0.0.1:3001/health
+curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000
+ss -ltnp | grep -E ':3000|:3001'
+```
+
+Typical causes: PM2 apps are stopped or still building; `BIND_HOST` is not `127.0.0.1` or `0.0.0.0`; leftover `mca-api` / `mca-web` containers were removed but PM2 was never started; something else is bound to those ports (`DEPLOYMENT.md` section 19). Caddy uses host networking, so `127.0.0.1` in the Caddyfile is the droplet, not a Docker bridge. Start or fix the Node processes, then Caddy will proxy without a config change.
+
+### Roll back Caddy
+
+HTTP on port 80 remains available until you enable redirects. To return to a previous Caddyfile without deleting certificates:
+
+```bash
+cd /var/www/medical-causation-ai
+git checkout HEAD -- docker/caddy/Caddyfile.ip docker/caddy/Caddyfile
+# or: git checkout <known-good-commit> -- docker/caddy/
+docker compose --profile https up -d --force-recreate caddy
+```
+
+To stop Caddy entirely (apps must then listen on `0.0.0.0` again):
+
+```bash
+docker stop mca-caddy
+# set BIND_HOST=0.0.0.0, restore NEXT_PUBLIC_API_URL to host:port URLs, rebuild web, pm2 restart
+```
+
+Do not remove `mca-caddy-data` as part of rollback.
 
 ## 22. Backups
 

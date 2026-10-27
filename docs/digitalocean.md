@@ -4,8 +4,9 @@ The droplet runs two PM2 processes and two Docker containers.
 
 | Name | Runtime | Port on the host |
 |------|---------|------------------|
-| `mca-web` | PM2 | `3000` (public) |
-| `mca-api` | PM2 | `3001` (public) |
+| `mca-web` | PM2 | `3000` (`BIND_HOST`; `127.0.0.1` once Caddy is on) |
+| `mca-api` | PM2 | `3001` (`BIND_HOST`; `127.0.0.1` once Caddy is on) |
+| `mca-caddy` | Docker, profile `https` | `80` and `443` |
 | `mca-postgres` | Docker, volume `mca-postgres-data` | `127.0.0.1:5432` |
 | `mca-redis` | Docker, volume `mca-redis-data` | `127.0.0.1:6379` |
 | `mca-pgadmin` | Docker, optional | `127.0.0.1:5050` through an SSH tunnel |
@@ -41,7 +42,7 @@ npm run pm2:start
 npm run pm2:save
 ```
 
-The server `.env` is the laptop's `.env.live`. Set `NEXT_PUBLIC_API_URL` in it before `npm run build:web` (the current demo value is `http://157.230.156.87:3001`). Postgres and Redis use `127.0.0.1`, not the Docker names `postgres` and `redis`. `JWT_SECRET` (32+ characters) and `REDIS_PASSWORD` must be set.
+The server `.env` is the laptop's `.env.live`. Set `NEXT_PUBLIC_API_URL` in it before `npm run build:web`. With Caddy on the public IP that value is `https://157.230.156.87/api` (see [DEPLOYMENT.md](../DEPLOYMENT.md) section 21). Postgres and Redis use `127.0.0.1`, not the Docker names `postgres` and `redis`. `JWT_SECRET` (32+ characters) and `REDIS_PASSWORD` must be set.
 
 Create the first real sign-in:
 

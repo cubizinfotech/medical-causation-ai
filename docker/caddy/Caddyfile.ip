@@ -1,15 +1,31 @@
-# Port 80 on the server's IP address, for while there is no domain. Plain
-# HTTP: nothing is encrypted, so do not upload real patient records this way.
-# Selected with CADDYFILE=Caddyfile.ip in .env. See DEPLOYMENT.md, "HTTPS".
+# Production on the public IP, with no domain.
+# HTTP stays on port 80. HTTPS on 443 uses a publicly trusted Let's Encrypt
+# certificate for the IP itself. That requires the shortlived ACME profile
+# (about 160 hours / 6 days). Caddy renews it while this container is running.
+#
+# This is not tls internal and not a self-signed certificate. Browsers trust
+# the certificate only after Let's Encrypt has issued it. HTTP is not redirected
+# to HTTPS until that is confirmed (see DEPLOYMENT.md).
+#
+# Selected with CADDYFILE=Caddyfile.ip and APP_IP=<public IPv4> in .env.
+# ACME_EMAIL is required (Let's Encrypt account contact). APP_DOMAIN and
+# API_DOMAIN are not used here.
 #
 # One address for both apps: the website at /, the API at /api. Caddy removes
 # the /api prefix, so the API sees its usual paths (/ewi/jobs, /socket.io/...).
-# Set NEXT_PUBLIC_API_URL and API_PUBLIC_URL to http://<IP>/api.
+# After HTTPS is issued, set NEXT_PUBLIC_API_URL and API_PUBLIC_URL to
+# https://<IP>/api and rebuild the website.
+#
+# Caddy 2.10.2+ is required for IP certificates. Keep the mca-caddy-data volume.
 {
-	auto_https off
+	email {$ACME_EMAIL}
+	# Serve HTTP and HTTPS together. Do not redirect until HTTPS is confirmed.
+	auto_https disable_redirects
+	# Browsers talking to an IP sometimes omit SNI; use the IP certificate.
+	default_sni {$APP_IP}
 }
 
-:80 {
+(site) {
 	encode zstd gzip
 	header {
 		X-Content-Type-Options "nosniff"
@@ -32,4 +48,22 @@
 	handle {
 		reverse_proxy 127.0.0.1:3000
 	}
+}
+
+# Any Host on port 80, including 127.0.0.1 health checks and the public IP.
+:80 {
+	import site
+}
+
+# Public IP only. Let's Encrypt IP identifiers require this ACME profile.
+# ZeroSSL is not configured: it does not issue IP certificates over ACME.
+https://{$APP_IP} {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+			email {$ACME_EMAIL}
+			profile shortlived
+		}
+	}
+	import site
 }

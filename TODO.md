@@ -29,9 +29,9 @@
 - [ ] Sharing cases inside one law firm (today each case is visible only to the user who created it)
 - [ ] Create the real users on the server with `npm run user:create` (never seed demo accounts there)
 - [ ] Production email to real organizations
-- [ ] Point a domain at the droplet and start HTTPS (`DEPLOYMENT.md` section 21); the demo is IP and HTTP until then
+- [ ] Turn on IP HTTPS on the droplet (`CADDYFILE=Caddyfile.ip`, `APP_IP`, `ACME_EMAIL`, rebuild the website) or point a domain at it; see `DEPLOYMENT.md` section 21
 - [ ] Schedule `scripts/backup.sh` with cron, with encryption configured, and add an off-server copy (`DEPLOYMENT.md` section 22)
 - [ ] Add `DEPLOY_KNOWN_HOSTS` to the GitHub secrets (deploys stop without it)
-- [ ] After HTTPS is on, set `BIND_HOST=127.0.0.1` in the server `.env`
+- [ ] After Caddy is in front of the apps, keep `BIND_HOST=127.0.0.1` in the server `.env`
 
 EWI runs on sample data by default, or on four free public sources with `RESEARCH_PROVIDER=live`. It is not complete opposing-expert research until the paid sources, access, and firm-separation items are done.

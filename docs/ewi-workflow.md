@@ -174,10 +174,10 @@ Public-profile search is unchanged: a name match is not enough, and a connected 
 **Redirect URI.** Nest has no global `/api` prefix. The value in `ORCID_REDIRECT_URI` (or `{API_PUBLIC_URL}/orcid/callback` when that is empty) must be identical in the authorize request, the token exchange, and the ORCID Developer Tools app.
 
 - Local development: `http://localhost:3001/orcid/callback` (ORCID allows localhost HTTP).
-- IP Caddy layout: public URL `{API_PUBLIC_URL}/orcid/callback`, for example `http://<host>/api/orcid/callback`. Caddy strips `/api` and Nest sees `/orcid/callback`.
+- IP Caddy layout: public URL `{API_PUBLIC_URL}/orcid/callback`, for example `https://<host>/api/orcid/callback`. Caddy strips `/api` and Nest sees `/orcid/callback`.
 - Split-domain HTTPS: `https://<API_DOMAIN>/orcid/callback`.
 
-ORCID production apps require HTTPS except for localhost. The current IP site is plain HTTP, so production user OAuth is not ready until a domain and TLS are in place and that exact HTTPS URI is registered. Do not treat a successful public-profile lookup as a successful user login.
+ORCID production apps require HTTPS except for localhost. Register the exact HTTPS callback after the IP or domain certificate is issued. Do not treat a successful public-profile lookup as a successful user login.
 
 After ORCID redirects to the callback, the API stores tokens in Redis under the user who started `POST /orcid/authorize` and sends the browser to `{FRONTEND_URL}?orcid_oauth=<result>`. The website does not yet start this flow; a controlled local test uses a signed-in `POST /orcid/authorize` and then opens `authorizationUrl` in a browser. `GET /orcid/connection` returns `{ connected, orcid, name }` only — never tokens.
 

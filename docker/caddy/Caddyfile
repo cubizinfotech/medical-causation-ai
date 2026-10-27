@@ -1,15 +1,22 @@
-# HTTPS in front of the PM2 apps. Caddy gets and renews Let's Encrypt
-# certificates automatically and redirects HTTP to HTTPS.
+# HTTPS in front of the PM2 apps after DNS names point at this server.
+# Caddy gets and renews Let's Encrypt certificates (default 90-day classic
+# profile). HTTP is not redirected to HTTPS until you remove
+# `auto_https disable_redirects` (see DEPLOYMENT.md).
+#
 # Domains come from .env (APP_DOMAIN, API_DOMAIN, ACME_EMAIL). Both DNS names
-# must point at this server before Caddy starts. See DEPLOYMENT.md, "HTTPS".
+# must point at this server before Caddy starts. Do not use this file for an
+# IP-only deployment; use Caddyfile.ip instead.
 {
 	email {$ACME_EMAIL}
+	auto_https disable_redirects
 }
 
 (common) {
 	encode zstd gzip
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# HSTS only on this domain file, and only after HTTPS is confirmed.
+		# Leave it commented until browsers should refuse plain HTTP.
+		# Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
