@@ -119,6 +119,10 @@ function resolveDocumentType(
   item: ExpertEvidenceItem,
   raw: Record<string, unknown>,
 ): LegalDocumentType {
+  const hay = `${item.title} ${item.summary ?? ''}`.toLowerCase();
+  if (/\bnotice of (?:taking )?deposition\b/.test(hay)) {
+    return 'pleading';
+  }
   const stated = readString(raw.documentType)?.toLowerCase();
   if (stated && isDocumentType(stated)) return stated;
 

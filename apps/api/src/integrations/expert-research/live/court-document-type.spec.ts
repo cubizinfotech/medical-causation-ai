@@ -57,6 +57,20 @@ describe('classifyCourtDocument', () => {
     expect(
       classifyCourtDocument({
         searchKind: 'recap_document',
+        description:
+          "Plaintiffs' Notice of Taking Deposition Upon Oral Examination of Leah Ellenberg, Ph.D.",
+        title: 'Warren v. United States',
+      }),
+    ).toBe('pleading');
+    expect(
+      classifyCourtDocument({
+        searchKind: 'recap_document',
+        description: 'Notice of Deposition of Jane Smith',
+      }),
+    ).toBe('pleading');
+    expect(
+      classifyCourtDocument({
+        searchKind: 'recap_document',
         description: 'Trial transcript of testimony',
       }),
     ).toBe('testimony');

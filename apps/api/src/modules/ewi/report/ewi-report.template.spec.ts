@@ -2,6 +2,7 @@ import { buildGroundedCrossExamQuestions } from './ewi-report-questions';
 import {
   EWI_REPORT_SECTIONS,
   buildEwiReportDocument,
+  publicCvUrlsFromWeb,
 } from './ewi-report.template';
 import { EWI_REPORT_TEMPLATE_VERSION } from './ewi-report.version';
 import { EwiPdfReportService } from './ewi-pdf-report.service';
@@ -45,7 +46,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.9');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.10');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -2106,5 +2107,174 @@ describe('EWI report source coverage', () => {
         .join('\n') ?? '';
     expect(lawsuits).toMatch(/Complaint against Dr\. Demery|malpractice/i);
     expect(lawsuits).not.toMatch(/Smith v\. Jones/);
+  });
+
+  it('keeps alumni news out of university forensic-policy and prefers the subject CV URL', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Leah Ellenberg',
+      city: 'Beverly Hills, CA',
+      specialty: 'Neuropsychology',
+      evidence: [
+        {
+          sourceId: 'university',
+          category: 'university',
+          title:
+            "WSU alumna Leah Ellenberg's passion for neuropsychology has taken her from research to application",
+          summary: 'An alumni profile details Dr. Leah Ellenberg’s career.',
+          url: 'https://clas.wayne.edu/psychology/news/wsu-alumna-leah-ellenbergs-passion',
+          identityMatch: 'matched',
+          raw: { documentType: 'university' },
+        },
+      ],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-10-28T00:00:00.000Z',
+      webResearch: {
+        ranAt: '2026-10-28T00:00:00.000Z',
+        durationMs: 1,
+        partial: false,
+        partialNote: null,
+        queriesPlanned: 1,
+        queriesRun: 1,
+        providers: [],
+        pagesRead: 2,
+        pagesBlocked: [],
+        candidates: [],
+        records: [
+          {
+            id: 'jesse-cv',
+            url: 'https://static1.squarespace.com/static/x/Jesse+Fischer+CV+2024.pdf',
+            title: 'Jesse Fischer CV',
+            kind: 'other',
+            snippet: null,
+            summary:
+              'Jesse Fischer, Ph.D. Clinical Neuropsychologist at Leah Ellenberg, PhD and Associates.',
+            publishedAt: null,
+            retrievedAt: '2026-10-28T00:00:00.000Z',
+            searchProviders: [],
+            queries: [],
+            read: 'read',
+            readNote: null,
+            match: {
+              level: 'strong',
+              confidence: 'high',
+              basis: [],
+              conflicts: [],
+              quote: 'Jesse Fischer',
+              quoteVerified: true,
+              classifiedBy: 'rules',
+            },
+            candidateId: null,
+            claims: [],
+          },
+          {
+            id: 'leah-cv',
+            url: 'https://leahellenberg.com/ellenbergCV.pdf',
+            title: 'CURRICULUM VITAE Leah Ellenberg, Ph.D.',
+            kind: 'expert_website',
+            snippet: null,
+            summary:
+              'January, 2022 CURRICULUM VITAE Leah Ellenberg, Ph.D. PERSONAL INFORMATION',
+            publishedAt: null,
+            retrievedAt: '2026-10-28T00:00:00.000Z',
+            searchProviders: [],
+            queries: [],
+            read: 'read',
+            readNote: null,
+            match: {
+              level: 'strong',
+              confidence: 'high',
+              basis: [],
+              conflicts: [],
+              quote: 'Leah Ellenberg',
+              quoteVerified: true,
+              classifiedBy: 'rules',
+            },
+            candidateId: null,
+            claims: [],
+          },
+        ],
+        registries: [],
+        limitations: [],
+      },
+    });
+    const university =
+      document.sections
+        .find((section) => section.id === 'university-rules')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(university).toMatch(/Not applicable|No university policy/i);
+    expect(university).not.toMatch(/WSU alumna/i);
+    const preferred = publicCvUrlsFromWeb(
+      {
+        ranAt: '2026-10-28T00:00:00.000Z',
+        durationMs: 1,
+        partial: false,
+        partialNote: null,
+        queriesPlanned: 1,
+        queriesRun: 1,
+        providers: [],
+        pagesRead: 2,
+        pagesBlocked: [],
+        candidates: [],
+        records: [
+          {
+            id: 'jesse-cv',
+            url: 'https://static1.squarespace.com/static/x/Jesse+Fischer+CV+2024.pdf',
+            title: 'Jesse Fischer CV',
+            kind: 'other',
+            snippet: null,
+            summary: 'Jesse Fischer works with Leah Ellenberg.',
+            publishedAt: null,
+            retrievedAt: '2026-10-28T00:00:00.000Z',
+            searchProviders: [],
+            queries: [],
+            read: 'read',
+            readNote: null,
+            match: {
+              level: 'strong',
+              confidence: 'high',
+              basis: [],
+              conflicts: [],
+              quote: null,
+              quoteVerified: false,
+              classifiedBy: 'rules',
+            },
+            candidateId: null,
+            claims: [],
+          },
+          {
+            id: 'leah-cv',
+            url: 'https://leahellenberg.com/ellenbergCV.pdf',
+            title: 'CURRICULUM VITAE Leah Ellenberg',
+            kind: 'expert_website',
+            snippet: null,
+            summary: 'CURRICULUM VITAE Leah Ellenberg, Ph.D.',
+            publishedAt: null,
+            retrievedAt: '2026-10-28T00:00:00.000Z',
+            searchProviders: [],
+            queries: [],
+            read: 'read',
+            readNote: null,
+            match: {
+              level: 'strong',
+              confidence: 'high',
+              basis: [],
+              conflicts: [],
+              quote: null,
+              quoteVerified: false,
+              classifiedBy: 'rules',
+            },
+            candidateId: null,
+            claims: [],
+          },
+        ],
+        registries: [],
+        limitations: [],
+      },
+      'Leah Ellenberg',
+    );
+    expect(preferred[0]).toContain('ellenbergCV.pdf');
+    expect(preferred.some((url) => /Jesse/i.test(url))).toBe(false);
   });
 });

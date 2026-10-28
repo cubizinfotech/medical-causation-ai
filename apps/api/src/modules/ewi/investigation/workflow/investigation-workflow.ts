@@ -666,7 +666,10 @@ export async function executeInvestigationWorkflow(
   // If intake had no uploaded CV, compare claims from a public CV/resume PDF
   // found on the expert’s own site during web research.
   if (!cvCheck && webResearch) {
-    const websiteExtraction = extractionFromWebsiteCv(webResearch);
+    const websiteExtraction = extractionFromWebsiteCv(
+      webResearch,
+      request.expertName,
+    );
     if (websiteExtraction) {
       try {
         cvCheck = compareCv({
@@ -1032,11 +1035,20 @@ async function readCvSource(
   }
 }
 
-/** Strong-match public CV/resume on the expert’s site → synthetic CV extraction. */
+/** Strong-match public CV/resume for this expert → synthetic CV extraction. */
 export function extractionFromWebsiteCv(
   dossier: WebResearchDossier,
+  expertName?: string,
 ): CvExtraction | null {
-  const record = dossier.records.find((entry) => isWebsiteCvRecord(entry));
+  const ranked = dossier.records
+    .filter((entry) => isWebsiteCvRecord(entry, expertName))
+    .map((entry) => ({
+      entry,
+      score: scoreWebsiteCvRecord(entry, expertName),
+    }))
+    .filter((row) => row.score >= 40)
+    .sort((left, right) => right.score - left.score);
+  const record = ranked[0]?.entry;
   if (!record) return null;
   const claims: CvClaim[] = [];
   for (const [index, claim] of (record.claims ?? []).entries()) {
@@ -1078,9 +1090,14 @@ export function extractionFromWebsiteCv(
   };
 }
 
-function isWebsiteCvRecord(record: WebRecord): boolean {
+function isWebsiteCvRecord(
+  record: WebRecord,
+  expertName?: string,
+): boolean {
   if (record.match.level !== 'strong') return false;
-  if (record.read !== 'read' && !(record.claims?.length > 0)) return false;
+  if (record.read !== 'read' && !(record.claims && record.claims.length > 0)) {
+    return false;
+  }
   if (
     record.kind !== 'expert_website' &&
     record.kind !== 'other' &&
@@ -1090,10 +1107,119 @@ function isWebsiteCvRecord(record: WebRecord): boolean {
     return false;
   }
   const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
-  return (
-    /\.pdf($|\?)/i.test(record.url) ||
-    /\b(curriculum vitae|\bcv\b|resume)\b/.test(hay)
+  if (
+    !/\.pdf($|\?)/i.test(record.url) &&
+    !/\b(curriculum vitae|\bcv\b|resume)\b/.test(hay)
+  ) {
+    return false;
+  }
+  if (isOtherPersonCvRecord(record, expertName)) return false;
+  return cvRecordNamesSubject(record, expertName);
+}
+
+function scoreWebsiteCvRecord(
+  record: WebRecord,
+  expertName?: string,
+): number {
+  const parsed = parsePersonName(expertName ?? '');
+  const surname = (parsed?.last ?? '').toLowerCase().replace(/[^a-z]/g, '');
+  const first = (parsed?.first ?? '').toLowerCase().replace(/[^a-z]/g, '');
+  const url = record.url.toLowerCase();
+  const file = url.split('/').pop()?.split('?')[0] ?? '';
+  const host = (() => {
+    try {
+      return new URL(record.url).hostname.toLowerCase().replace(/^www\./, '');
+    } catch {
+      return '';
+    }
+  })();
+  const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
+  let score = 10;
+  if (surname && host.replace(/[^a-z]/g, '').includes(surname)) score += 50;
+  if (surname && file.replace(/[^a-z]/g, '').includes(surname)) score += 40;
+  if (first && file.replace(/[^a-z]/g, '').includes(first)) score += 15;
+  if (/\bcurriculum vitae\b/.test(hay)) score += 20;
+  if (/\.pdf($|\?)/i.test(record.url)) score += 10;
+  if (record.kind === 'expert_website') score += 10;
+  return score;
+}
+
+/** True when the CV page/file is clearly someone else’s curriculum vitae. */
+function isOtherPersonCvRecord(
+  record: WebRecord,
+  expertName?: string,
+): boolean {
+  const parsed = parsePersonName(expertName ?? '');
+  if (!parsed) return false;
+  const surname = parsed.last.toLowerCase().replace(/[^a-z]/g, '');
+  const first = parsed.first.toLowerCase().replace(/[^a-z]/g, '');
+  const url = record.url.toLowerCase();
+  const file = (url.split('/').pop()?.split('?')[0] ?? '').replace(
+    /[^a-z]/g,
+    '',
   );
+  let hostLetters = '';
+  try {
+    hostLetters = new URL(record.url).hostname
+      .toLowerCase()
+      .replace(/^www\./, '')
+      .replace(/[^a-z]/g, '');
+  } catch {
+    /* ignore */
+  }
+  const onOwnHost = Boolean(surname && hostLetters.includes(surname));
+  const title = record.title.toLowerCase();
+  const summaryHead = record.summary.slice(0, 400).toLowerCase();
+  // Filename like Jesse+Fischer+CV.pdf — reject unless this is the expert’s
+  // own host (where a generic cv.pdf can still be theirs).
+  if (file.includes('cv') || file.includes('resume') || file.includes('vitae')) {
+    if (surname && !file.includes(surname) && !onOwnHost) return true;
+  }
+  if (/\b(curriculum vitae|resume)\b/.test(title)) {
+    if (
+      surname &&
+      !title.includes(parsed.last.toLowerCase()) &&
+      !onOwnHost
+    ) {
+      return true;
+    }
+  }
+  // Opening lines name another person as the CV subject (summary is lowercased).
+  const otherLead =
+    summaryHead.match(
+      /\b(?:curriculum vitae|resume)\b[\s\S]{0,80}?\b([a-z]+(?:\s+[a-z]+){1,3})\b/,
+    ) ??
+    summaryHead.match(
+      /^([a-z]+(?:\s+[a-z]+){1,3}),?\s*(?:ph\.?d\.?|psy\.?d\.?|m\.?d\.?)/,
+    );
+  if (otherLead) {
+    const named = otherLead[1].replace(/[^a-z\s]/g, '');
+    if (
+      !named.includes(surname) &&
+      !(first && named.includes(first) && named.includes(surname))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function cvRecordNamesSubject(
+  record: WebRecord,
+  expertName?: string,
+): boolean {
+  const parsed = parsePersonName(expertName ?? '');
+  if (!parsed) return true;
+  const surname = parsed.last.toLowerCase();
+  const hay = [
+    record.url,
+    record.title,
+    record.summary,
+    ...(record.claims ?? []).flatMap((claim) => [claim.text, claim.quote]),
+  ]
+    .join(' ')
+    .toLowerCase();
+  return hay.includes(surname);
 }
 
 function cvCategoryForWebTopic(

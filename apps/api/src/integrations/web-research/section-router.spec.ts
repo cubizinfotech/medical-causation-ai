@@ -698,6 +698,60 @@ describe('coverageLine', () => {
     );
   });
 
+  it('does not treat a model primary_source tag on a practice site as board proof', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'site',
+          'https://leahellenberg.com/services',
+          'expert_website',
+          [
+            {
+              type: 'credential',
+              text: 'Dr. Leah Ellenberg - Board Certified in Clinical Neuropsychology, Pediatric Clinical Neuropsychology in Beverly Hills, CA',
+              quote:
+                'Dr. Leah Ellenberg - Board Certified in Clinical Neuropsychology, Pediatric Clinical Neuropsychology in Beverly Hills, CA',
+              topic: 'board_certification',
+              basis: 'primary_source',
+              from: 'page',
+            },
+          ],
+        ),
+      ]),
+    );
+    expect(routed.get('board-certifications')).toBeUndefined();
+    expect(routed.get('websites')?.[0].basisLabel).not.toMatch(
+      /issuing body/i,
+    );
+  });
+
+  it('files a notice of taking deposition under pleadings, not depositions', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'notice',
+          'https://www.courtlistener.com/docket/1/notice/',
+          'court',
+          [
+            {
+              type: 'other',
+              text: "Plaintiffs' Notice of Taking Deposition of Leah Ellenberg, Ph.D.",
+              quote:
+                "Plaintiffs' Notice of Taking Deposition of Leah Ellenberg, Ph.D.",
+              topic: 'deposition',
+              basis: 'primary_source',
+              from: 'page',
+            },
+          ],
+          'strong',
+          "Plaintiffs' Notice of Taking Deposition of Leah Ellenberg, Ph.D.",
+        ),
+      ]),
+    );
+    expect(routed.get('depositions')).toBeUndefined();
+    expect(routed.get('pleadings')?.length).toBeGreaterThan(0);
+  });
+
   it('adds Secretary of State deep links for named companies in the practice state', () => {
     const routed = routeWebFindings(
       {

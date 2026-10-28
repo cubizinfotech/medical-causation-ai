@@ -52,6 +52,8 @@ export function classifyCourtDocument(input: {
   const lead = (input.description ?? '').trim();
   if (/^(withdrawn\s+)?motion\b/i.test(lead)) return 'motion';
   if (/^(minute\s+)?order\b|^ordered\b/i.test(lead)) return 'order';
+  // A notice of deposition is a pleading/notice, not the transcript.
+  if (/\bnotice of (?:taking )?deposition\b/i.test(hay)) return 'pleading';
   // Deposition/testimony only from the filing description, never a snippet
   // of a motion or order that merely mentions a deposition.
   if (DEPOSITION.test(lead)) return 'deposition';

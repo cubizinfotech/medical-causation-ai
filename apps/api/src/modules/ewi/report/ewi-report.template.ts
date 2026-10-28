@@ -429,7 +429,10 @@ export function buildEwiReportDocument(input: {
             0,
             8,
           ),
-          websiteCvUrls: publicCvUrlsFromWeb(input.webResearch),
+          websiteCvUrls: publicCvUrlsFromWeb(
+            input.webResearch,
+            input.expertName,
+          ),
         });
       case 'background':
         return backgroundSection(spec, tracker, input.identity ?? null);
@@ -578,10 +581,20 @@ export function buildEwiReportDocument(input: {
           tracker,
         );
       case 'university-rules':
+        // Alumni news/profiles are not forensic-work policy. Only policy /
+        // COI / bylaw pages belong here.
         return evidenceSection(spec, tracker, {
-          categories: ['university', 'university_rules'],
-          providers: ['university'],
-          titleHints: ['rule', 'policy', 'bylaw'],
+          categories: ['university_rules'],
+          titleHints: [
+            'rule',
+            'policy',
+            'bylaw',
+            'conflict of interest',
+            'outside activity',
+            'consulting',
+            'forensic',
+          ],
+          excludeHints: ['alum', 'alumni', 'alumna', 'alumnus'],
         });
       case 'corporate':
         return professionalGroupSection(
@@ -1495,7 +1508,11 @@ function webSummaryLines(
       if (match !== 0) return match;
       return WEB_BASIS_RANK[left.basis] - WEB_BASIS_RANK[right.basis];
     })[0];
-    const quote = lead.quote ? ` “${lead.quote.slice(0, 120).trim()}”` : '';
+    const headline = summaryHeadline(lead);
+    const quote =
+      lead.quote && !headline.includes(lead.quote.slice(0, 48).trim())
+        ? ` “${lead.quote.slice(0, 220).trim()}”`
+        : '';
     const more =
       list.length > 1 ? ` (${list.length} items in the section)` : '';
     const possibleCount = list.filter(
@@ -1510,13 +1527,13 @@ function webSummaryLines(
       (sectionId === 'memberships' || sectionId === 'corporate')
     ) {
       lines.push(
-        `${plainTitle(sectionId)}: ${strongCount} confirmed-identity listing(s); ${possibleCount} possible match(es), not treated as verified. ${lead.basisLabel}. ${lead.title}.${quote}${more}`,
+        `${plainTitle(sectionId)}: ${strongCount} confirmed-identity listing(s); ${possibleCount} possible match(es), not treated as verified. ${lead.basisLabel}. ${headline}.${quote}${more}`,
       );
       continue;
     }
     const possible = lead.matchLevel === 'possible' ? 'Possible match. ' : '';
     lines.push(
-      `${plainTitle(sectionId)}: ${possible}${lead.basisLabel}. ${lead.title}.${quote}${more}`,
+      `${plainTitle(sectionId)}: ${possible}${lead.basisLabel}. ${headline}.${quote}${more}`,
     );
   }
   for (const verification of dossier?.verifications ?? []) {
@@ -1768,12 +1785,20 @@ function cvCheckBlocks(check: CvCheck): ReportBlock[] {
   return blocks;
 }
 
-/** Public CV / resume URLs found on the expert’s own site during web research. */
+/** Public CV / resume URLs that belong to this expert (not a colleague). */
 export function publicCvUrlsFromWeb(
   dossier: WebResearchDossier | null | undefined,
+  expertName?: string,
 ): string[] {
   if (!dossier) return [];
-  const urls: string[] = [];
+  const surname = (expertName ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .pop()
+    ?.toLowerCase()
+    .replace(/[^a-z]/g, '');
+  const scored: Array<{ url: string; score: number }> = [];
   for (const record of dossier.records) {
     if (record.match.level !== 'strong') continue;
     if (
@@ -1791,14 +1816,62 @@ export function publicCvUrlsFromWeb(
     ) {
       continue;
     }
+    const file = (record.url.split('/').pop()?.split('?')[0] ?? '')
+      .toLowerCase()
+      .replace(/[^a-z]/g, '');
+    // Reject colleague CVs (e.g. Jesse+Fischer+CV.pdf), even when the
+    // summary mentions the subject as an employer.
     if (
-      /\.pdf($|\?)/i.test(record.url) ||
-      /\b(curriculum vitae|\bcv\b|resume)\b/.test(hay)
+      surname &&
+      (file.includes('cv') ||
+        file.includes('resume') ||
+        file.includes('vitae')) &&
+      !file.includes(surname)
     ) {
-      urls.push(record.url);
+      let hostLetters = '';
+      try {
+        hostLetters = new URL(record.url).hostname
+          .toLowerCase()
+          .replace(/^www\./, '')
+          .replace(/[^a-z]/g, '');
+      } catch {
+        /* ignore */
+      }
+      if (!(surname && hostLetters.includes(surname))) continue;
+    }
+    if (surname && !hay.includes(surname) && !file.includes(surname)) {
+      continue;
+    }
+    let score = 1;
+    try {
+      const host = new URL(record.url).hostname
+        .toLowerCase()
+        .replace(/^www\./, '')
+        .replace(/[^a-z]/g, '');
+      if (surname && host.includes(surname)) score += 5;
+    } catch {
+      /* ignore bad URL */
+    }
+    if (surname && file.includes(surname)) score += 4;
+    scored.push({ url: record.url, score });
+  }
+  return [...new Set(scored.sort((a, b) => b.score - a.score).map((r) => r.url))]
+    .slice(0, 5);
+}
+
+/** Prefer a full statement over a truncated page title in the summary. */
+function summaryHeadline(lead: RoutedFinding): string {
+  const statement = lead.statement?.trim() ?? '';
+  const title = lead.title?.trim() ?? '';
+  if (statement.length >= 24 && statement.length <= 280) {
+    return statement.replace(/\s+/g, ' ');
+  }
+  if (title.endsWith('…') || title.endsWith('...')) {
+    if (statement.length > title.length) {
+      return statement.slice(0, 280).replace(/\s+/g, ' ');
     }
   }
-  return [...new Set(urls)].slice(0, 5);
+  return title;
 }
 
 function cvOmissionLine(
@@ -1818,6 +1891,7 @@ function cvOmissionLine(
 function cvComparisonSection(
   spec: EwiReportSectionSpec,
   input: {
+    expertName?: string;
     discrepancies: ExpertDiscrepancy[];
     analysis?: EwiAnalysisDocument;
     cvCheck?: CvCheck | null;
@@ -1846,7 +1920,7 @@ function cvComparisonSection(
     blocks.push({
       text: cvOmissionLine(
         input.cvComparisonState,
-        publicCvUrlsFromWeb(input.webResearch),
+        publicCvUrlsFromWeb(input.webResearch, input.expertName),
       ),
       style: 'note',
     });

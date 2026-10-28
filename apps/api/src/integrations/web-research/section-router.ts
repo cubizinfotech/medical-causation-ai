@@ -32,29 +32,21 @@ function isPaidDirectoryRecord(record: WebRecord): boolean {
 }
 
 /**
- * True when the claim may support a credential section: issuing-body /
- * primary registry page only. Practice sites, CVs, and subject_stated copy
- * are the expert’s own statement and must not prove board cert or license.
+ * True when the claim may support a credential section: the page host must
+ * be the issuing body / official registry for that topic. Practice sites,
+ * directories, news, and a model “primary_source” tag alone are not enough.
  */
 function isIssuingBodyCredentialClaim(
   record: WebRecord,
   claim: WebClaim,
   basis: WebClaimBasis | 'record',
 ): boolean {
-  if (claim.basis === 'subject_stated' || basis === 'subject_stated') {
-    return false;
-  }
-  if (
-    record.kind === 'expert_website' ||
-    record.kind === 'advertising' ||
-    record.kind === 'profile'
-  ) {
-    return false;
-  }
+  void basis;
+  if (claim.basis === 'subject_stated') return false;
   const topic = claim.topic;
+  if (!topic) return false;
   const official = officialSourceFor(record.url);
-  if (topic && official?.topics.includes(topic)) return true;
-  return basis === 'primary_source';
+  return Boolean(official?.topics.includes(topic));
 }
 
 export const ROUTED_SECTION_IDS = [
@@ -371,11 +363,12 @@ function courtDocumentSection(record: WebRecord): RoutedSectionId | null {
   ) {
     return 'pleadings';
   }
-  // Only transcript-like titles count as depositions — not every page that
-  // mentions that someone "testified" or "was deposed".
-  if (
-    /\b(deposition of|deposition transcript|notice of deposition)\b/.test(text)
-  ) {
+  // A notice of deposition is a pleading/notice, not the transcript itself.
+  if (/\bnotice of (?:taking )?deposition\b/.test(text)) {
+    return 'pleadings';
+  }
+  // Only transcript-like titles count as depositions.
+  if (/\b(deposition of|deposition transcript)\b/.test(text)) {
     return 'depositions';
   }
   if (
@@ -513,11 +506,10 @@ export function routeWebFindings(
             title: `Expert’s own statement: ${short(record.title, 90)}`,
             statement: `${claim.text} This is the expert’s own statement (website or profile). It is not independent verification of the credential.`,
             quote: claim.quote,
-            basis: claim.basis === 'subject_stated' ? 'subject_stated' : basis,
-            basisLabel:
-              claim.basis === 'subject_stated'
-                ? BASIS_LABEL.subject_stated
-                : BASIS_LABEL[basis],
+            // Never keep a “primary source / issuing body” label after the
+            // hard rule moves the claim off the credential section.
+            basis: 'subject_stated',
+            basisLabel: BASIS_LABEL.subject_stated,
             from: claim.from ?? 'page',
             verification: verificationFor('websites'),
           });
@@ -533,6 +525,27 @@ export function routeWebFindings(
         }
         if (['order', 'pleading', 'deposition'].includes(claim.topic ?? '')) {
           claimedDocumentType = true;
+        }
+        // Model-tagged "deposition" claims that are only a notice of
+        // deposition belong under pleadings, not deposition transcripts.
+        if (
+          sectionId === 'depositions' &&
+          /\bnotice of (?:taking )?deposition\b/i.test(
+            `${claim.text} ${claim.quote} ${record.title}`,
+          )
+        ) {
+          push({
+            ...base,
+            sectionId: 'pleadings',
+            title: caseCaption(record.title, record.summary),
+            statement: claim.text,
+            quote: claim.quote,
+            basis,
+            basisLabel: BASIS_LABEL[basis],
+            from: claim.from ?? 'page',
+            verification: null,
+          });
+          continue;
         }
         if (sectionId === 'certification-orgs') {
           const official = officialSourceFor(record.url);

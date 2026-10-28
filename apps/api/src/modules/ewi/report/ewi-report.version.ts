@@ -94,8 +94,12 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * policy; APA/CHEA query trail; website CV comparison; LinkedIn /in/ boost;
  * 404 vs unread wording; SOS deep links for all states; memorandum opinions
  * under orders.
+ * 3.10.10: reject colleague website CVs for CV comparison; board/license
+ * proof only on issuing-body hosts; alumni news out of university forensic
+ * policy; notice of deposition → pleadings; executive summary uses full
+ * statements instead of truncated titles.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.10.9';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.10';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis and other licensed PDFs are not stored unless legally permitted.';
