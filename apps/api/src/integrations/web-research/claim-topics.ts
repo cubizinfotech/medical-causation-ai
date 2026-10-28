@@ -410,7 +410,10 @@ const RULES: readonly TopicRule[] = [
   },
   {
     topic: 'deposition',
-    pattern: /\bdeposition\b|\bdeposed\b/i,
+    // Require transcript-like phrasing. A lone "deposed" / "deposition" on an
+    // OAH order or school-board page is an order mention, not a deposition file.
+    pattern:
+      /\b(?:deposition of|deposition transcript|notice of deposition|videotaped deposition|discovery deposition)\b/i,
     kinds: COURTISH,
   },
   {
@@ -429,9 +432,11 @@ const RULES: readonly TopicRule[] = [
   },
   {
     topic: 'university_rules',
+    // Only policy / COI / consulting-rule language — not "instructor of record"
+    // on a syllabus or faculty bio alone.
     pattern:
-      /\b(?:conflict of interest|outside (?:activity|employment|consulting)|consulting policy|faculty handbook|academic (?:policy|rule)|instructor of record)\b/i,
-    and: /\b(?:University|College|Professor|Faculty|instructor)\b/i,
+      /\b(?:conflict of interest|outside (?:activity|employment|consulting)|consulting policy|faculty handbook|academic (?:policy|rule)|disclosure of outside|policy on consulting)\b/i,
+    and: /\b(?:University|College|Professor|Faculty|policy|handbook)\b/i,
   },
 ];
 

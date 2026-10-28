@@ -279,7 +279,7 @@ describe('WebSourceProvider coverage', () => {
     expect(result.items[0].url).toContain('patents.google.com');
   });
 
-  it('files a forensic practice site under advertising when the page markets those services', async () => {
+  it('keeps a forensic practice site under the website catalog, not paid advertising', async () => {
     const practice = dossier([
       record({
         id: 'practice',
@@ -302,8 +302,7 @@ describe('WebSourceProvider coverage', () => {
       }),
     ]);
     const ads = await provider('advertising', practice).search(query);
-    expect(ads.status).toBe('ok');
-    expect(ads.items[0].url).toContain('neuropsychologicalsciences.com');
+    expect(ads.items).toHaveLength(0);
     const site = await provider('expert_website', practice).search(query);
     expect(site.items[0].url).toContain('neuropsychologicalsciences.com');
   });

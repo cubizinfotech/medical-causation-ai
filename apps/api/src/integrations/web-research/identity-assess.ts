@@ -4,9 +4,17 @@ import {
   parsePersonName,
   type PersonName,
 } from '../expert-research/live/person-name';
-import { parseCityState } from '../expert-research/live/location';
+import {
+  metroPeerCities,
+  parseCityState,
+} from '../expert-research/live/location';
 import { specialtyStems } from '../expert-research/live/specialty-match';
 import type { MatchConfidence, MatchLevel } from './web-research.types';
+
+/** Tokens to look for near a name when the subject city has metro peers. */
+function metroCityTokens(city: string): string[] {
+  return metroPeerCities(city);
+}
 
 export interface IdentitySubject {
   name: PersonName;
@@ -362,7 +370,12 @@ export function assessIdentity(
     );
   const { city } = parseCityState(subject.city || '');
   const cityLower = city.toLowerCase();
-  const cityNear = cityLower.length > 2 && near.includes(cityLower);
+  // Exact city token, or a same-metro city listed near the name (e.g. Los
+  // Angeles subject with Beverly Hills on the page).
+  const cityNear =
+    cityLower.length > 2 &&
+    (near.includes(cityLower) ||
+      metroCityTokens(city).some((token) => near.includes(token)));
   const contextHits = contextTerms(subject.context).filter((term) =>
     near.includes(fold(term)),
   );

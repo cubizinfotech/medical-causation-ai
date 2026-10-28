@@ -529,7 +529,7 @@ export function planFollowUps(
       'university_accreditation',
       {
         query: `site:chea.org ${quote(institution)}`,
-        prompt: `Find whether ${institution} is listed in the Council for Higher Education Accreditation (CHEA) database. A missing listing is not proof the school was unaccredited.`,
+        prompt: `Find whether ${institution} is listed in the Council for Higher Education Accreditation (CHEA) database. Return the CHEA page URL. A missing listing is not proof the school was unaccredited.`,
       },
       { label: 'CHEA', topics: ['education'] },
     );
@@ -537,9 +537,17 @@ export function planFollowUps(
       'university_accreditation',
       {
         query: `site:ope.ed.gov ${quote(institution)}`,
-        prompt: `Find the U.S. Department of Education College Navigator or accreditation listing for ${institution}. A missing listing is not proof the school was unaccredited.`,
+        prompt: `Find the U.S. Department of Education College Navigator or accreditation listing for ${institution}. Return the official page URL. A missing listing is not proof the school was unaccredited.`,
       },
       { label: 'U.S. Department of Education', topics: ['education'] },
+    );
+    push(
+      'university_accreditation',
+      {
+        query: `site:accreditation.apa.org ${quote(institution)} OR site:apa.org/ed/accreditation ${quote(institution)}`,
+        prompt: `Find whether ${institution} appears on the American Psychological Association (APA) accredited-program list (CoA). Return the exact APA accreditation page URL and whether the program is listed. A missing listing is not proof the school was unaccredited.`,
+      },
+      { label: 'APA CoA', topics: ['education'] },
     );
   }
   const licenseStates = uniqueStates([

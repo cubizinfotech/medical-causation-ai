@@ -45,7 +45,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.7');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.9');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -1269,7 +1269,7 @@ describe('EWI report web research section', () => {
     expect(document.subtitle).toBe('Jason A. Demery — Neuropsychology');
   });
 
-  it('lists search-found social accounts in Social Media', () => {
+  it('lists only strongly matched social accounts in Social Media', () => {
     const document = buildEwiReportDocument({
       ...base,
       city: 'Cleveland, OH',
@@ -1302,7 +1302,7 @@ describe('EWI report web research section', () => {
               'li1',
               'cleveland-clinic',
               'https://www.linkedin.com/company/cleveland-clinic',
-              'possible',
+              'strong',
             ),
             kind: 'social',
             platform: 'linkedin',
@@ -1312,6 +1312,7 @@ describe('EWI report web research section', () => {
         ],
         registries: [],
         limitations: [],
+        topics: [{ topic: 'social', queries: 1, hits: 2 }],
       },
     });
     const text =
@@ -1319,7 +1320,7 @@ describe('EWI report web research section', () => {
         .find((s) => s.id === 'social')
         ?.blocks.map((block) => block.text)
         .join('\n') ?? '';
-    expect(text).toContain('https://x.com/ClevelandClinic');
+    expect(text).not.toContain('https://x.com/ClevelandClinic');
     expect(text).toContain('linkedin.com/company/cleveland-clinic');
     expect(text).toMatch(/institutional/i);
     expect(text).not.toMatch(/did not establish a public social media profile/);

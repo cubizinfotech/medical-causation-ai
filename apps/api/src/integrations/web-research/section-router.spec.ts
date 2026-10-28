@@ -135,34 +135,31 @@ describe('routeWebFindings', () => {
     expect(action?.basisLabel).toMatch(/not established|Reported/);
   });
 
-  it('files a search-listed social profile under Social Media', () => {
+  it('files only strongly matched social profiles under Social Media', () => {
     const routed = routeWebFindings(
       dossier([
+        record(
+          'li-possible',
+          'https://www.linkedin.com/in/someone-else',
+          'social',
+          [],
+          'possible',
+          'Someone Else',
+        ),
         record(
           'li',
           'https://www.linkedin.com/company/cleveland-clinic',
           'social',
           [],
-          'possible',
+          'strong',
           'cleveland-clinic',
-        ),
-        record(
-          'x',
-          'https://x.com/ClevelandClinic',
-          'social',
-          [],
-          'possible',
-          '@ClevelandClinic',
         ),
       ]),
     );
     const social = routed.get('social') ?? [];
-    expect(social.map((item) => item.url)).toEqual(
-      expect.arrayContaining([
-        'https://www.linkedin.com/company/cleveland-clinic',
-        'https://x.com/ClevelandClinic',
-      ]),
-    );
+    expect(social.map((item) => item.url)).toEqual([
+      'https://www.linkedin.com/company/cleveland-clinic',
+    ]);
     expect(social.some((item) => /institutional/i.test(item.title))).toBe(true);
     expect(
       social.some((item) => /not a personal profile/i.test(item.statement)),
@@ -625,6 +622,104 @@ describe('coverageLine', () => {
     );
     expect(routed.get('pleadings')?.[0].url).toContain('compel-deposition');
     expect(routed.get('depositions')).toBeUndefined();
+  });
+
+  it('files an OAH due-process order under Orders, not Depositions', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'oah',
+          'https://www.doah.state.fl.us/ALJ/order/123',
+          'court',
+          [
+            claim(
+              'order',
+              'Final Order. The administrative law judge found that Dr. Demery testified at the due process hearing.',
+            ),
+          ],
+          'strong',
+          'OAH Case No. 21-1234 — Final Order',
+        ),
+      ]),
+    );
+    expect(routed.get('orders')?.[0].url).toContain('doah.state.fl.us');
+    expect(routed.get('depositions')).toBeUndefined();
+  });
+
+  it('files practice-site IME claims under Websites, not advertising', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'site',
+          'https://neuropsychologicalsciences.com/about',
+          'other',
+          [
+            {
+              type: 'forensic',
+              text: 'IME',
+              quote: 'independent medical examinations for attorneys',
+              topic: 'ime',
+              basis: 'third_party',
+              from: 'page',
+            },
+          ],
+        ),
+      ]),
+    );
+    expect(routed.get('ime')).toBeUndefined();
+    expect(routed.get('websites')?.[0].url).toContain(
+      'neuropsychologicalsciences.com',
+    );
+  });
+
+  it('files own-site board-certification under Websites, not board-certifications', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'site',
+          'https://leahellenberg.com/about',
+          'expert_website',
+          [
+            {
+              type: 'credential',
+              text: 'Board certified',
+              quote: 'Board Certified in Clinical Neuropsychology by ABPP',
+              topic: 'board_certification',
+              basis: 'subject_stated',
+              from: 'page',
+            },
+          ],
+        ),
+      ]),
+    );
+    expect(routed.get('board-certifications')).toBeUndefined();
+    expect(routed.get('websites')?.[0].statement).toMatch(
+      /not independent verification/i,
+    );
+  });
+
+  it('adds Secretary of State deep links for named companies in the practice state', () => {
+    const routed = routeWebFindings(
+      {
+        ...dossier([]),
+        companies: [
+          {
+            name: 'Ellenberg Neuropsychology',
+            url: 'https://leahellenberg.com/',
+            scope: 'own_page',
+            quote: 'Ellenberg Neuropsychology',
+          },
+        ],
+      },
+      { stateCodes: ['CA'] },
+    );
+    const corporate = routed.get('corporate') ?? [];
+    expect(
+      corporate.some((item) => /Secretary of State search/i.test(item.title)),
+    ).toBe(true);
+    expect(
+      corporate.some((item) => /bizfileonline\.sos\.ca\.gov/i.test(item.url)),
+    ).toBe(true);
   });
 
   it('does not file a possible-match directory as the subject’s directories', () => {

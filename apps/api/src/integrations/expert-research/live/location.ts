@@ -124,8 +124,68 @@ export function normalizeCity(value: string): string {
     .trim();
 }
 
+/**
+ * Adjacent cities that share a metro area for NPI / practice-location matching.
+ * Exact equality still wins first; these groups only bridge known pairs such as
+ * Los Angeles ↔ Beverly Hills so the same expert is not left "unconfirmed".
+ */
+const METRO_CITY_GROUPS: readonly (readonly string[])[] = [
+  [
+    'los angeles',
+    'beverly hills',
+    'santa monica',
+    'west hollywood',
+    'culver city',
+    'century city',
+    'brentwood',
+    'encino',
+    'sherman oaks',
+    'studio city',
+    'van nuys',
+    'pasadena',
+    'glendale',
+    'burbank',
+    'marina del rey',
+    'pacific palisades',
+  ],
+  ['miami', 'miami beach', 'coral gables', 'coconut grove', 'aventura'],
+  ['new york', 'manhattan', 'brooklyn', 'queens', 'bronx', 'staten island'],
+  ['san francisco', 'oakland', 'berkeley', 'daly city'],
+  ['dallas', 'plano', 'irving', 'richardson', 'garland'],
+  ['houston', 'pasadena', 'sugar land', 'the woodlands'],
+  ['chicago', 'evanston', 'oak park', 'skokie'],
+  ['phoenix', 'scottsdale', 'tempe', 'mesa', 'chandler', 'glendale'],
+  ['tampa', 'st petersburg', 'saint petersburg', 'clearwater'],
+  ['orlando', 'winter park', 'kissimmee'],
+  ['washington', 'arlington', 'alexandria', 'bethesda', 'silver spring'],
+  ['boston', 'cambridge', 'brookline', 'somerville'],
+  ['atlanta', 'decatur', 'sandy springs'],
+  ['seattle', 'bellevue', 'redmond', 'kirkland'],
+  ['denver', 'aurora', 'lakewood', 'englewood'],
+];
+
+function metroGroupOf(city: string): readonly string[] | null {
+  const normalized = normalizeCity(city);
+  if (!normalized) return null;
+  for (const group of METRO_CITY_GROUPS) {
+    if (group.includes(normalized)) return group;
+  }
+  return null;
+}
+
+/** Other cities in the same metro group as `city`, excluding itself. */
+export function metroPeerCities(city: string): string[] {
+  const normalized = normalizeCity(parseCityState(city).city);
+  const group = metroGroupOf(normalized);
+  if (!group) return [];
+  return group.filter((entry) => entry !== normalized);
+}
+
 export function citiesMatch(left: string, right: string): boolean {
   const a = normalizeCity(parseCityState(left).city);
   const b = normalizeCity(parseCityState(right).city);
-  return a.length > 0 && a === b;
+  if (!a.length || !b.length) return false;
+  if (a === b) return true;
+  const group = metroGroupOf(a);
+  return Boolean(group && group.includes(b));
 }

@@ -83,8 +83,19 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * search snippet from a read page; docket notices that mention a deposition
  * are not transcript evidence; lawsuit empty-copy names related court records
  * instead of “not searched.”
+ * 3.10.8: own-site board-cert and forensic copy stay under Websites, not
+ * board-certification or paid advertising; only paid directories count as
+ * ads; OAH/school-board orders are not depositions; social requires a strong
+ * match; LA↔Beverly Hills (and similar metros) match for identity; PDF wrap
+ * no longer inserts hyphens into names; public CV URLs are named when no CV
+ * was uploaded; analysis uses gender-neutral wording by default.
+ * 3.10.9: national license honesty (non-FL boards not accessed); own website
+ * never proves board cert or license; university section renamed for forensic
+ * policy; APA/CHEA query trail; website CV comparison; LinkedIn /in/ boost;
+ * 404 vs unread wording; SOS deep links for all states; memorandum opinions
+ * under orders.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.10.7';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.9';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis and other licensed PDFs are not stored unless legally permitted.';

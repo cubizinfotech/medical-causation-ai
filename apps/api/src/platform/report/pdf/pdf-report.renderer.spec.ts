@@ -266,10 +266,10 @@ describe('wrapText', () => {
     expect(lines.slice(1, -1).every((line) => line.endsWith('/'))).toBe(true);
   });
 
-  it('hyphenates a long alphabetic word instead of splitting it mid-letter', () => {
+  it('hard-breaks a long alphabetic word without inserting a hyphen', () => {
     const lines = wrapText('neuropsychological', 50, measure);
-    expect(lines.some((line) => line.endsWith('-'))).toBe(true);
-    expect(lines.join('').replace(/-/g, '')).toBe('neuropsychological');
+    expect(lines.some((line) => line.endsWith('-'))).toBe(false);
+    expect(lines.join('')).toBe('neuropsychological');
     for (const line of lines) expect(measure(line)).toBeLessThanOrEqual(50);
   });
 

@@ -134,9 +134,57 @@ function hostMatches(url: string, domains: readonly string[]): boolean {
 }
 
 /**
- * A practice or IME page can also answer the advertising catalog sources
- * when the page itself markets forensic or expert-witness services. A
- * biography without that language stays a website, not an advertisement.
+ * Paid expert-directory hosts where a listing is advertising (not the
+ * expert's own practice site, journal article, or faculty page).
+ */
+export const PAID_ADVERTISING_DIRECTORY_IDS = new Set([
+  'seak',
+  'jurispro',
+  'expertpages',
+  'expertwitness_com',
+  'alm_law',
+  'expertlaw',
+  'dri',
+  'other_expert_directories',
+]);
+
+const PAID_ADVERTISING_HOSTS = [
+  'seakexperts.com',
+  'seak.com',
+  'imenet.com',
+  'jurispro.com',
+  'expertpages.com',
+  'expertwitness.com',
+  'almexperts.com',
+  'expertlaw.com',
+  'dri.org',
+  'hgexperts.com',
+  'experts.com',
+  'witness.net',
+  'freereferral.com',
+  'expertinstitute.com',
+  'expertwitnessprofiler.com',
+  'forensisgroup.com',
+  'testifyingexpert.com',
+];
+
+/** True when the URL is a paid expert-directory listing, not a practice site. */
+export function isPaidAdvertisingDirectory(record: WebRecord): boolean {
+  if (record.kind === 'directory') {
+    if (
+      record.directoryId &&
+      PAID_ADVERTISING_DIRECTORY_IDS.has(record.directoryId)
+    ) {
+      return true;
+    }
+  }
+  return hostMatches(record.url, PAID_ADVERTISING_HOSTS);
+}
+
+/**
+ * Catalog overlap for practice pages and directories. Own websites and
+ * articles that mention forensic work stay websites/publications; only paid
+ * expert-directory hosts count as IME/expert advertising.
  */
 export function recordServesCatalogSource(
   record: WebRecord,
@@ -184,6 +232,9 @@ export function recordServesCatalogSource(
       claims.some((claim) => claim.topic === 'order') ||
       /^\W*(order|opinion|ruling|judgment|memorandum opinion)\b/i.test(
         record.title,
+      ) ||
+      /\b(oah case|due process hearing|administrative law judge|memorandum (?:and )?order)\b/i.test(
+        hay,
       )
     );
   }
@@ -194,30 +245,48 @@ export function recordServesCatalogSource(
     );
   }
   if (sourceId === 'depositions' || sourceId === 'expert_testimony') {
-    return (
+    // "Testified" on an order or school page is not a deposition transcript.
+    const transcriptLike =
+      /\b(deposition of|deposition transcript|notice of deposition|trial transcript|hearing transcript)\b/i.test(
+        hay,
+      ) ||
       claims.some(
-        (claim) => claim.topic === 'deposition' || claim.topic === 'testimony',
-      ) || /\b(deposition|transcript|testified|daubert|frye)\b/i.test(hay)
+        (claim) =>
+          claim.topic === 'deposition' &&
+          /\b(deposition of|deposition transcript|notice of deposition)\b/i.test(
+            `${claim.text} ${claim.quote}`,
+          ),
+      );
+    if (sourceId === 'depositions') return transcriptLike;
+    return (
+      transcriptLike ||
+      claims.some((claim) => claim.topic === 'testimony') ||
+      /\b(daubert|frye|rule 702)\b/i.test(hay)
     );
   }
   if (sourceId === 'university_accreditation') {
-    return hostMatches(record.url, ['chea.org', 'ope.ed.gov']);
+    return hostMatches(record.url, ['chea.org', 'ope.ed.gov', 'apa.org']);
+  }
+  if (
+    sourceId === 'ime_websites' ||
+    sourceId === 'ime_advertising' ||
+    sourceId === 'advertising'
+  ) {
+    if (!isPaidAdvertisingDirectory(record)) return false;
+    const ime =
+      /\bindependent medical\b|\bime\b|\bcompulsory examination\b|\brule 35\b|\bforensic evaluat|\bexpert witness\b|\bavailable to attorneys\b|\bmedicolegal\b/.test(
+        hay,
+      ) ||
+      claims.some(
+        (claim) =>
+          claim.topic === 'ime' ||
+          claim.topic === 'advertising' ||
+          claim.type === 'forensic' ||
+          claim.type === 'advertising',
+      );
+    return ime || record.kind === 'directory';
   }
   if (!PRACTICE_PAGE_KINDS.has(record.kind)) return false;
-  const ime =
-    /\bindependent medical\b|\bime\b|\bcompulsory examination\b|\brule 35\b|\bforensic evaluat/.test(
-      hay,
-    ) ||
-    claims.some((claim) => claim.topic === 'ime' || claim.type === 'forensic');
-  const ads =
-    /\bexpert witness\b|\bavailable to attorneys\b|\bmedicolegal\b|\bforensic (?:neuro)?psycholog/.test(
-      hay,
-    ) ||
-    claims.some(
-      (claim) => claim.topic === 'advertising' || claim.type === 'advertising',
-    );
-  if (sourceId === 'ime_websites' || sourceId === 'ime_advertising') return ime;
-  if (sourceId === 'advertising') return ads || ime;
   return false;
 }
 

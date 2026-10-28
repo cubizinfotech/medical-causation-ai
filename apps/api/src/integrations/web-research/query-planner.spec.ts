@@ -304,6 +304,15 @@ describe('planFollowUps', () => {
           p.request.query.includes('site:ope.ed.gov'),
       ),
     ).toBe(true);
+    expect(
+      plans.some(
+        (p) =>
+          p.topic === 'university_accreditation' &&
+          /accreditation\.apa\.org|apa\.org\/ed\/accreditation/.test(
+            p.request.query,
+          ),
+      ),
+    ).toBe(true);
   });
 });
 

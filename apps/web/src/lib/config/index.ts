@@ -8,4 +8,5 @@ export {
   getAccessToken,
   setAccessToken,
   AUTH_EXPIRED_EVENT,
+  AUTH_TOKEN_KEY,
 } from "./api";

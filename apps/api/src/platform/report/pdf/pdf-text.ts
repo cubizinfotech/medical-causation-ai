@@ -38,14 +38,9 @@ export function wrapText(
       let rest = word;
       while (measure(rest) > maxWidth) {
         const cut = breakIndex(rest, maxWidth, measure);
-        if (isAlphabeticWord(rest) && cut > 2) {
-          const hyphenated = `${rest.slice(0, cut - 1)}-`;
-          if (measure(hyphenated) <= maxWidth) {
-            lines.push(hyphenated);
-            rest = rest.slice(cut - 1);
-            continue;
-          }
-        }
+        // Do not insert a hyphen into alphabetic words (names and titles were
+        // being split as "Demery" → "Dem-" / "ery"). Prefer a clean wrap at a
+        // separator; otherwise hard-break without a hyphen character.
         lines.push(rest.slice(0, cut));
         rest = rest.slice(cut);
       }
@@ -88,10 +83,6 @@ function breakIndex(
 
 function isLowSurrogate(code: number): boolean {
   return code >= 0xdc00 && code <= 0xdfff;
-}
-
-function isAlphabeticWord(word: string): boolean {
-  return /^[\p{L}][\p{L}'’-]*$/u.test(word);
 }
 
 /** The longest start of `text` that fits in `maxWidth`, ending in "…" when cut. */

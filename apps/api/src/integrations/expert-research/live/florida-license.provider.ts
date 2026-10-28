@@ -53,11 +53,12 @@ export class FloridaLicenseResearchProvider extends LiveResearchProvider {
     const reported = floridaLicensesFrom(record);
     const inFlorida = parseCityState(query.city).state === 'FL';
     if (!inFlorida && reported.length === 0) {
+      const state = parseCityState(query.city).state;
+      const stateLabel = state ? ` (${state})` : '';
       return {
         items: [],
         status: 'unavailable',
-        message:
-          'Official board not accessed. The official Florida Department of Health license lookup is used when the expert’s city is in Florida or NPPES lists a Florida license number. Other states are not searched by this adapter. This is not a finding that a license was checked.',
+        message: `Official state licensing board not accessed for this expert’s practice location${stateLabel}. This adapter completes an official Florida Department of Health (MQA) lookup only when the city is in Florida or NPPES lists a Florida license number. Licensing boards in other states were not queried. That is not a finding that the expert is unlicensed or that no discipline exists.`,
       };
     }
 

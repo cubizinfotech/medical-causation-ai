@@ -222,9 +222,12 @@ function normalizeText(value: string): string {
     .trim();
 }
 
-/** Well-known platforms whose footer names are not the subject's business. */
+/**
+ * Platforms and publishers whose names appear near an expert but are not a
+ * corporate affiliation of the subject (book houses, journals, directories).
+ */
 const COMPANY_BLOCKLIST =
-  /^(google|youtube|facebook|meta|microsoft|amazon|apple|twitter|linkedin|webmd|wordpress|squarespace|wix|godaddy|expert institute|jurispro|seak|researchgate|healthgrades|vitals)\b/i;
+  /^(google|youtube|facebook|meta|microsoft|amazon|apple|twitter|linkedin|webmd|wordpress|squarespace|wix|godaddy|expert institute|jurispro|seak|researchgate|healthgrades|vitals|jason aronson|routledge|springer|elsevier|wiley|sage publications|oxford university press|cambridge university press|taylor (&|and) francis|wolters kluwer|lippincott|mcgraw[- ]?hill|pearson|guilford|apa books|american psychiatric (?:association|publishing))\b/i;
 
 /**
  * Model readings first, then rule-extracted statements the model did not
@@ -1010,20 +1013,49 @@ export class WebResearchEngine {
         subject,
         { limitedText: limited },
       );
-      if (assessment.level === 'none') {
+      if (assessment.level === 'none' || assessment.level === 'possible') {
         const social = classifyUrl(page.url, 'web');
         const socialHaystack =
           `${page.title} ${page.snippet} ${wordsFromUrl(page.url)}`.toLowerCase();
         if (social.kind === 'social' && socialHaystack.includes(surname)) {
-          assessment = {
-            ...assessment,
-            level: 'possible',
-            confidence: 'low',
-            basis: [
-              'A search for this person returned this social profile address. The site was not opened because it is shown only to signed-in users. Attribution is from the search result, not from reading the profile.',
-            ],
-            quote: (page.snippet || page.title).slice(0, 280) || null,
-          };
+          const linkedInProfile = /linkedin\.com\/in\//i.test(page.url);
+          const first = subject.name.first.toLowerCase().replace(/[^a-z]/g, '');
+          const last = surname.toLowerCase().replace(/[^a-z]/g, '');
+          const slug = page.url.toLowerCase();
+          const exactLinkedIn =
+            linkedInProfile &&
+            Boolean(first) &&
+            Boolean(last) &&
+            slug.includes(last) &&
+            (slug.includes(first) ||
+              slug.includes(`${first[0]}${last}`) ||
+              slug.includes(`${first}-${last}`));
+          if (exactLinkedIn) {
+            assessment = {
+              ...assessment,
+              level: 'strong',
+              confidence: 'high',
+              nameMatch:
+                assessment.nameMatch === 'none'
+                  ? 'full'
+                  : assessment.nameMatch,
+              basis: [
+                'LinkedIn personal profile URL matches the expert’s name exactly. The profile page itself was not opened (login-gated); attribution is from the public profile address.',
+                ...assessment.basis,
+              ],
+              quote: (page.snippet || page.title).slice(0, 280) || null,
+            };
+          } else if (assessment.level === 'none') {
+            assessment = {
+              ...assessment,
+              level: 'possible',
+              confidence: 'low',
+              basis: [
+                'A search for this person returned this social profile address. The site was not opened because it is shown only to signed-in users. Attribution is from the search result, not from reading the profile.',
+              ],
+              quote: (page.snippet || page.title).slice(0, 280) || null,
+            };
+          }
         }
       }
       if (assessment.level === 'none' && isNewsLead(page.url)) {

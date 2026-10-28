@@ -9,6 +9,9 @@ Rules:
 - If the findings are insufficient, say that the information could not be verified.
 - Restricted or unavailable sources require authorized access. Do not infer their contents.
 - Do not write cross-examination questions; they are produced separately.
+- Use gender-neutral wording (the expert, they/them) unless a finding explicitly states the expert's pronouns or gendered title in a way that makes he/she unavoidable; never guess gender from the name alone.
+- Do not treat the expert's own website claim of board certification as independent board-certification verification.
+- Do not describe school-board or administrative hearing orders as deposition transcripts.
 - Respond with one JSON object and no markdown.
 
 Evidence status values (use exactly):

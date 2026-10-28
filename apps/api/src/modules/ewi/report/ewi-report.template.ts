@@ -3,6 +3,7 @@ import {
   articleTitle,
   authorPositionIn,
   describePosition,
+  parseCityState,
   parsePersonName,
   researchCoverageFor,
   sameTitle,
@@ -310,7 +311,7 @@ export const EWI_REPORT_SECTIONS: EwiReportSectionSpec[] = [
   {
     id: 'university-rules',
     number: 34,
-    title: '34. University Rules',
+    title: '34. University policy regarding forensic work',
     icon: 'clipboard-list',
   },
   {
@@ -387,7 +388,10 @@ export function buildEwiReportDocument(input: {
   /** Shown when stored questions were rebuilt from current evidence. */
   questionsNote?: string;
 }): ReportDocumentModel {
-  const routedWeb = routeWebFindings(input.webResearch);
+  const practiceState = parseCityState(input.city).state;
+  const routedWeb = routeWebFindings(input.webResearch, {
+    stateCodes: practiceState ? [practiceState] : [],
+  });
   const tracker: ClaimTracker = {
     claimed: new Set<number>(),
     evidence: input.evidence,
@@ -425,6 +429,7 @@ export function buildEwiReportDocument(input: {
             0,
             8,
           ),
+          websiteCvUrls: publicCvUrlsFromWeb(input.webResearch),
         });
       case 'background':
         return backgroundSection(spec, tracker, input.identity ?? null);
@@ -1011,16 +1016,32 @@ function withWebFindings(
     }
   }
   const verification = sectionVerification(dossier, section.id);
-  if (verification && (findings.length > 0 || own.length > 0)) {
+  // Show issuing-body verification even when own-site claims were filed under
+  // Websites (hard rule: practice site is not credential proof).
+  if (
+    verification &&
+    (findings.length > 0 ||
+      own.length > 0 ||
+      section.id === 'board-certifications' ||
+      section.id === 'licenses')
+  ) {
     blocks.push(...verificationBlocks(verification));
   }
   const coverage = structuredCoverage(section.id, statuses);
   const hasFindingBlocks =
     findings.length > 0 ||
-    own.some((block) => block.style !== 'note' && block.style !== 'citation');
+    own.some((block) => block.style !== 'note' && block.style !== 'citation') ||
+    Boolean(
+      verification &&
+        (section.id === 'board-certifications' || section.id === 'licenses'),
+    );
   if (!hasFindingBlocks) {
+    const emptyLine =
+      section.id === 'university-rules'
+        ? 'Not applicable. No university policy on outside forensic or consulting work was found for this expert’s appointment. Unrelated articles are not filed here.'
+        : coverageLine(dossier, section.id, coverage, expertName);
     blocks.push({
-      text: coverageLine(dossier, section.id, coverage, expertName),
+      text: emptyLine,
       style: 'note',
     });
   } else {
@@ -1343,6 +1364,7 @@ function summarySection(
     cvCheck?: CvCheck | null;
     cvComparisonState?: 'compared' | 'not_uploaded' | 'not_read';
     discrepancies: ExpertDiscrepancy[];
+    websiteCvUrls?: string[];
   },
 ): ReportSectionModel {
   const text =
@@ -1379,7 +1401,7 @@ function summarySection(
     });
   } else {
     blocks.push({
-      text: cvOmissionLine(input.cvComparisonState),
+      text: cvOmissionLine(input.cvComparisonState, input.websiteCvUrls),
       style: 'note',
     });
   }
@@ -1724,7 +1746,7 @@ function compactCvText(value: string, limit = 180): string {
 function cvCheckBlocks(check: CvCheck): ReportBlock[] {
   const blocks: ReportBlock[] = [
     {
-      text: `Uploaded CV: ${check.document.name} (${check.document.pageCount} page${check.document.pageCount === 1 ? '' : 's'}). ${cvComparedSourcesLine(check)} ${cvCoverageLine(check)} A missing catalog result is not a confirmed discrepancy.`,
+      text: `${/^https?:\/\//i.test(check.document.id) ? 'Website CV' : 'Uploaded CV'}: ${check.document.name} (${check.document.pageCount} page${check.document.pageCount === 1 ? '' : 's'}). ${cvComparedSourcesLine(check)} ${cvCoverageLine(check)} A missing catalog result is not a confirmed discrepancy.`,
       style: 'note',
     },
     {
@@ -1746,13 +1768,51 @@ function cvCheckBlocks(check: CvCheck): ReportBlock[] {
   return blocks;
 }
 
+/** Public CV / resume URLs found on the expert’s own site during web research. */
+export function publicCvUrlsFromWeb(
+  dossier: WebResearchDossier | null | undefined,
+): string[] {
+  if (!dossier) return [];
+  const urls: string[] = [];
+  for (const record of dossier.records) {
+    if (record.match.level !== 'strong') continue;
+    if (
+      record.kind !== 'expert_website' &&
+      record.kind !== 'advertising' &&
+      record.kind !== 'other' &&
+      record.kind !== 'profile'
+    ) {
+      continue;
+    }
+    const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
+    if (
+      !/\b(curriculum vitae|\bcv\b|resume)\b/.test(hay) &&
+      !/\.pdf($|\?)/i.test(record.url)
+    ) {
+      continue;
+    }
+    if (
+      /\.pdf($|\?)/i.test(record.url) ||
+      /\b(curriculum vitae|\bcv\b|resume)\b/.test(hay)
+    ) {
+      urls.push(record.url);
+    }
+  }
+  return [...new Set(urls)].slice(0, 5);
+}
+
 function cvOmissionLine(
   state: 'compared' | 'not_uploaded' | 'not_read' | undefined,
+  websiteCvUrls: string[] = [],
 ): string {
+  const found =
+    websiteCvUrls.length > 0
+      ? ` A public CV or resume URL was found during web research (${websiteCvUrls.join('; ')}). When that page was read, comparison uses those statements; otherwise upload the CV to compare.`
+      : '';
   if (state === 'not_read') {
-    return 'A CV was uploaded but could not be read. CV comparison was not performed. That is not a finding that the expert has no CV discrepancies.';
+    return `A CV was uploaded but could not be read. CV comparison was not performed.${found} That is not a finding that the expert has no CV discrepancies.`;
   }
-  return 'No CV was uploaded. CV comparison was not performed. That is not a finding that the expert has no CV discrepancies.';
+  return `No CV was uploaded. CV comparison was not performed.${found} That is not a finding that the expert has no CV discrepancies.`;
 }
 
 function cvComparisonSection(
@@ -1762,6 +1822,7 @@ function cvComparisonSection(
     analysis?: EwiAnalysisDocument;
     cvCheck?: CvCheck | null;
     cvComparisonState?: 'compared' | 'not_uploaded' | 'not_read';
+    webResearch?: WebResearchDossier | null;
   },
   tracker: ClaimTracker,
 ): ReportSectionModel {
@@ -1783,7 +1844,10 @@ function cvComparisonSection(
     (input.analysis?.cvDiscrepancies.length ?? 0) === 0
   ) {
     blocks.push({
-      text: cvOmissionLine(input.cvComparisonState),
+      text: cvOmissionLine(
+        input.cvComparisonState,
+        publicCvUrlsFromWeb(input.webResearch),
+      ),
       style: 'note',
     });
   }
@@ -2397,12 +2461,16 @@ function webResearchSection(
 
   if (dossier.pagesBlocked.length > 0) {
     blocks.push({
-      text: 'Pages that could not be read',
+      text: 'Pages the automated fetch could not use',
       style: 'subheading',
+    });
+    blocks.push({
+      text: 'A browser may still open some of these URLs. “Could not be used” means this investigation’s automated fetch did not get usable page text (HTTP 404/not found, login wall, bot check, or empty body) — not that a person cannot click the link. Dead (404) addresses are labelled as not found, not as live profiles.',
+      style: 'note',
     });
     for (const page of dossier.pagesBlocked.slice(0, 15)) {
       blocks.push({
-        text: `${page.url} — ${page.reason}`,
+        text: `${page.url} — ${blockedPageReason(page.reason)}`,
         link: page.url,
         style: 'citation',
       });
@@ -2424,6 +2492,18 @@ function webResearchSection(
     });
   }
   return { id: spec.id, title: spec.title, blocks };
+}
+
+/** Clarify 404 vs bot/login walls for the client-facing blocked-page list. */
+function blockedPageReason(reason: string): string {
+  const text = reason.trim();
+  if (/404|not found|http\s*404/i.test(text)) {
+    return `Not found (HTTP 404 or equivalent). This address was not a live page for the automated fetch. ${text}`;
+  }
+  if (/login|sign[- ]?in|auth|captcha|bot|robots|403|401|cloudflare/i.test(text)) {
+    return `Automated fetch blocked (login, bot check, or robots). A person in a browser may still open it. ${text}`;
+  }
+  return text || 'Automated fetch did not get usable page text.';
 }
 
 function overallFindingsSection(
@@ -2616,7 +2696,7 @@ function licensesSection(
   }
   const blocks: ReportBlock[] = [
     {
-      text: 'License numbers listed by NPPES are self-reported by the clinician. They are not official state-board verification. Official verification appears only when a licensing-board lookup was completed.',
+      text: 'License numbers listed by NPPES are self-reported by the clinician. They are not official state-board verification. Official verification appears only when a licensing-board lookup was completed for that state. Today the live path completes an official Florida DOH (MQA) lookup when Florida applies; other state boards are not accessed unless a dedicated adapter for that state runs. A missing official board hit outside Florida is not a finding that the expert is unlicensed.',
       style: 'note',
     },
   ];

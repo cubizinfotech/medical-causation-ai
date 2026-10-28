@@ -15,6 +15,8 @@ import {
   TOPIC_LABEL,
 } from './claim-topics';
 import { looksLikeCourtDocument } from './source-kind';
+import { sosDeepLinksFor } from './sos-business-search';
+import { isPaidAdvertisingDirectory } from './web-source-providers';
 import type {
   WebClaim,
   WebClaimBasis,
@@ -24,6 +26,36 @@ import type {
   WebSourceKind,
   WebVerification,
 } from './web-research.types';
+
+function isPaidDirectoryRecord(record: WebRecord): boolean {
+  return isPaidAdvertisingDirectory(record);
+}
+
+/**
+ * True when the claim may support a credential section: issuing-body /
+ * primary registry page only. Practice sites, CVs, and subject_stated copy
+ * are the expert’s own statement and must not prove board cert or license.
+ */
+function isIssuingBodyCredentialClaim(
+  record: WebRecord,
+  claim: WebClaim,
+  basis: WebClaimBasis | 'record',
+): boolean {
+  if (claim.basis === 'subject_stated' || basis === 'subject_stated') {
+    return false;
+  }
+  if (
+    record.kind === 'expert_website' ||
+    record.kind === 'advertising' ||
+    record.kind === 'profile'
+  ) {
+    return false;
+  }
+  const topic = claim.topic;
+  const official = officialSourceFor(record.url);
+  if (topic && official?.topics.includes(topic)) return true;
+  return basis === 'primary_source';
+}
 
 export const ROUTED_SECTION_IDS = [
   'background',
@@ -316,13 +348,31 @@ function courtDocumentSection(record: WebRecord): RoutedSectionId | null {
   ) {
     return 'orders';
   }
+  // School-board / OAH due-process materials are orders, not depositions.
   if (
-    /\b(motion|memorandum|complaint|petition|brief|affidavit|response in|reply)\b/.test(
+    /\b(oah case|due process hearing|administrative law judge|final order|memorandum (?:and )?order|school board)\b/.test(
+      text,
+    )
+  ) {
+    return 'orders';
+  }
+  // Memorandum opinions / memorandum-and-order titles are orders, not pleadings.
+  if (
+    /\b(memorandum opinion|memorandum (?:and|&) order|memorandum decision)\b/.test(
+      text,
+    )
+  ) {
+    return 'orders';
+  }
+  if (
+    /\b(motion|complaint|petition|brief|affidavit|response in|reply|memorandum (?:in|of|to|for|supporting|opposing))\b/.test(
       text,
     )
   ) {
     return 'pleadings';
   }
+  // Only transcript-like titles count as depositions — not every page that
+  // mentions that someone "testified" or "was deposed".
   if (
     /\b(deposition of|deposition transcript|notice of deposition)\b/.test(text)
   ) {
@@ -341,9 +391,15 @@ function courtDocumentSection(record: WebRecord): RoutedSectionId | null {
   return null;
 }
 
+export interface RouteWebFindingsOptions {
+  /** Two-letter state codes for official SOS business-search deep links. */
+  stateCodes?: readonly string[];
+}
+
 /** Everything the web run found, filed by report section. */
 export function routeWebFindings(
   dossier: WebResearchDossier | null | undefined,
+  options: RouteWebFindingsOptions = {},
 ): Map<RoutedSectionId, RoutedFinding[]> {
   const routed = new Map<RoutedSectionId, RoutedFinding[]>();
   if (!dossier) return routed;
@@ -418,6 +474,60 @@ export function routeWebFindings(
         if (
           CREDENTIAL_SECTIONS.has(sectionId) &&
           record.match.level !== 'strong'
+        ) {
+          continue;
+        }
+        // Forensic/IME marketing belongs under paid directories only. Practice
+        // sites (often kind "other") and articles stay under Websites — not
+        // IME advertising.
+        if (
+          (sectionId === 'ime' || claim.topic === 'advertising') &&
+          !isPaidDirectoryRecord(record)
+        ) {
+          push({
+            ...base,
+            sectionId: 'websites',
+            title: `Website: ${short(record.title, 90)}`,
+            statement: claim.text,
+            quote: claim.quote,
+            basis: claim.basis === 'subject_stated' ? 'subject_stated' : basis,
+            basisLabel:
+              claim.basis === 'subject_stated'
+                ? BASIS_LABEL.subject_stated
+                : BASIS_LABEL[basis],
+            from: claim.from ?? 'page',
+            verification: verificationFor('websites'),
+          });
+          continue;
+        }
+        // Hard rule: the expert’s own website/CV may be listed as their
+        // statement, but must not support board certification or license proof.
+        // Only issuing-body / primary_source pages stay in credential sections.
+        if (
+          (sectionId === 'board-certifications' || sectionId === 'licenses') &&
+          !isIssuingBodyCredentialClaim(record, claim, basis)
+        ) {
+          push({
+            ...base,
+            sectionId: 'websites',
+            title: `Expert’s own statement: ${short(record.title, 90)}`,
+            statement: `${claim.text} This is the expert’s own statement (website or profile). It is not independent verification of the credential.`,
+            quote: claim.quote,
+            basis: claim.basis === 'subject_stated' ? 'subject_stated' : basis,
+            basisLabel:
+              claim.basis === 'subject_stated'
+                ? BASIS_LABEL.subject_stated
+                : BASIS_LABEL[basis],
+            from: claim.from ?? 'page',
+            verification: verificationFor('websites'),
+          });
+          continue;
+        }
+        // University faculty pages about teaching are not university rules /
+        // COI policies unless the claim itself is a policy rule.
+        if (
+          sectionId === 'university-rules' &&
+          claim.topic !== 'university_rules'
         ) {
           continue;
         }
@@ -540,9 +650,10 @@ export function routeWebFindings(
     }
 
     // Possible and other-person pages belong under Other people, not the
-    // subject's directories, reviews, news, or advertising sections.
-    // Social listings may still appear as possible matches.
-    if (record.match.level !== 'strong' && record.kind !== 'social') {
+    // subject's directories, reviews, news, advertising, or social sections.
+    // Social URLs require a strong identity match (client: LinkedIn/social
+    // must be attributable to the expert).
+    if (record.match.level !== 'strong') {
       continue;
     }
 
@@ -560,10 +671,10 @@ export function routeWebFindings(
             ? `${platform} profile`
             : short(record.title, 90),
         statement: institutional
-          ? 'A search result listed this as an official or employer social account connected to the expert’s work. It is not a personal profile of the expert. Profile URL found; the page was not read (login-gated).'
+          ? 'A search result listed this as an official or employer social account connected to the expert’s work. It is not a personal profile of the expert. Profile URL found; the page was not opened because it requires sign-in.'
           : record.read === 'read'
             ? `Page was read. ${record.summary}`.trim()
-            : 'Profile URL found. The page was not read because it is shown only to signed-in users.',
+            : 'A public search listed this profile URL. The page itself was not opened because it requires sign-in, so profile content was not independently verified.',
         quote: record.match.quote ?? record.snippet,
         basis: 'record',
         basisLabel: BASIS_LABEL.record,
@@ -603,8 +714,11 @@ export function routeWebFindings(
       push(recordFinding('videos', short(record.title, 140)));
     }
     if (
-      (record.kind === 'advertising' || record.kind === 'ime') &&
+      (record.kind === 'advertising' ||
+        record.kind === 'ime' ||
+        record.kind === 'directory') &&
       !courtLike &&
+      isPaidDirectoryRecord(record) &&
       !alreadyFiled('ime')
     ) {
       push(recordFinding('ime', short(record.title, 140)));
@@ -675,8 +789,8 @@ export function routeWebFindings(
       title: tie.name,
       statement:
         tie.scope === 'own_page'
-          ? `${tie.name} is named with the expert on the expert’s own page (${hostOf(tie.url)}). The role (owner, officer, employer) is not stated unless the quote says so.`
-          : `${tie.name} is named near the expert’s name on ${hostOf(tie.url)}. The page does not establish ownership or role.`,
+          ? `${tie.name} is named with the expert on the expert’s own page (${hostOf(tie.url)}). A practice website is not a Secretary of State record. The role (owner, officer, employer) is not stated unless the quote says so.`
+          : `${tie.name} is named near the expert’s name on ${hostOf(tie.url)}. The page does not establish ownership or role and is not a Secretary of State filing.`,
       quote: tie.quote,
       url: tie.url,
       sourceTitle: record?.title ?? hostOf(tie.url),
@@ -691,6 +805,29 @@ export function routeWebFindings(
       publishedAt: record?.publishedAt ?? null,
       verification: null,
     });
+  }
+
+  // Official SOS search deep-links for named entities (all states when known).
+  // These are entry points for the attorney; automated SOS login was not done.
+  const states = (options.stateCodes ?? []).filter(Boolean);
+  if (states.length > 0 && companyNames.size > 0) {
+    for (const link of sosDeepLinksFor([...companyNames], states)) {
+      push({
+        sectionId: 'corporate',
+        title: `${link.entityName} — ${link.state} Secretary of State search`,
+        statement: `Official ${link.state} business-entity search for “${link.entityName}”. Open this registry to confirm the entity name and filing status. This investigation did not complete a Secretary of State login or scrape; the practice website is not SOS proof.`,
+        quote: null,
+        url: link.searchUrl,
+        sourceTitle: `${link.state} Secretary of State`,
+        basis: 'record',
+        basisLabel: BASIS_LABEL.record,
+        matchLevel: 'possible',
+        from: 'snippet',
+        retrievedAt: dossier.ranAt,
+        publishedAt: null,
+        verification: null,
+      });
+    }
   }
 
   for (const [sectionId, list] of routed) {
@@ -840,30 +977,30 @@ const PUBLIC_SEARCH_LIMIT: Partial<Record<RoutedSectionId, string>> = {
     'A public web search for awards, medals and military-service claims was performed. Official military verification was not completed.',
   directories:
     'Public directory pages were searched. Login-gated member databases, including the DRI members-only area, were not accessed.',
-  ime: 'A public search for IME, forensic, and expert-services advertising was performed. Paid expert-referral databases were not accessed.',
+  ime: 'A public search for paid expert-directory and IME advertising listings was performed. The expert’s own practice website is reported under Websites, not as advertising. Paid expert-referral databases were not accessed.',
   lawsuits:
     'A public web search for court records naming the expert was performed. That is not a comprehensive malpractice or lawsuit search. Paid docket databases were not queried.',
   criminal:
     'A public news and web search for criminal-record mentions was performed. Dedicated criminal-record databases were not queried. This is not a comprehensive criminal-records search.',
   depositions:
-    'A public web search for deposition or testimony transcripts was performed. Paid transcript databases were not accessed.',
+    'A public web search for deposition or testimony transcripts naming the expert was performed. Paid transcript databases (for example TrialSmith) were not accessed. Finding a docket notice that mentions a deposition is not the same as retrieving the transcript.',
   'testimony-inconsistencies':
-    'A public web search for testimony and Daubert, Frye, or Rule 702 mentions was performed. Full transcripts were not purchased or opened.',
+    'A public web search for testimony and Daubert, Frye, or Rule 702 mentions was performed. Mentions of testimony are not transcript text. Paid transcript libraries (TrialSmith, Lexis) are listed only when those sources are configured for this investigation.',
   orders:
-    'A public web search for court orders naming the expert was performed. PACER paid downloads and complete dockets were not retrieved.',
+    'A public web search for court orders naming the expert was performed. PACER paid downloads and complete dockets were not retrieved. School-board and administrative (OAH) orders are listed here when found; they are not deposition transcripts.',
   pleadings:
     'A public web search for motions and pleadings naming the expert was performed. PACER paid downloads and complete dockets were not retrieved.',
   'admissibility-challenges':
     'A public web search for Daubert, Frye, and Rule 702 mentions was performed. This is not a complete docket review.',
   news: 'Public news search included web and Google News results when those providers ran. A missing article is not proof that none exist.',
   social:
-    'Public search listed social profiles. Login-gated pages were not opened, so profile content was not independently verified.',
+    'Public search looked for LinkedIn, Facebook, Instagram, X (Twitter), TikTok, YouTube channel, and Bluesky profiles. Only profiles strongly matched to the expert are listed. Login-gated pages were not opened, so profile content was not independently verified.',
   corporate:
-    'A public web search for corporate-registry mentions was performed. Official secretary-of-state logins were not completed.',
+    'A public web search for corporate-registry mentions was performed. Book publishers and journal houses named on publication pages are not treated as corporate affiliations. Official secretary-of-state logins were not completed.',
   'patient-reviews':
-    'Public review-site listings were searched. This is not a complete patient-review file.',
+    'Public review-site listings were searched when found. When a rating or review page was retrieved, the URL and any rating shown on that page are listed. Patient reviews are third-party opinions, not independently verified clinical facts. If a review site blocked automated reading, that page is listed as unread by the software — not as a comprehensive patient-review file.',
   'university-accreditation':
-    'Public accreditation listings were searched when an institution was identified. That is not a complete official accreditation file.',
+    'Official accreditation look-ups (CHEA, U.S. Department of Education College Navigator, and APA CoA program lists when an institution was identified) were searched on the public web. Each query and any resulting page URL are listed when available. That is not a paid official accreditation-database login.',
 };
 
 function blockedNote(
@@ -900,7 +1037,9 @@ function topicQueriesForSection(
 ): number {
   if (sectionId === 'university-accreditation') {
     const hosts = (dossier.executedQueries ?? []).filter((entry) =>
-      /site:chea\.org|site:ope\.ed\.gov/.test(entry.query),
+      /site:chea\.org|site:ope\.ed\.gov|site:accreditation\.apa\.org|site:apa\.org/.test(
+        entry.query,
+      ),
     ).length;
     if (hosts > 0) return hosts;
   }
@@ -990,6 +1129,12 @@ export function coverageLine(
         parts.push(
           'No relevant records identified that qualify as a lawsuit or malpractice claim against this expert. An opinion, motion, or appointment that names the expert is not a lawsuit against the expert.',
         );
+      } else if (sectionId === 'university-accreditation') {
+        parts.push(
+          'Dedicated accreditation queries ran (CHEA, U.S. Department of Education, and/or APA CoA when an institution was known). No matching public accreditation listing was returned for those queries. That is not proof the school was unaccredited.',
+        );
+        const trail = accreditationQueryTrail(dossier);
+        if (trail) parts.push(trail);
       } else {
         parts.push(TOPIC_SEARCHED_EMPTY);
       }
@@ -1000,10 +1145,52 @@ export function coverageLine(
   }
   const limit = publicSearchNote(dossier, sectionId);
   if (limit) parts.push(limit);
+  if (
+    sectionId === 'university-accreditation' &&
+    dossier &&
+    !parts.some((part) => /Queries run:/i.test(part))
+  ) {
+    const trail = accreditationQueryTrail(dossier);
+    if (trail) parts.push(trail);
+  }
   if (dossier) {
     const blocked = blockedNote(dossier, sectionId);
     if (blocked) parts.push(blocked);
   }
   parts.push(...display);
   return parts.join(' ');
+}
+
+/** Lists accreditation queries actually executed so the report shows how/where. */
+function accreditationQueryTrail(
+  dossier: WebResearchDossier | null | undefined,
+): string | null {
+  if (!dossier?.executedQueries?.length) return null;
+  const queries = dossier.executedQueries
+    .filter(
+      (entry) =>
+        entry.topic === 'university_accreditation' ||
+        /site:chea\.org|site:ope\.ed\.gov|site:accreditation\.apa\.org|site:apa\.org/.test(
+          entry.query,
+        ),
+    )
+    .map((entry) => entry.query);
+  if (queries.length === 0) return null;
+  const unique = [...new Set(queries)].slice(0, 8);
+  const hits = dossier.records
+    .filter(
+      (record) =>
+        record.match.level === 'strong' || record.match.level === 'possible',
+    )
+    .filter((record) =>
+      /chea\.org|ope\.ed\.gov|accreditation\.apa\.org|apa\.org\/ed\/accreditation/i.test(
+        record.url,
+      ),
+    )
+    .map((record) => record.url);
+  const hitLine =
+    hits.length > 0
+      ? ` Result URL(s): ${[...new Set(hits)].slice(0, 5).join('; ')}.`
+      : ' No official accreditation result URL was returned for those queries.';
+  return `Queries run: ${unique.join(' | ')}.${hitLine}`;
 }

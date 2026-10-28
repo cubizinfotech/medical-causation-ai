@@ -224,11 +224,11 @@ describe('Demery report regression', () => {
     expect(outside).not.toContain('Texas');
   });
 
-  it('files the board certification and names the certifying organization', () => {
-    const certifications = sectionText(document, 'board-certifications');
-    expect(certifications).toMatch(/ABPP/);
-    expect(certifications).not.toContain(GENERIC);
-    expect(certifications).not.toContain(ORDER);
+  it('lists own-site board-certification as the expert’s statement, not issuing-body proof', () => {
+    const websites = sectionText(document, 'websites');
+    expect(websites).toMatch(/ABPP|board certified|Board Certified/i);
+    expect(websites).toMatch(/own statement|not independent verification/i);
+    expect(sectionText(document, 'board-certifications')).not.toContain(ORDER);
     expect(sectionText(document, 'ime')).not.toContain(ORDER);
     const organizations = sectionText(document, 'certification-orgs');
     expect(organizations).toMatch(
@@ -250,7 +250,7 @@ describe('Demery report regression', () => {
     expect(membership?.status).toBe('confirmed');
     expect(membership?.confirmedBy?.url).toBe(AACN);
     expect(sectionText(document, 'board-certifications')).toMatch(
-      /not confirmed at the source/i,
+      /not confirmed at the source|issuing body’s own site/i,
     );
     expect(sectionText(document, 'memberships')).toMatch(/Confirmed on/);
   });
@@ -260,10 +260,14 @@ describe('Demery report regression', () => {
     expect(education).toMatch(/University of Florida/);
     expect(education).not.toContain(GENERIC);
     const accreditation = sectionText(document, 'university-accreditation');
-    expect(accreditation).not.toMatch(/University of Florida/);
+    // Institution names may appear in the query trail; that is not an
+    // accreditation confirmation for the school.
     expect(accreditation).not.toMatch(/not checked against an accreditor/);
     expect(accreditation).toMatch(
-      /dedicated search for this topic ran|Public accreditation listings were searched/i,
+      /Queries run:|dedicated accreditation queries ran|Official accreditation look-ups/i,
+    );
+    expect(accreditation).toMatch(
+      /No matching public accreditation listing|No official accreditation result URL/i,
     );
     expect(accreditation).not.toMatch(/not implemented/i);
   });
@@ -300,11 +304,11 @@ describe('Demery report regression', () => {
     }
   });
 
-  it('files IME language from the practice site', () => {
-    expect(sectionText(document, 'ime')).toMatch(
+  it('files practice-site IME language under Websites, not paid advertising', () => {
+    expect(sectionText(document, 'websites')).toMatch(
       /independent medical|forensic neuropsychological/i,
     );
-    expect(sectionText(document, 'ime')).not.toContain(GENERIC);
+    expect(sectionText(document, 'ime')).not.toMatch(NS_ABOUT);
   });
 
   it('reports a blocked registry as not read, not as absent', () => {

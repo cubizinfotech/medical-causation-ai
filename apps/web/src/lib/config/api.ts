@@ -25,18 +25,40 @@ export const AUTH_TOKEN_KEY = "auth:access-token";
 /** Fired on window when the API rejects the saved session (expired or revoked). */
 export const AUTH_EXPIRED_EVENT = "auth:expired";
 
+/**
+ * Access token lives in localStorage so every tab of this origin shares the
+ * same signed-in session. sessionStorage is per-tab and caused a new tab to
+ * ask for login while another tab was already signed in.
+ */
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(AUTH_TOKEN_KEY);
+  try {
+    const stored = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (stored) return stored;
+    // One-time move from older per-tab storage so a refresh keeps the session.
+    const legacy = sessionStorage.getItem(AUTH_TOKEN_KEY);
+    if (!legacy) return null;
+    localStorage.setItem(AUTH_TOKEN_KEY, legacy);
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    return legacy;
+  } catch {
+    return null;
+  }
 }
 
 export function setAccessToken(token: string | null): void {
   if (typeof window === "undefined") return;
-  if (token) {
-    sessionStorage.setItem(AUTH_TOKEN_KEY, token);
-    return;
+  try {
+    if (token) {
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
+      sessionStorage.removeItem(AUTH_TOKEN_KEY);
+      return;
+    }
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch {
+    // Private mode or blocked storage; callers treat missing token as signed out.
   }
-  sessionStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
 /** Fetch an API path and attach the session bearer token when one exists. */

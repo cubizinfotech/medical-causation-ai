@@ -27,3 +27,8 @@ export {
   type RoutedSectionId,
 } from './section-router';
 export { TOPIC_LABEL } from './claim-topics';
+export {
+  sosBusinessSearchUrl,
+  sosDeepLinksFor,
+  type SosDeepLink,
+} from './sos-business-search';

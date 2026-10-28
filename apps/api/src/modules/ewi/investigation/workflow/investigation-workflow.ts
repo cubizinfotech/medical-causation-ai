@@ -11,9 +11,15 @@ import {
   type PublicationLookupResult,
   type PublicationQuery,
 } from '@integrations/expert-research';
-import type { WebResearchDossier } from '@integrations/web-research';
+import type { WebRecord, WebResearchDossier } from '@integrations/web-research';
 import { compareCv, cvDiscrepancies } from '../../cv/cv-comparison';
-import type { CvCheck, CvExtraction } from '../../cv/cv.types';
+import type {
+  CvCheck,
+  CvClaim,
+  CvClaimCategory,
+  CvExtraction,
+} from '../../cv/cv.types';
+import { CV_CLAIM_CATEGORIES } from '../../cv/cv.types';
 import { DiscrepancyAnalyzer } from '../../research/discrepancy-analyzer';
 import type { VerificationAttempt } from '../../research/inconsistency-analyzer';
 import {
@@ -657,6 +663,27 @@ export async function executeInvestigationWorkflow(
       );
     }
   }
+  // If intake had no uploaded CV, compare claims from a public CV/resume PDF
+  // found on the expert’s own site during web research.
+  if (!cvCheck && webResearch) {
+    const websiteExtraction = extractionFromWebsiteCv(webResearch);
+    if (websiteExtraction) {
+      try {
+        cvCheck = await compareCv({
+          extraction: websiteExtraction,
+          evidence,
+          sourceResults,
+          identity: identityFromResearch(request, sourceResults, evidence),
+          publications: [],
+          expertName: request.expertName,
+        });
+      } catch (error) {
+        dependencies.logger?.warn(
+          `Website CV comparison failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      }
+    }
+  }
   const reportArtifact = await dependencies.report.build({
     expertName: request.expertName,
     city: request.city,
@@ -1003,6 +1030,91 @@ async function readCvSource(
       items: [],
     };
   }
+}
+
+/** Strong-match public CV/resume on the expert’s site → synthetic CV extraction. */
+export function extractionFromWebsiteCv(
+  dossier: WebResearchDossier,
+): CvExtraction | null {
+  const record = dossier.records.find((entry) => isWebsiteCvRecord(entry));
+  if (!record) return null;
+  const claims: CvClaim[] = [];
+  for (const [index, claim] of (record.claims ?? []).entries()) {
+    const category = cvCategoryForWebTopic(claim.topic);
+    if (!category) continue;
+    claims.push({
+      id: `website-cv-${index + 1}`,
+      category,
+      statement: claim.text,
+      details: {},
+      page: 1,
+      quote: claim.quote || claim.text,
+    });
+  }
+  if (claims.length === 0 && record.summary.trim().length > 40) {
+    claims.push({
+      id: 'website-cv-summary',
+      category: 'appointment',
+      statement: record.summary.slice(0, 400),
+      details: { title: record.title },
+      page: 1,
+      quote: record.summary.slice(0, 280),
+    });
+  }
+  if (claims.length === 0) return null;
+  return {
+    document: {
+      id: record.url,
+      name: record.title || 'Website CV',
+      pageCount: 1,
+      unreadablePages: [],
+      ocrPages: [],
+    },
+    status: 'completed',
+    claims,
+    warnings: [
+      `CV was read from the expert’s public website (${record.url}), not from an uploaded file.`,
+    ],
+  };
+}
+
+function isWebsiteCvRecord(record: WebRecord): boolean {
+  if (record.match.level !== 'strong') return false;
+  if (record.read !== 'read' && !(record.claims?.length > 0)) return false;
+  if (
+    record.kind !== 'expert_website' &&
+    record.kind !== 'other' &&
+    record.kind !== 'profile' &&
+    record.kind !== 'advertising'
+  ) {
+    return false;
+  }
+  const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
+  return (
+    /\.pdf($|\?)/i.test(record.url) ||
+    /\b(curriculum vitae|\bcv\b|resume)\b/.test(hay)
+  );
+}
+
+function cvCategoryForWebTopic(
+  topic: string | undefined,
+): CvClaimCategory | null {
+  if (!topic) return null;
+  if ((CV_CLAIM_CATEGORIES as readonly string[]).includes(topic)) {
+    return topic as CvClaimCategory;
+  }
+  const map: Record<string, CvClaimCategory> = {
+    board_certification: 'board_certification',
+    license: 'license',
+    education: 'education',
+    membership: 'membership',
+    publication: 'publication',
+    award: 'award',
+    employment: 'appointment',
+    advertising: 'expert_witness',
+    ime: 'expert_witness',
+  };
+  return map[topic] ?? null;
 }
 
 /** Compares the CV's claims with the collected sources, or null without a CV. */

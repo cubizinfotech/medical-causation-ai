@@ -22,7 +22,7 @@ Next.js website for Medical Causation Analysis (MCA) and Expert Witness Investig
 
 - `/mca`, `/ewi`, and `/profile` need a signed-in user (`AuthGate` in `features/auth/auth-session.tsx`).
 - After sign-in the user returns to the page they asked for, but only to a path on this site (`features/auth/safe-next-path.ts`).
-- Sign-in and sign-out clear everything the browser kept for the previous user: the token, case drafts and results in `sessionStorage`, saved letterhead details, and the query cache.
+- The access token is kept in `localStorage` so every tab of this site shares the same signed-in session. Sign-in and sign-out clear the token, case drafts and results in `sessionStorage`, saved letterhead details, and the query cache.
 
 ## Security headers
 

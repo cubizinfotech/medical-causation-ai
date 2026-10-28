@@ -187,7 +187,8 @@ describe('FloridaLicenseResearchProvider', () => {
       specialty: 'Neurology',
     });
     expect(result.status).toBe('unavailable');
-    expect(result.message).toMatch(/not searched/i);
+    expect(result.message).toMatch(/not accessed|other states were not queried/i);
+    expect(result.message).toMatch(/AZ/);
     expect(mqaCalls).toBe(0);
   });
 

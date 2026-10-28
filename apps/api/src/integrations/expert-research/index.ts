@@ -33,5 +33,5 @@ export {
   scholarlyTypeLabel,
 } from './live/publication-citation';
 export { specialtyMatches, taxonomyMatches } from './live/specialty-match';
-export { stateCode, stateName } from './live/location';
+export { parseCityState, stateCode, stateName } from './live/location';
 export { namesCompatible, parsePersonName } from './live/person-name';

@@ -17,6 +17,7 @@ import {
 } from "@tanstack/react-query";
 import {
   AUTH_EXPIRED_EVENT,
+  AUTH_TOKEN_KEY,
   apiFetch,
   getAccessToken,
   setAccessToken,
@@ -55,8 +56,9 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /**
- * Removes everything this browser kept for the signed-in user: the token,
- * case drafts and results in sessionStorage, and saved letterhead details.
+ * Removes everything this browser kept for the signed-in user: the token
+ * (shared across tabs), case drafts and results in sessionStorage, and saved
+ * letterhead details.
  */
 function clearStoredSession(): void {
   setAccessToken(null);
@@ -114,6 +116,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+  }, [queryClient]);
+
+  // localStorage is shared across tabs; keep this tab's session in sync when
+  // another tab signs in or out.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== AUTH_TOKEN_KEY) return;
+      if (!event.newValue) {
+        try {
+          sessionStorage.clear();
+        } catch {
+          // ignore
+        }
+        resetSessionCache(queryClient, null);
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: ME_KEY });
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, [queryClient]);
 
   const login = useCallback(
