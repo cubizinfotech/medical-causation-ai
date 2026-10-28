@@ -548,6 +548,11 @@ export function planFollowUps(
       query: `${clause} ${quote(institution)} (faculty OR "conflict of interest" OR "outside activity" OR "consulting policy" OR "outside consulting")`,
       prompt: `Find the faculty or staff page for ${label} at ${institution}, and any public conflict-of-interest, outside-activity or consulting policy that would apply to that role. Do not report a generic course syllabus unless it names this person as the instructor.`,
     });
+    // Institution policy pages rarely name the expert; search the policy itself.
+    push('university_rules', {
+      query: `${quote(institution)} ("conflict of interest" OR "outside activity" OR "outside consulting" OR "compensated outside" OR "supplemental compensation") (policy OR handbook OR "faculty code")`,
+      prompt: `Find the public conflict-of-interest, outside-activity, outside-consulting, or supplemental-compensation policy for faculty or clinical faculty at ${institution}. Quote the rule text that governs taking forensic or consulting cases and keeping fees. The expert’s own CV is not a university policy.`,
+    });
     push(
       'university_accreditation',
       {

@@ -177,6 +177,26 @@ export function isCatalogAbsenceFinding(input: {
   );
 }
 
+/**
+ * True when a CV "publication" claim looks like a real citation — not
+ * memberships, editorial boards, advisory boards, or internship blurbs that
+ * the extractor mis-tagged as publications.
+ */
+export function looksLikePublicationCitation(claim: CvClaim): boolean {
+  const hay = `${claim.statement} ${claim.details.title ?? ''} ${claim.quote}`.toLowerCase();
+  if (
+    /\b(society memberships?|editorial activit|ad hoc reviewer|advisory boards?|program committee|internship|licensure|board certification|professional experience|consulting editor)\b/.test(
+      hay,
+    )
+  ) {
+    return false;
+  }
+  // Reject empty shells; year is preferred but not required when a title was
+  // explicitly extracted (catalog lookup can still run).
+  if (hay.length < 24) return false;
+  return true;
+}
+
 function normalizeTitle(value: string): string {
   return articleTitle(value).toLowerCase().replace(/\s+/g, ' ').trim();
 }
@@ -396,6 +416,7 @@ function publicationTitleRows(
   const seen: string[] = [];
   const lookups = input.publications;
   for (const claim of byCategory(claims, 'publication')) {
+    if (!looksLikePublicationCitation(claim)) continue;
     const title = claim.details.title || articleTitle(claim.statement);
     if (!title) continue;
     const identityKey =
@@ -1002,6 +1023,9 @@ function leftoverClaimRows(claims: CvClaim[], rows: Row[]): Row[] {
     .map((claim) => claim.details.title || articleTitle(claim.statement));
   return claims.flatMap((claim) => {
     if (used.has(claim.id)) return [];
+    if (claim.category === 'publication' && !looksLikePublicationCitation(claim)) {
+      return [];
+    }
     if (
       claim.category === 'publication' &&
       comparedTitles.some((title) =>

@@ -306,6 +306,15 @@ describe('planFollowUps', () => {
     expect(
       plans.some(
         (p) =>
+          p.topic === 'university_rules' &&
+          p.request.query.includes('University of Florida') &&
+          /supplemental compensation|outside activity/i.test(p.request.query) &&
+          !p.request.query.includes('Jason'),
+      ),
+    ).toBe(true);
+    expect(
+      plans.some(
+        (p) =>
           p.topic === 'university_accreditation' &&
           p.request.query.includes('site:chea.org'),
       ),

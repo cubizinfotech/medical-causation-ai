@@ -56,10 +56,23 @@ function isIrrelevantNoiseRecord(record: WebRecord): boolean {
   if (/\bboard of trustees\b/.test(hay) && /\b(school|academy|college)\b/.test(hay)) {
     return true;
   }
-  // Practice-site associate pages (e.g. /kristen.html, /dylan.html).
+  // Practice-site associate pages (e.g. /kristen.html, /dylan.html, glassCV.pdf).
   if (
     /\/(kristen|dylan|jesse|fischer|thompson|glass)(\.html?)?$/i.test(path) ||
-    /\/(associates?|team|staff)\/(kristen|dylan|jesse|thompson)/i.test(path)
+    /\/(associates?|team|staff)\/(kristen|dylan|jesse|thompson|glass)/i.test(
+      path,
+    ) ||
+    /(?:^|\/)(kristen|dylan|jesse|fischer|thompson|glass)[_-]?cv(?:\.pdf)?$/i.test(
+      path,
+    ) ||
+    /(?:^|\/)c\.?v\.?-?(kristen|dylan|jesse|fischer|thompson|glass)/i.test(path)
+  ) {
+    return true;
+  }
+  if (
+    /\b(kristen\s+thompson|leila\s+glass|jesse\s+fischer)\b/.test(hay) &&
+    /\b(curriculum vitae|\bcv\b|resume)\b/.test(hay) &&
+    !/\bleah\s+ellenberg\b/.test(hay.slice(0, 240))
   ) {
     return true;
   }
@@ -1044,6 +1057,9 @@ const PRIOR_NOT_REUSED =
   'Results from other investigations are not reused or revalidated here.';
 const BUDGET_OMITTED =
   'This category was planned but not searched because the query budget or time limit was reached. That is not proof that nothing exists.';
+/** Empty university-rules copy: section is about outside-income / forensic consulting rules. */
+export const UNIVERSITY_RULES_EMPTY =
+  'This section covers university rules on outside income and forensic or consulting work. Some universities permit employees to take forensic cases and keep the fee, but they publish rules on how that work is disclosed or approved, and those policies may be discoverable. No public conflict-of-interest, outside-activity, or consulting policy page for this expert’s appointment was retrieved in this investigation. The expert’s own CV or practice site is not a university rule. Unrelated alumni articles are not filed here.';
 const NOT_IMPLEMENTED_LINE = /is not implemented in this investigation/i;
 
 /** Public search ran; official database login or dedicated API was not used. */
@@ -1201,7 +1217,13 @@ export function coverageLine(
   if (attempted && !worked) {
     parts.push(SEARCH_INCOMPLETE);
   } else if (display.length === 0) {
-    if (queried) {
+    if (sectionId === 'university-rules') {
+      // Always explain the section purpose (outside income / forensic consulting
+      // rules). Do not say "Not applicable" or treat the expert’s CV as a policy.
+      parts.push(UNIVERSITY_RULES_EMPTY);
+      if (omitted) parts.push(BUDGET_OMITTED);
+      else if (!queried && attempted) parts.push(NOT_SEARCHED);
+    } else if (queried) {
       if (sectionId === 'lawsuits') {
         parts.push(
           'No relevant records identified that qualify as a lawsuit or malpractice claim against this expert. An opinion, motion, or appointment that names the expert is not a lawsuit against the expert.',

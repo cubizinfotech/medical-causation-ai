@@ -697,6 +697,33 @@ describe('coverageLine', () => {
     expect([...routed.keys()]).toHaveLength(0);
   });
 
+  it('drops associate glassCV.pdf pages from awards and background', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'glass',
+          'https://leahellenberg.com/glassCV.pdf',
+          'other',
+          [
+            {
+              type: 'other',
+              text: 'Chief Fellow, UCLA Medical Psychological Assessment Center',
+              quote: 'Chief Fellow',
+              topic: 'award',
+              basis: 'third_party',
+              from: 'page',
+            },
+          ],
+          'strong',
+          'Microsoft Word - Glass_CV_10_2019.docx',
+        ),
+      ]),
+    );
+    expect(routed.get('awards-military')).toBeUndefined();
+    expect(routed.get('background')).toBeUndefined();
+    expect([...routed.keys()]).toHaveLength(0);
+  });
+
   it('files practice-site publication lists under Websites, not Publications', () => {
     const routed = routeWebFindings(
       dossier([

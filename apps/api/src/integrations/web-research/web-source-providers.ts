@@ -341,11 +341,17 @@ function webInformationStatus(
   record: WebRecord,
 ): ExpertEvidenceItem['informationStatus'] {
   if (record.match.level !== 'strong') return 'unverified';
+  // Strong identity + retrieved page: the record itself is confirmed. This is
+  // not issuer proof of a license or board cert on a practice site.
   if (
     record.kind === 'court' ||
     record.kind === 'justia' ||
     record.kind === 'maps' ||
-    record.kind === 'publication'
+    record.kind === 'publication' ||
+    record.kind === 'expert_website' ||
+    record.kind === 'directory' ||
+    record.kind === 'profile' ||
+    record.kind === 'university'
   ) {
     return 'verified';
   }

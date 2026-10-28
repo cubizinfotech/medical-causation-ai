@@ -574,13 +574,21 @@ export function extractFacts(input: FactInput): WebClaim[] {
   const seen = new Set<string>();
   const pieces = sentencesOf(input.text, 4000);
 
+  const pageLooksLikePolicy =
+    /\b(conflict of interest|outside (?:activity|employment|consulting)|consulting policy|faculty handbook|supplemental compensation)\b/i.test(
+      `${input.title ?? ''} ${input.url} ${input.text.slice(0, 2000)}`,
+    ) &&
+    (input.kind === 'university' ||
+      /\.(edu)\b/i.test(input.url) ||
+      /policy|handbook|coi|conflict/i.test(input.url));
+
   for (let i = 0; i < pieces.length; i++) {
     if (claims.length >= MAX_FACTS) break;
     const piece = pieces[i];
     const namesSubject = quoteNamesSubject(piece, input.subject.name);
     const namesOther = quoteNamesOtherPerson(piece, input.subject.name);
     if (namesOther && !namesSubject) continue;
-    if (!ownProfile && !namesSubject) continue;
+    if (!ownProfile && !namesSubject && !pageLooksLikePolicy) continue;
     for (const rule of RULES) {
       if (rule.kinds && !rule.kinds.includes(input.kind)) continue;
       if ((perTopic.get(rule.topic) ?? 0) >= MAX_PER_TOPIC) continue;
@@ -590,7 +598,10 @@ export function extractFacts(input: FactInput): WebClaim[] {
       if (!hit) continue;
       if (rule.and && !rule.and.test(piece)) continue;
       if (rule.unless && rule.unless.test(piece)) continue;
-      if (!ownProfile && !namesSubject) continue;
+      // Institutional COI / outside-consulting policies rarely name the expert.
+      const policyWithoutName =
+        rule.topic === 'university_rules' && pageLooksLikePolicy && !namesOther;
+      if (!ownProfile && !namesSubject && !policyWithoutName) continue;
       if (
         rule.topic === 'university_rules' &&
         /cell phones?|times new roman|late work|food and drinks/i.test(piece) &&

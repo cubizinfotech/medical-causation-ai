@@ -251,6 +251,18 @@ describe('extractFacts', () => {
     );
   });
 
+  it('keeps an institutional COI policy even when the expert is not named on the page', () => {
+    const policy = extractFacts({
+      url: 'https://www.ucla.edu/policy/outside-activity',
+      kind: 'university',
+      title: 'UCLA Conflict of Interest and Outside Activity Policy',
+      text: 'Faculty must disclose compensated outside consulting, including forensic evaluations. Conflict of interest and outside activity rules apply to clinical faculty who accept expert-witness fees.',
+      subject,
+      ownPage: false,
+    });
+    expect(policy.some((fact) => fact.topic === 'university_rules')).toBe(true);
+  });
+
   it('labels NIH PI listings as personal awards and papers as associated research', () => {
     const award = extractFacts({
       url: 'https://reporter.nih.gov/project-details/1',

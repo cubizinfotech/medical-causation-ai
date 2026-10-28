@@ -1049,10 +1049,12 @@ function withWebFindings(
         (section.id === 'board-certifications' || section.id === 'licenses'),
     );
   if (!hasFindingBlocks) {
-    const emptyLine =
-      section.id === 'university-rules'
-        ? 'Not applicable. No university policy on outside forensic or consulting work was found for this expert’s appointment. Unrelated articles are not filed here.'
-        : coverageLine(dossier, section.id, coverage, expertName);
+    const emptyLine = coverageLine(
+      dossier,
+      section.id,
+      coverage,
+      expertName,
+    );
     blocks.push({
       text: emptyLine,
       style: 'note',

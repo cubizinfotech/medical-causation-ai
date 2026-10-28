@@ -342,6 +342,39 @@ describe('CV comparison', () => {
     ).toBe(true);
   });
 
+  it('does not treat membership or editorial CV text as publication citations', () => {
+    const junk = compareCv({
+      extraction: {
+        ...extraction,
+        claims: [
+          claim(
+            'cv-m',
+            'publication',
+            'SOCIETY MEMBERSHIPS American Psychological Association',
+            {
+              title: 'SOCIETY MEMBERSHIPS American Psychological Association',
+            },
+          ),
+          claim(
+            'cv-e',
+            'publication',
+            'Ad Hoc Reviewer, Journal of Pain and Symptom Management, from 2013',
+            {
+              title: 'Ad Hoc Reviewer, Journal of Pain',
+            },
+          ),
+        ],
+      },
+      evidence,
+      sourceResults,
+      identity,
+      publications: [],
+    });
+    expect(
+      junk.comparisons.filter((row) => row.topic === 'publication'),
+    ).toHaveLength(0);
+  });
+
   it('keeps a CV publication that catalogs did not search, without calling it disproven', () => {
     const unsearched = compareCv({
       extraction: {

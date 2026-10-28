@@ -46,7 +46,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.12');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.13');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -2207,7 +2207,9 @@ describe('EWI report source coverage', () => {
         .find((section) => section.id === 'university-rules')
         ?.blocks.map((block) => block.text)
         .join('\n') ?? '';
-    expect(university).toMatch(/Not applicable|No university policy/i);
+    expect(university).toMatch(/outside income|forensic or consulting/i);
+    expect(university).toMatch(/may be discoverable/i);
+    expect(university).not.toMatch(/Not applicable/i);
     expect(university).not.toMatch(/WSU alumna/i);
     const preferred = publicCvUrlsFromWeb(
       {
