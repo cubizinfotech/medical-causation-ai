@@ -53,9 +53,19 @@ export const CHALLENGE_TERMS = [
 ];
 
 const DEFAULT_MAX_HITS = 80;
-const MAX_TEXT_FETCHES = 12;
+/** Public opinion/RECAP text budget. Prefer challenges and available filings. */
+const MAX_TEXT_FETCHES = 24;
 const EXCERPT_RADIUS = 450;
 const MAX_EXCERPTS = 4;
+
+/** RECAP terms that often mark deposition/transcript filings (not notices alone). */
+const RECAP_DEPOSITION_TERMS = [
+  '"deposition of"',
+  '"deposition transcript"',
+  '"videotaped deposition"',
+  '"transcript of deposition"',
+  '"errata sheet"',
+];
 
 export type ChallengeStandard = 'daubert' | 'frye' | 'rule_702' | 'unspecified';
 
@@ -128,18 +138,31 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
     const npiConfirmed =
       identity?.resolution.status === 'confirmed' && Boolean(identity.record);
     const recapQuery = npiConfirmed ? `(${names})` : base;
-    const [challenges, mentions, recap] = await Promise.all([
-      this.client.searchOpinions(
-        `${base} AND (${CHALLENGE_TERMS.join(' OR ')})`,
-      ),
+    const challengeClause = CHALLENGE_TERMS.join(' OR ');
+    const [
+      challenges,
+      mentions,
+      recap,
+      recapChallenges,
+      recapDepositions,
+    ] = await Promise.all([
+      this.client.searchOpinions(`${base} AND (${challengeClause})`),
       this.client.searchOpinions(base),
       this.searchRecap(recapQuery),
+      this.searchRecap(`${recapQuery} AND (${challengeClause})`),
+      this.searchRecap(
+        `${recapQuery} AND (${RECAP_DEPOSITION_TERMS.join(' OR ')})`,
+      ),
     ]);
 
     const hits = mergeHits(
       challenges.hits,
       mentions.hits,
-      recap.hits,
+      [
+        ...recap.hits,
+        ...recapChallenges.hits,
+        ...recapDepositions.hits,
+      ],
       this.maxHits,
     );
     if (hits.length === 0) {
@@ -179,7 +202,9 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
         this.client.canReadOpinions
           ? ''
           : ' Opinion and filing text was not read (no CourtListener API token), so rulings are judged from search excerpts only.',
-        recap.limited ? ` ${recap.limited}` : '',
+        recap.limited || recapChallenges.limited || recapDepositions.limited
+          ? ` ${recap.limited ?? recapChallenges.limited ?? recapDepositions.limited}`
+          : '',
       ].join(''),
     };
   }
@@ -209,41 +234,30 @@ export class CourtListenerResearchProvider extends LiveResearchProvider {
     }
   }
 
-  /** Paragraphs around the expert's surname, read from the opinion text. */
+  /** Paragraphs around the expert's surname, read from opinion/RECAP text. */
   private async excerpts(
     hits: Hit[],
     name: PersonName,
   ): Promise<Map<CourtListenerSearchHit, string[]>> {
     const found = new Map<CourtListenerSearchHit, string[]>();
     if (!this.client.canReadOpinions) return found;
-    const opinionTargets = hits
-      .filter((entry) => entry.challenge && entry.hit.opinions?.[0]?.id)
-      .slice(0, MAX_TEXT_FETCHES);
-    const recapTargets = hits
-      .filter(
-        (entry) =>
+    const targets = prioritizeHitsForTextFetch(hits).slice(0, MAX_TEXT_FETCHES);
+    await mapWithLimit(targets, 3, async (entry) => {
+      try {
+        const text =
           entry.searchKind === 'recap_document' &&
-          entry.hit.is_available !== false &&
-          typeof entry.hit.id === 'number',
-      )
-      .slice(0, MAX_TEXT_FETCHES);
-    await mapWithLimit(
-      [...opinionTargets, ...recapTargets].slice(0, MAX_TEXT_FETCHES),
-      2,
-      async (entry) => {
-        try {
-          const text =
-            entry.searchKind === 'recap_document' &&
-            typeof entry.hit.id === 'number'
-              ? await this.client.recapDocumentText(entry.hit.id)
-              : await this.client.opinionText(entry.hit.opinions![0].id!);
-          const windows = excerptsAround(text, name.last);
-          if (windows.length > 0) found.set(entry.hit, windows);
-        } catch {
-          // The search excerpt is used instead.
-        }
-      },
-    );
+          typeof entry.hit.id === 'number'
+            ? await this.client.recapDocumentText(entry.hit.id)
+            : entry.hit.opinions?.[0]?.id
+              ? await this.client.opinionText(entry.hit.opinions[0].id)
+              : '';
+        if (!text.trim()) return;
+        const windows = excerptsAround(text, name.last);
+        if (windows.length > 0) found.set(entry.hit, windows);
+      } catch {
+        // The search excerpt is used instead.
+      }
+    });
     return found;
   }
 
@@ -534,7 +548,33 @@ function mergeHits(
   for (const hit of mentions) add(hit, false, 'opinion');
   for (const hit of recap)
     add(hit, recapLooksLikeChallenge(hit), 'recap_document');
-  return [...byKey.values()].slice(0, maxHits);
+  return prioritizeHitsForTextFetch([...byKey.values()]).slice(0, maxHits);
+}
+
+/**
+ * Prefer admissibility challenges and publicly available RECAP filings when
+ * the hit list or text-fetch budget is limited (Lexis/PACER buy not used).
+ */
+function prioritizeHitsForTextFetch(hits: Hit[]): Hit[] {
+  return [...hits].sort((left, right) => {
+    const rank = (entry: Hit): number => {
+      let score = 0;
+      if (entry.challenge) score += 100;
+      if (
+        entry.searchKind === 'recap_document' &&
+        entry.hit.is_available !== false &&
+        typeof entry.hit.id === 'number'
+      ) {
+        score += 40;
+      }
+      if (entry.searchKind === 'opinion' && entry.hit.opinions?.[0]?.id) {
+        score += 30;
+      }
+      if (entry.snippets.length > 0) score += 5;
+      return score;
+    };
+    return rank(right) - rank(left);
+  });
 }
 
 function recapLooksLikeChallenge(hit: CourtListenerSearchHit): boolean {

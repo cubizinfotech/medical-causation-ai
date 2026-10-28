@@ -46,7 +46,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.10');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.11');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');

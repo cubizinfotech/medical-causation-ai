@@ -2230,7 +2230,12 @@ function depositionsSection(
     tracker,
     dossier.depositions.map((item) => item.matter),
   );
-  const blocks: ReportBlock[] = [];
+  const blocks: ReportBlock[] = [
+    {
+      text: 'LexisNexis and TrialSmith deposition banks were not searched for this investigation. Public docket notices are not transcripts. A notice of taking deposition is filed under Pleadings. Supply a transcript reference when the firm has one from licensed research.',
+      style: 'note',
+    },
+  ];
   if (dossier.depositions.length === 0) {
     blocks.push({ text: EMPTY, style: 'note' });
     return { id: spec.id, title: spec.title, blocks };

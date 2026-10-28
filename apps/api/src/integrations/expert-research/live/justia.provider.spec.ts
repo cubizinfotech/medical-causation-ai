@@ -18,6 +18,18 @@ describe('parseJustiaHits', () => {
       'https://law.justia.com/cases/florida/relative/3/',
     ]);
   });
+
+  it('requires the first name when provided to reduce same-surname hits', () => {
+    const html = `
+      <a href="https://law.justia.com/cases/florida/example/1/">Smith v. Jones, testimony of Jason Demery</a>
+      <a href="/cases/florida/relative/3/">Demery mentioned again</a>
+      <a href="https://law.justia.com/cases/florida/other/4/">Mary Demery v. City</a>
+    `;
+    const hits = parseJustiaHits(html, 'Demery', 'Jason');
+    expect(hits.map((hit) => hit.url)).toEqual([
+      'https://law.justia.com/cases/florida/example/1/',
+    ]);
+  });
 });
 
 describe('JustiaResearchProvider', () => {

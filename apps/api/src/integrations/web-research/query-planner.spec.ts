@@ -1,6 +1,7 @@
 import { parsePersonName } from '../expert-research/live/person-name';
 import type { IdentitySubject } from './identity-assess';
 import {
+  QUERY_PRIORITY,
   planFollowUps,
   planQueries,
   selectQueriesForBudget,
@@ -225,6 +226,18 @@ describe('planQueries', () => {
     );
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it('prioritizes public Daubert and deposition-of queries without Lexis', () => {
+    const plans = planQueries(subject());
+    const queries = plans.map((plan) => plan.request.query).join('\n');
+    expect(queries).toMatch(/Daubert|Rule 702|motion in limine/i);
+    expect(queries).toMatch(/"deposition of"/i);
+    expect(queries).toMatch(/site:uscourts\.gov|site:gov/i);
+    expect(QUERY_PRIORITY.litigation).toBeLessThan(QUERY_PRIORITY.directories);
+    expect(QUERY_PRIORITY.court_documents).toBeLessThanOrEqual(
+      QUERY_PRIORITY.directories,
+    );
+  });
 });
 
 describe('planFollowUps', () => {
@@ -327,17 +340,18 @@ describe('planQueries order', () => {
 });
 
 describe('selectQueriesForBudget', () => {
-  it('keeps patents, IME and directories when the budget cannot run every query', () => {
+  it('keeps public legal search, directories and IME when the budget cannot run every query', () => {
     const { selected, omitted } = selectQueriesForBudget(
       planQueries(subject()),
       35,
     );
     const topics = new Set(selected.map((plan) => plan.topic));
-    expect(topics.has('patents')).toBe(true);
+    // Without Lexis/TrialSmith, court/litigation/deposition queries stay in budget.
+    expect(topics.has('litigation')).toBe(true);
+    expect(topics.has('court_documents')).toBe(true);
+    expect(topics.has('depositions')).toBe(true);
     expect(topics.has('ime')).toBe(true);
-    expect(topics.has('advertising')).toBe(true);
     expect(topics.has('directories')).toBe(true);
-    expect(topics.has('military_claims')).toBe(true);
     expect(
       omitted.some((plan) => plan.topic === 'reviews' || plan.topic === 'news'),
     ).toBe(true);

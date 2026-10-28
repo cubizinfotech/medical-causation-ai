@@ -22,10 +22,16 @@ export interface JustiaHit {
 
 /**
  * Pulls case links from a Justia results page. A link counts only when the
- * expert's last name appears in the link text or the text beside it.
+ * expert's last name appears in the link text. When a first name is given,
+ * it must appear too (reduces same-surname false hits without Lexis).
  */
-export function parseJustiaHits(html: string, lastName: string): JustiaHit[] {
+export function parseJustiaHits(
+  html: string,
+  lastName: string,
+  firstName?: string,
+): JustiaHit[] {
   const last = lastName.trim().toLowerCase();
+  const first = firstName?.trim().toLowerCase() ?? '';
   if (last.length < 2) return [];
   const hits: JustiaHit[] = [];
   const seen = new Set<string>();
@@ -38,7 +44,9 @@ export function parseJustiaHits(html: string, lastName: string): JustiaHit[] {
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    if (!title.toLowerCase().includes(last)) continue;
+    const titleLower = title.toLowerCase();
+    if (!titleLower.includes(last)) continue;
+    if (first.length >= 2 && !titleLower.includes(first)) continue;
     const url = href.startsWith('http') ? href : `${SEARCH_HOST}${href}`;
     if (!url.startsWith(`${SEARCH_HOST}/`)) continue;
     if (seen.has(url)) continue;
@@ -99,19 +107,19 @@ export class JustiaResearchProvider extends LiveResearchProvider {
           'Justia presented a bot-protection or access wall. The results page was not read. This is not a finding that no case exists.',
       };
     }
-    const hits = parseJustiaHits(html, name.last);
+    const hits = parseJustiaHits(html, name.last, name.first);
     if (hits.length === 0) {
       return {
         items: [],
         status: 'no_result',
-        message: `Searched Justia for ${quoted}. No case link on the results page included the expert’s last name. That is not proof that no case exists.`,
+        message: `Searched Justia for ${quoted}. No case link on the results page included the expert’s first and last name. That is not proof that no case exists.`,
       };
     }
     return {
       items: hits.map((hit) =>
         this.caseItem(hit, quoted, name.last, retrievedAt),
       ),
-      message: `Justia results page listed ${hits.length} case link(s) for ${quoted}. Open each link before treating it as the same person.`,
+      message: `Justia results page listed ${hits.length} case link(s) naming ${quoted}. Open each link before treating it as the same person.`,
     };
   }
 

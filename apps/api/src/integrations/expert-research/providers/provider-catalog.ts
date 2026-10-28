@@ -374,7 +374,7 @@ const BASE_CATALOG: readonly ProviderDefinition[] = [
     accessClass: 'restricted',
     requirement: 'manual',
     summary:
-      'Depositions are not scraped. A user-supplied transcript reference may be recorded as permitted metadata only.',
+      'Depositions are not scraped from LexisNexis or TrialSmith. Public docket notices may appear from other sources; a user-supplied transcript reference may be recorded as permitted metadata only. The TrialSmith outreach path remains available when authorized.',
   }),
   source({
     id: 'expert_testimony',
@@ -393,7 +393,7 @@ const BASE_CATALOG: readonly ProviderDefinition[] = [
     requirement: 'subscription',
     credentialEnv: 'LEXISNEXIS_API_KEY',
     summary:
-      'Authorized subscription access only. No request is sent from this adapter, and LexisNexis PDFs are not stored.',
+      'Authorized subscription access only. No request is sent while a subscription is not configured for this investigation. LexisNexis PDFs are not stored. The adapter remains in place for when authorized credentials are available.',
   }),
   source({
     id: 'expert_directory',

@@ -112,9 +112,11 @@ export const QUERY_PRIORITY: Record<QueryTopic, number> = {
   patents: 14,
   awards: 15,
   military_claims: 16,
-  litigation: 17,
-  court_documents: 18,
-  depositions: 19,
+  // Legal topics rank ahead of pubs/social so public court search fills gaps
+  // when LexisNexis / TrialSmith are not subscribed.
+  litigation: 9,
+  court_documents: 10,
+  depositions: 11,
   criminal: 20,
   discipline: 21,
   publications: 22,
@@ -349,13 +351,25 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${clause} (testified OR testimony OR "expert witness" OR Daubert OR "motion to exclude" OR disqualified OR deposition OR court)`,
     prompt: `Find public court opinions, dockets, motions, orders or news about court proceedings where ${subjectLine} testified, was an expert witness, or was challenged (Daubert, Frye, motion to exclude, disqualification).`,
   });
+  add('litigation', {
+    query: `${clause} (Daubert OR Frye OR "Rule 702" OR "motion in limine" OR "motion to exclude" OR "exclude the testimony" OR "exclude the opinions") (expert OR neuropsycholog OR psychologist OR physician OR surgeon)`,
+    prompt: `Find public Daubert, Frye, Rule 702, or motion-in-limine rulings that name ${subjectLine} as the challenged or retained expert. Prefer the court's own opinion or docket PDF. Do not invent an outcome.`,
+  });
   add('court_documents', {
     query: `${clause} ("expert witness" AND (motion OR order OR pleading OR docket OR "case no"))`,
     prompt: `Find public motions, orders, pleadings or docket pages that name ${subjectLine} as an expert witness. Prefer the court's own page or a public PDF. A paid PACER download is not retrieved; give the link and any listed fee instead.`,
   });
+  add('court_documents', {
+    query: `${clause} (site:uscourts.gov OR site:gov) (Daubert OR "Rule 702" OR "motion to exclude" OR "expert witness" OR deposition) filetype:pdf`,
+    prompt: `Find .gov or uscourts.gov PDFs that name ${subjectLine} in an expert-witness, Daubert, or deposition context. Prefer the court-hosted file. Do not purchase PACER content.`,
+  });
   add('depositions', {
     query: `${clause} (deposition OR "transcript" OR "cross-examination" OR "testimony transcript" OR "sworn testimony")`,
-    prompt: `Find deposition or trial testimony transcripts, excerpts or recordings of ${subjectLine}. Give the page URL and say whether a transcript is available.`,
+    prompt: `Find deposition or trial testimony transcripts, excerpts or recordings of ${subjectLine}. Give the page URL and say whether a transcript is available. A notice of deposition is not a transcript. Do not treat TrialSmith or LexisNexis portal content as retrieved unless a public page is given.`,
+  });
+  add('depositions', {
+    query: `"deposition of" ${clause} (transcript OR videotape OR "oral examination")`,
+    prompt: `Find a public page that is the deposition of ${subjectLine} (transcript or videotape), not merely a notice that a deposition was scheduled. Say whether the transcript text is readable.`,
   });
   add('criminal', {
     query: `${clause} (arrested OR conviction OR "criminal record" OR mugshot OR indicted OR "criminal history")${where}`,

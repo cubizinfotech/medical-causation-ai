@@ -158,10 +158,12 @@ export class CatalogExpertResearchProvider implements IExpertResearchProvider {
         return this.emptyResult(
           'unavailable',
           retrievedAt,
-          `Not searched. ${this.definition.name} is restricted. No request was sent.${
+          `Not searched. ${this.definition.name} is restricted for this investigation. No request was sent.${
             this.definition.id === 'lexisnexis'
-              ? ' LexisNexis PDFs are not stored.'
-              : ''
+              ? ' LexisNexis PDFs are not stored. The adapter remains available when authorized credentials are configured.'
+              : this.definition.id === 'depositions'
+                ? ' Deposition banks (including TrialSmith) are not scraped; supply a transcript reference manually when needed.'
+                : ''
           }`,
           'restricted',
         );
