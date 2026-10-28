@@ -17,11 +17,11 @@ const UNVERIFIED =
 const SINGLE_ACCOUNT = /\bCould not verify a single account\.\s*/gi;
 
 const FINDING_LABEL: Partial<Record<EwiAssessment, string>> = {
-  verified: 'Verified',
-  partially_verified: 'Partly verified',
+  verified: 'Confirmed by source',
+  partially_verified: 'Partly matched',
   conflicting: 'Sources disagree',
   restricted: 'Restricted source; content not stored',
-  unavailable: 'Source unavailable',
+  unavailable: 'Source not queried',
 };
 
 /** The label of an overall finding, or null when there is nothing to flag. */
@@ -79,19 +79,21 @@ export function questionBasis(basis: string): string {
 export function evidenceStatusLine(item: ExpertEvidenceItem): string {
   const status =
     item.access === 'restricted'
-      ? 'Inaccessible'
+      ? 'Restricted source (body not stored)'
       : item.informationStatus === 'conflicting'
-        ? 'Discrepancy found'
+        ? 'Sources disagree'
         : item.informationStatus === 'verified'
-          ? 'Verified'
+          ? 'Confirmed by source'
           : item.informationStatus === 'unavailable'
             ? 'Not found'
             : item.category === 'publication' &&
                 ['pubmed', 'openalex', 'crossref', 'orcid'].includes(
                   item.sourceId,
                 )
-              ? 'Catalog record found. This is not a comparison against an uploaded CV claim'
-              : 'Not independently verified';
+              ? 'Catalog record found (not a CV comparison)'
+              : item.sourceId === 'npi_registry'
+                ? 'NPI Registry record retrieved'
+                : 'Reported by source only';
   return `Status: ${status}. Source: ${item.sourceId}.`;
 }
 

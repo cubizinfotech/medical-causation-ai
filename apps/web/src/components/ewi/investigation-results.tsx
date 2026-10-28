@@ -91,40 +91,41 @@ function sourcesFromResult(
 function labelText(label: string | undefined): string {
   switch (label) {
     case "verified":
-      return "Verified";
+      return "Confirmed by source";
     case "partially_verified":
-      return "Partially Verified";
+      return "Partly matched";
     case "conflicting":
-      return "Conflicting";
+      return "Sources disagree";
     case "not_verified":
     case "unverified":
-      return "Not Verified";
+      return "Reported by source only";
     case "not_found":
-      return "Not Found";
+      return "Not found";
     case "unavailable":
-      return "Unavailable";
+      return "Source not queried";
     case "restricted":
     case "restricted_unavailable":
-      return "Restricted";
+      return "Restricted source";
     case "unable_to_verify":
-      return "Unable to Verify";
+      return "No confirming source in this packet";
     default:
-      return "Not Verified";
+      return "Reported by source only";
   }
 }
 
 function sourceStatusLabel(source: EwiSourceStatus): string {
   if (
     source.message?.startsWith("Not searched") ||
+    source.message?.startsWith("Not queried") ||
     source.message?.includes("No request was sent")
   ) {
-    return "Not searched";
+    return "Not queried";
   }
   if (source.checked === false) {
     if (source.attemptStatus === "skipped") {
       return "Skipped (not a completed check)";
     }
-    return "Not checked";
+    return "Not queried";
   }
   if (
     source.attemptStatus === "restricted" ||

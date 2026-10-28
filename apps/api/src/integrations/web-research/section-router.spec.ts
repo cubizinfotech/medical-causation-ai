@@ -453,12 +453,10 @@ describe('coverageLine', () => {
     const ran = dossier([], {
       topics: [{ topic: 'identity', queries: 4, hits: 0 }],
     });
-    expect(coverageLine(ran, 'grants')).toMatch(/was not searched/);
+    expect(coverageLine(ran, 'grants')).toMatch(/No dedicated search was run|was not searched/i);
     expect(coverageLine(ran, 'grants')).not.toMatch(/did not establish/);
-    expect(coverageLine(ran, 'education')).toMatch(/was not searched/);
-    expect(coverageLine(dossier([], {}), 'patents')).toMatch(
-      /was not searched/,
-    );
+    expect(coverageLine(ran, 'education')).toMatch(/No dedicated search was run|was not searched/i);
+    expect(coverageLine(dossier([], {}), 'patents')).toMatch(/No dedicated search was run|was not searched/i);
     expect(coverageLine(dossier([], {}), 'patents')).not.toMatch(
       /did not establish/,
     );
@@ -479,7 +477,7 @@ describe('coverageLine', () => {
   });
 
   it('says not searched when the web run did not work or did not run', () => {
-    expect(coverageLine(null, 'grants')).toMatch(/was not searched/);
+    expect(coverageLine(null, 'grants')).toMatch(/No dedicated search was run|was not searched/i);
     const failed = dossier([], {
       providers: [
         {
@@ -670,6 +668,57 @@ describe('coverageLine', () => {
     expect(routed.get('websites')?.[0].url).toContain(
       'neuropsychologicalsciences.com',
     );
+  });
+
+  it('drops parkcenturyschool board-of-trustees pages from all sections', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'park',
+          'https://www.parkcenturyschool.org/about/faculty-staff/board-of-trustees/',
+          'other',
+          [
+            {
+              type: 'other',
+              text: 'Board of trustees includes testimony references',
+              quote: 'testified',
+              topic: 'deposition',
+              basis: 'third_party',
+              from: 'page',
+            },
+          ],
+          'strong',
+          'Board of Trustees — Park Century School',
+        ),
+      ]),
+    );
+    expect(routed.get('depositions')).toBeUndefined();
+    expect(routed.get('testimony-inconsistencies')).toBeUndefined();
+    expect([...routed.keys()]).toHaveLength(0);
+  });
+
+  it('files practice-site publication lists under Websites, not Publications', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'site',
+          'https://leahellenberg.com/publications',
+          'expert_website',
+          [
+            {
+              type: 'credential',
+              text: 'Author of forty publications',
+              quote: '40 publications',
+              topic: 'publication',
+              basis: 'subject_stated',
+              from: 'page',
+            },
+          ],
+        ),
+      ]),
+    );
+    expect(routed.get('publications')).toBeUndefined();
+    expect(routed.get('websites')?.[0].statement).toMatch(/not a PubMed/i);
   });
 
   it('files own-site board-certification under Websites, not board-certifications', () => {
@@ -866,9 +915,7 @@ describe('coverageLine', () => {
     expect(coverageLine(litigationRan, 'lawsuits')).toMatch(
       /No relevant records identified/,
     );
-    expect(coverageLine(litigationRan, 'lawsuits')).not.toMatch(
-      /was not searched/,
-    );
+    expect(coverageLine(litigationRan, 'lawsuits')).not.toMatch(/No dedicated search was run|was not searched/i);
     expect(coverageLine(litigationRan, 'lawsuits')).toMatch(
       /not a comprehensive malpractice or lawsuit search/,
     );
@@ -884,7 +931,7 @@ describe('coverageLine', () => {
     const identityOnly = dossier([], {
       topics: [{ topic: 'identity', queries: 1, hits: 1 }],
     });
-    expect(coverageLine(identityOnly, 'lawsuits')).toMatch(/was not searched/);
+    expect(coverageLine(identityOnly, 'lawsuits')).toMatch(/No dedicated search was run|was not searched/i);
     expect(coverageLine(identityOnly, 'lawsuits')).not.toMatch(
       /No relevant records identified/,
     );
@@ -894,7 +941,7 @@ describe('coverageLine', () => {
     const globalOnly = dossier([], {
       topics: [{ topic: 'identity', queries: 2, hits: 1 }],
     });
-    expect(coverageLine(globalOnly, 'education')).toMatch(/was not searched/);
+    expect(coverageLine(globalOnly, 'education')).toMatch(/No dedicated search was run|was not searched/i);
     expect(findingsCoverageNote(globalOnly, 'education')).toMatch(
       /general web search/,
     );

@@ -16,11 +16,11 @@ import { Spinner } from "@/components/ui/spinner";
 /** Same words and order as the PDF report: conflicts first. */
 const LABEL_TEXT: Record<EwiCvLabel, string> = {
   conflicting: "Conflicts",
-  not_found: "Not found",
-  not_verified: "Not verified",
-  partially_verified: "Partly verified",
-  verified: "Verified",
-  unable_to_verify: "Not checked",
+  not_found: "Not found in catalogs",
+  not_verified: "Not compared",
+  partially_verified: "Possible match",
+  verified: "Consistent",
+  unable_to_verify: "No matching source",
 };
 
 const LABEL_ORDER: EwiCvLabel[] = [

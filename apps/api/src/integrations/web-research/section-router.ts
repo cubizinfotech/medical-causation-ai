@@ -32,6 +32,47 @@ function isPaidDirectoryRecord(record: WebRecord): boolean {
 }
 
 /**
+ * School boards, associate bios, and similar pages that repeatedly polluted
+ * Ellenberg depositions/testimony. They are not the subject’s credentials or
+ * sworn testimony.
+ */
+function isIrrelevantNoiseRecord(record: WebRecord): boolean {
+  const host = (() => {
+    try {
+      return new URL(record.url).hostname.toLowerCase().replace(/^www\./, '');
+    } catch {
+      return '';
+    }
+  })();
+  const path = (() => {
+    try {
+      return new URL(record.url).pathname.toLowerCase();
+    } catch {
+      return record.url.toLowerCase();
+    }
+  })();
+  const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
+  if (host.includes('parkcenturyschool')) return true;
+  if (/\bboard of trustees\b/.test(hay) && /\b(school|academy|college)\b/.test(hay)) {
+    return true;
+  }
+  // Practice-site associate pages (e.g. /kristen.html, /dylan.html).
+  if (
+    /\/(kristen|dylan|jesse|fischer|thompson|glass)(\.html?)?$/i.test(path) ||
+    /\/(associates?|team|staff)\/(kristen|dylan|jesse|thompson)/i.test(path)
+  ) {
+    return true;
+  }
+  if (
+    /\bkristen\s+thompson\b/.test(hay) &&
+    !/\bleah\s+ellenberg\b/.test(hay.slice(0, 200))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * True when the claim may support a credential section: the page host must
  * be the issuing body / official registry for that topic. Practice sites,
  * directories, news, and a model “primary_source” tag alone are not enough.
@@ -422,6 +463,7 @@ export function routeWebFindings(
 
   for (const record of dossier.records) {
     if (!tied(record)) continue;
+    if (isIrrelevantNoiseRecord(record)) continue;
     const matchLevel = record.match.level;
     const courtLike = looksLikeCourtDocument(record);
     const base = {
@@ -488,6 +530,27 @@ export function routeWebFindings(
               claim.basis === 'subject_stated'
                 ? BASIS_LABEL.subject_stated
                 : BASIS_LABEL[basis],
+            from: claim.from ?? 'page',
+            verification: verificationFor('websites'),
+          });
+          continue;
+        }
+        // Practice-site publication lists are the expert’s own bibliography,
+        // not PubMed/OpenAlex catalog hits — do not fill Publications with them.
+        if (
+          sectionId === 'publications' &&
+          (record.kind === 'expert_website' ||
+            record.kind === 'advertising' ||
+            record.kind === 'profile')
+        ) {
+          push({
+            ...base,
+            sectionId: 'websites',
+            title: `Expert’s own publication list: ${short(record.title, 90)}`,
+            statement: `${claim.text} This is listed on the expert’s own site or profile. It is not a PubMed/OpenAlex catalog confirmation.`,
+            quote: claim.quote,
+            basis: 'subject_stated',
+            basisLabel: BASIS_LABEL.subject_stated,
             from: claim.from ?? 'page',
             verification: verificationFor('websites'),
           });
@@ -971,7 +1034,8 @@ export function sectionVerification(
     : null;
 }
 
-const NOT_SEARCHED = 'This was not searched in this investigation.';
+const NOT_SEARCHED =
+  'No dedicated search was run for this topic in this investigation.';
 const SEARCH_INCOMPLETE =
   'The search for this topic did not complete, so no finding is reported.';
 const TOPIC_SEARCHED_EMPTY =

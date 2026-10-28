@@ -102,8 +102,12 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * LexisNexis/TrialSmith are not subscribed (adapters kept); Justia requires
  * first+last name; depositions section states licensed banks were not
  * searched; notice≠transcript remains.
+ * 3.10.12: rebuild PDF on missing/outdated download; remove stock
+ * Unable-to-verify / Not Verified labels; drop parkcentury/associate noise;
+ * practice-site pubs stay under Websites; PubMed default recall raised;
+ * faculty/UCLA and PubMed site queries; honest retrieval wording in UI.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.10.11';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.12';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis, TrialSmith, and other licensed databases are searched only when authorized for the investigation; licensed PDFs are not stored unless legally permitted.';

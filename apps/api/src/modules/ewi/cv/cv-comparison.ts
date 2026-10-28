@@ -540,7 +540,7 @@ function publicationTitleRows(
         topic: 'publication',
         label: 'unable_to_verify',
         severity: 'low',
-        title: `Unable to verify. Publication not confirmed in the catalogs searched: ${title}`,
+        title: `Publication not found in catalogs searched: ${title}`,
         cv: cvSide(claim),
         source: {
           name: catalogs,
@@ -1019,7 +1019,7 @@ function leftoverClaimRows(claims: CvClaim[], rows: Row[]): Row[] {
         title: claim.statement,
         cv: cvSide(claim),
         source: null,
-        note: 'This CV claim was read but was not compared with a connected source. It is not verified and is not treated as false.',
+        note: 'This CV claim was read but was not compared with a connected source. No confirming source was connected; it is not treated as false.',
       },
     ];
   });
@@ -1094,7 +1094,7 @@ export function cvComparisonCountSummary(check: CvCheck): string {
     sourceOnly > 0
       ? `${sourceOnly} additional row(s) come from sources and are not CV claims.`
       : '',
-    'Not every extracted claim is independently verified. “Unable to verify” covers not searched, a truncated author list, or a catalog miss. “Possible match” means identity or authorship is uncertain. “Discrepancy identified” means a catalog or registry disagrees with the CV. An expert’s own CV or website is not independent verification.',
+    'Not every extracted claim has a confirming catalog match. “No matching source” covers claims with no connected checker, a truncated author list, or a catalog miss. “Possible match” means identity or authorship is uncertain. “Discrepancy identified” means a catalog or registry disagrees with the CV. An expert’s own CV or website is not independent confirmation.',
     counts,
   ]
     .filter(Boolean)
@@ -1119,7 +1119,7 @@ export const CV_LABEL_TEXT: Record<InconsistencyLabel, string> = {
   verified: 'Consistent',
   partially_verified: 'Possible match',
   conflicting: 'Discrepancy identified',
-  not_verified: 'Unable to verify',
-  not_found: 'Not found',
-  unable_to_verify: 'Unable to verify',
+  not_verified: 'Not compared',
+  not_found: 'Not found in catalogs',
+  unable_to_verify: 'No matching source',
 };

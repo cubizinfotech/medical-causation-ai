@@ -130,9 +130,9 @@ describe('EWI report CV comparison', () => {
     });
     const text = sectionText(document, 'cv-comparison');
     expect(text).toMatch(/Uploaded CV: smith-cv\.pdf \(4 pages\)/);
-    expect(text).toMatch(/Discrepancy identified: 1; Unable to verify: 1/);
+    expect(text).toMatch(/Discrepancy identified: 1; No matching source: 1/);
     expect(text.indexOf('[Discrepancy identified]')).toBeLessThan(
-      text.indexOf('[Unable to verify]'),
+      text.indexOf('[No matching source]'),
     );
     expect(text).toContain('CV (page 3): “Spine study. Spine 2012.”');
     expect(text).toContain('OpenAlex: Spine study (2012). Authors: Ann Lee.');

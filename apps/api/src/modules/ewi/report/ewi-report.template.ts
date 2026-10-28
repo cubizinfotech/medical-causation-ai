@@ -1152,7 +1152,7 @@ const IDENTITY_STATUS_TEXT: Record<ExpertIdentityResolution['status'], string> =
     ambiguous: 'Identity not confirmed',
     not_found: 'No matching NPI Registry record',
     npi_mismatch: 'The supplied NPI does not match the expert',
-    unavailable: 'NPI Registry not checked',
+    unavailable: 'NPI Registry was not queried',
   };
 
 function identityHeading(identity: ExpertIdentityResolution): string {
@@ -3455,11 +3455,11 @@ function firstAuthorClass(row: CvComparison): string {
       : 'verified citation discrepancy';
   }
   if (
-    /\bnot verifiable\b|\bauthor list is truncated\b|\bunable to verify\b/.test(
+    /\bnot verifiable\b|\bauthor list is truncated\b|\bunable to verify\b|\bno matching source\b|\bnot compared\b/.test(
       hay,
     )
   ) {
-    return 'unable to verify';
+    return 'author position not established from catalog';
   }
   if (
     row.label === 'verified' &&
@@ -3476,7 +3476,7 @@ function firstAuthorClass(row: CvComparison): string {
     return 'not first-listed';
   }
   if (row.label === 'verified') return 'not first-listed';
-  return 'unable to verify';
+  return 'author position not established from catalog';
 }
 
 function authorOrderLine(

@@ -111,11 +111,25 @@ export class EwiClient {
   private async saveReport(path: string, fileName: string): Promise<string> {
     const response = await apiFetch(path);
     if (!response.ok) {
-      await parseApiResponse<never>(response);
+      try {
+        await parseApiResponse<never>(response);
+      } catch (error) {
+        if (error instanceof ApiError) {
+          const hint =
+            response.status === 404
+              ? " The PDF may still be generating, or the stored file is missing — try Export Word, then Retry download."
+              : "";
+          throw new ApiError(`${error.message}${hint}`, error.status);
+        }
+        throw error;
+      }
     }
     const blob = await response.blob();
     if (blob.size === 0) {
-      throw new ApiError("The report file was empty or could not be read.", 502);
+      throw new ApiError(
+        "The report file was empty. Try Export Word, or re-run the investigation and download again.",
+        502,
+      );
     }
     const name = downloadFileName(
       response.headers.get("Content-Disposition"),

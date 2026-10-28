@@ -44,7 +44,7 @@ describe('report wording', () => {
   });
 
   it('labels only outcomes worth acting on', () => {
-    expect(findingLabel('verified')).toBe('Verified');
+    expect(findingLabel('verified')).toBe('Confirmed by source');
     expect(findingLabel('conflicting')).toBe('Sources disagree');
     expect(findingLabel('restricted')).toMatch(/Restricted/);
     expect(findingLabel('not_verified')).toBeNull();
@@ -81,16 +81,16 @@ describe('report wording', () => {
 
   it('states an evidence-standard status on every collected record', () => {
     expect(evidenceStatusLine(item())).toBe(
-      'Status: Not independently verified. Source: npi_registry.',
+      'Status: NPI Registry record retrieved. Source: npi_registry.',
     );
     expect(evidenceStatusLine(item({ informationStatus: 'verified' }))).toBe(
-      'Status: Verified. Source: npi_registry.',
+      'Status: Confirmed by source. Source: npi_registry.',
     );
     expect(evidenceStatusLine(item({ informationStatus: 'conflicting' }))).toBe(
-      'Status: Discrepancy found. Source: npi_registry.',
+      'Status: Sources disagree. Source: npi_registry.',
     );
     expect(evidenceStatusLine(item({ access: 'restricted' }))).toBe(
-      'Status: Inaccessible. Source: npi_registry.',
+      'Status: Restricted source (body not stored). Source: npi_registry.',
     );
     expect(evidenceStatusLine(item({ informationStatus: 'unavailable' }))).toBe(
       'Status: Not found. Source: npi_registry.',
@@ -104,7 +104,7 @@ describe('report wording', () => {
         }),
       ),
     ).toBe(
-      'Status: Catalog record found. This is not a comparison against an uploaded CV claim. Source: pubmed.',
+      'Status: Catalog record found (not a CV comparison). Source: pubmed.',
     );
     expect(sourceIndexStatus(item())).toBe(
       '; access: catalog record retrieved',

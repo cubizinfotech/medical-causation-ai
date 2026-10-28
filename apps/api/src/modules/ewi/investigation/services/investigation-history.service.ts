@@ -111,8 +111,24 @@ export class InvestigationHistoryService {
 
   async getReport(id: string, ownerUserId: string): Promise<ReportFile> {
     const row = await this.getHistory(id, ownerUserId);
+    // Prefer a live rebuild from stored findings when the on-disk file is
+    // missing, empty, or the template is outdated — that is the usual cause
+    // of “Download failed” after a completed investigation.
+    if (row.result && row.status === 'completed') {
+      const needsRebuild =
+        !row.reportStorageKey ||
+        !row.reportFileName ||
+        !row.reportMimeType ||
+        row.reportTemplateVersion !== EWI_REPORT_TEMPLATE_VERSION;
+      if (needsRebuild) {
+        const rebuilt = await this.rebuildReportFromResult(row);
+        if (rebuilt) return rebuilt;
+      }
+    }
     if (!row.reportStorageKey || !row.reportFileName || !row.reportMimeType) {
-      throw new NotFoundException(`Report for investigation "${id}" not found`);
+      throw new NotFoundException(
+        `Report for investigation "${id}" not found. The investigation may still be finishing, or the PDF file was not stored. Try Export Word, or re-run the investigation.`,
+      );
     }
     const path = this.reportPath(row.reportStorageKey);
     const rebuilt = await this.rebuildOutdatedReport(
@@ -120,13 +136,68 @@ export class InvestigationHistoryService {
       row.reportStorageKey,
       path,
     );
-    return (
-      rebuilt ?? {
+    if (rebuilt) return rebuilt;
+    try {
+      const buffer = await readFile(path);
+      if (buffer.byteLength === 0) {
+        const fromResult = await this.rebuildReportFromResult(row);
+        if (fromResult) return fromResult;
+        throw new NotFoundException(
+          `Report file for investigation "${id}" is empty. Try Export Word, or re-run the investigation.`,
+        );
+      }
+      return {
         fileName: row.reportFileName,
         mimeType: row.reportMimeType,
-        buffer: await readFile(path),
-      }
-    );
+        buffer,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      const fromResult = await this.rebuildReportFromResult(row);
+      if (fromResult) return fromResult;
+      throw new NotFoundException(
+        `Report file for investigation "${id}" could not be read. Try Export Word, or re-run the investigation.`,
+      );
+    }
+  }
+
+  /** Rebuild and persist the PDF from the saved investigation result. */
+  private async rebuildReportFromResult(
+    row: InvestigationView,
+  ): Promise<ReportFile | null> {
+    if (!row.result) return null;
+    try {
+      const report = await this.pdfReport.build(
+        prepareEwiReportInput(row.result),
+      );
+      const directory = join(this.reportsDirectory(), 'investigations');
+      await mkdir(directory, { recursive: true });
+      const storageKey = join(
+        directory,
+        `${row.jobId}${reportExtension(report.fileName)}`,
+      );
+      await writeFile(storageKey, report.buffer);
+      await this.repo.updateReportFile(row.id, {
+        fileName: report.fileName,
+        mimeType: report.mimeType,
+        storageKey,
+        byteSize: report.buffer.byteLength,
+        templateVersion: report.templateVersion,
+      });
+      this.logger.log(
+        `Rebuilt missing/outdated report for investigation ${row.id} (${report.templateVersion})`,
+      );
+      return {
+        fileName: report.fileName,
+        mimeType: report.mimeType,
+        buffer: report.buffer,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Could not rebuild report for investigation ${row.id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
   }
 
   /**

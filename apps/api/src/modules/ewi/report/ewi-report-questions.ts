@@ -1012,7 +1012,7 @@ function cvClaimDrafts(
           name: `Uploaded CV: ${check.document.name}`,
         },
       ],
-      evidenceBasis: `Uploaded CV, page ${page}: “${clip(claim.quote, 180)}”. Not independently verified.`,
+      evidenceBasis: `Uploaded CV, page ${page}: “${clip(claim.quote, 180)}”. Appears on the CV; no confirming source was connected.`,
       anchors: [claim.quote.slice(0, 40), `page ${page}`],
       evidenceIds: [`cv:${check.document.name}:page-${page}:${claim.id}`],
       basisKind: 'evidence_gap',

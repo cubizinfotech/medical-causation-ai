@@ -270,7 +270,7 @@ describe('CV comparison', () => {
       label: 'conflicting',
       severity: 'high',
     });
-    expect(byTitle('not confirmed in the catalogs searched')?.label).toBe(
+    expect(byTitle('not found in catalogs searched')?.label).toBe(
       'unable_to_verify',
     );
   });
@@ -531,7 +531,7 @@ describe('CV comparison', () => {
       item.title.includes('Neuropsychology of traumatic brain injury'),
     );
     expect(row?.label).toBe('unable_to_verify');
-    expect(row?.title).toMatch(/Unable to verify/);
+    expect(row?.title).toMatch(/not found in catalogs searched/i);
     expect(row?.note).toMatch(
       /often not indexed as a peer-reviewed journal article/,
     );
@@ -663,11 +663,11 @@ describe('CV comparison', () => {
     expect(summary).toMatch(
       /Unique CV claims \(3\) = compared \(3\) \+ uncompared \(0\)/,
     );
-    expect(summary).toMatch(/Unable to verify: 3/);
+    expect(summary).toMatch(/No matching source: 3/);
     expect(CV_LABEL_TEXT.verified).toBe('Consistent');
     expect(CV_LABEL_TEXT.conflicting).toBe('Discrepancy identified');
     expect(CV_LABEL_TEXT.partially_verified).toBe('Possible match');
-    expect(CV_LABEL_TEXT.unable_to_verify).toBe('Unable to verify');
+    expect(CV_LABEL_TEXT.unable_to_verify).toBe('No matching source');
   });
 });
 

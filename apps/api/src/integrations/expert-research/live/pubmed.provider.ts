@@ -8,7 +8,7 @@ import { LiveResearchProvider, type LiveRunResult } from './live-provider.base';
 import { parseCityState } from './location';
 import { parsePersonName, type PersonName } from './person-name';
 
-const DEFAULT_MAX_ARTICLES = 40;
+const DEFAULT_MAX_ARTICLES = 100;
 const PUBMED_MAX_ARTICLES_CAP = 200;
 const PUBMED_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
 

@@ -272,10 +272,19 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${clause} ${profession} (member OR fellow OR "member directory" OR association OR society OR academy)`,
     prompt: `Find the professional memberships and fellowships of ${subjectLine}: association or academy member directories, society pages and biographies. Give the page URL for each.`,
   });
+  add('identity', {
+    query: `${clause} (faculty OR "clinical faculty" OR "volunteer faculty" OR professor OR "staff directory" OR "people directory") (UCLA OR university OR "medical center" OR "school of medicine")`,
+    prompt: `Find an official university or medical-center faculty/staff directory page for ${subjectLine} (for example UCLA). Prefer the institution’s own site. Do not treat the person’s private practice website as a university appointment.`,
+  });
   add('publications', {
     query: `${clause} ${profession} publications OR "first author" OR research OR journal`,
     kind: 'scholar',
-    prompt: `Find publications, research profiles (Google Scholar, ResearchGate, ORCID, PubMed, university pages) and presentations by ${subjectLine}.`,
+    prompt: `Find publications, research profiles (Google Scholar, ResearchGate, ORCID, PubMed, university pages) and presentations by ${subjectLine}. Prefer PubMed, publisher, or university repository pages over the person’s own practice website.`,
+  });
+  add('publications', {
+    query: `${clause} site:pubmed.ncbi.nlm.nih.gov`,
+    kind: 'scholar',
+    prompt: `Find PubMed records that list ${subjectLine} as an author. Give the PubMed URL for each. Do not substitute the person’s practice website for a missing PubMed listing.`,
   });
   add('publications', {
     query: `${clause} ("first author" OR "first-authored" OR "lead author") ${profession}`,

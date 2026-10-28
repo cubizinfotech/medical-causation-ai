@@ -46,7 +46,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.11');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.12');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -94,7 +94,9 @@ describe('EWI report template', () => {
         .find((section) => section.id === 'board-certifications')
         ?.blocks.map((block) => block.text)
         .join(' '),
-    ).toBe('This was not searched in this investigation.');
+    ).toBe(
+      'No dedicated search was run for this topic in this investigation.',
+    );
     expect(
       document.sections.find((section) => section.id === 'questions'),
     ).toBeUndefined();
@@ -1132,7 +1134,7 @@ describe('EwiWordReportService', () => {
         .join('\n') ?? '';
     expect(cv).toMatch(/2 unique CV claim\(s\) were read/);
     expect(cv).toMatch(/2 compared, 0 uncompared/);
-    expect(cv).toMatch(/Consistent: 1; Unable to verify: 1/);
+    expect(cv).toMatch(/Consistent: 1; No matching source: 1/);
     expect(cv).toMatch(/\[Consistent\]/);
     expect(cv).not.toMatch(
       /Not confirmed in the catalogs searched: Memory after pediatric TBI/,

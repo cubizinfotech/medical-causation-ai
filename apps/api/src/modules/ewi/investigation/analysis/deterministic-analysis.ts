@@ -352,6 +352,26 @@ function sectionStatus(
   return 'not_verified';
 }
 
+function assessmentPhrase(status: EwiAssessment): string {
+  switch (status) {
+    case 'verified':
+      return 'Confirmed by source';
+    case 'partially_verified':
+      return 'Partly matched';
+    case 'conflicting':
+      return 'Sources disagree';
+    case 'restricted':
+      return 'Restricted source';
+    case 'unavailable':
+      return 'Source not queried';
+    case 'not_found':
+      return 'Not found';
+    case 'not_verified':
+    default:
+      return 'Reported by source only';
+  }
+}
+
 function sectionNarrative(
   section: EwiAnalysisSectionId,
   packet: AnalysisPacket,
@@ -362,15 +382,16 @@ function sectionNarrative(
     .map((f) => f.title)
     .filter(Boolean)
     .slice(0, 8);
+  const statusPhrase = assessmentPhrase(status);
   switch (section) {
     case 'expert_summary':
       return findings.length
         ? `Collected identity/background for ${packet.expertName} (${packet.specialty}): ${titles.join('; ')}.`
-        : `No verified identity profile findings were collected for ${packet.expertName}. Status: ${status}.`;
+        : `No confirmed identity profile findings were collected for ${packet.expertName}. Retrieval status: ${statusPhrase}.`;
     case 'credentials':
       return findings.length
         ? `Credential findings: ${titles.join('; ')}.`
-        : `No education, license, or board certification findings were collected. Status: ${status}.`;
+        : `No education, license, or board certification findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'cv_comparison':
       return findings.length >= 2
         ? `Multiple CV/profile records collected (${findings.length}). Compare only cited finding keys.`
@@ -382,63 +403,63 @@ function sectionNarrative(
     case 'legal_matters':
       return findings.length
         ? `Legal matter findings: ${titles.join('; ')}.`
-        : `No legal matter findings were collected. Status: ${status}.`;
+        : `No legal matter findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'orders':
       return findings.length
         ? `Court order findings: ${titles.join('; ')}.`
-        : `No court order findings were collected. Status: ${status}.`;
+        : `No court order findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'motions':
       return findings.length
         ? `Motion findings: ${titles.join('; ')}.`
-        : `No motion findings were collected. Status: ${status}.`;
+        : `No motion findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'depositions':
       return findings.length
         ? `Deposition findings: ${titles.join('; ')}.`
-        : `No deposition findings were collected. Status: ${status}.`;
+        : `No deposition findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'contradictory_testimony':
       return findings.length
         ? `Testimony-related findings: ${titles.join('; ')}. Contradictions require conflicting packet assessments.`
-        : `No testimony findings were collected; contradictory testimony cannot be asserted. Status: ${status}.`;
+        : `No testimony findings were collected; contradictory testimony cannot be asserted. Retrieval status: ${statusPhrase}.`;
     case 'publications':
       return findings.length
         ? `Publication findings: ${titles.join('; ')}.`
-        : `No publication findings were collected. Status: ${status}.`;
+        : `No publication findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'authorship':
       return findings.length
         ? `Authorship notes are limited to publication findings in the packet (${findings.length} item(s)).`
-        : `No publication findings were collected; authorship discrepancies cannot be asserted. Status: ${status}.`;
+        : `No publication findings were collected; authorship discrepancies cannot be asserted. Retrieval status: ${statusPhrase}.`;
     case 'grants_patents':
       return findings.length
         ? `Grant/patent findings: ${titles.join('; ')}.`
-        : `No grant or patent findings were collected. Status: ${status}.`;
+        : `No grant or patent findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'licenses_certifications':
       return findings.length
         ? `License/certification findings: ${titles.join('; ')}.`
-        : `No license or certification findings were collected. Status: ${status}.`;
+        : `No license or certification findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'memberships':
       return findings.length
         ? `Membership findings: ${titles.join('; ')}.`
-        : `No membership findings were collected. Status: ${status}.`;
+        : `No membership findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'websites':
       return findings.length
         ? `Website/directory findings: ${titles.join('; ')}.`
-        : `No website findings were collected. Status: ${status}.`;
+        : `No website findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'videos':
       return findings.length
         ? `Video/presentation findings: ${titles.join('; ')}.`
-        : `No video findings were collected. Status: ${status}.`;
+        : `No video findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'social_media':
       return findings.length
         ? `Social media findings: ${titles.join('; ')}.`
-        : `No social media findings were collected. Status: ${status}.`;
+        : `No social media findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'income_bias':
       return findings.length
         ? `Income/bias-related findings: ${titles.join('; ')}.`
-        : `No income or bias findings were collected. Status: ${status}.`;
+        : `No income or bias findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'university_rules':
       return findings.length
         ? `University rule findings: ${titles.join('; ')}.`
-        : `No university rule findings were collected. Status: ${status}.`;
+        : `No university rule findings were collected. Retrieval status: ${statusPhrase}.`;
     case 'missing_unverified':
       return 'See missing[] and assessments for packet-grounded gaps. Absent evidence is not proof of unqualified status.';
     case 'investigation_findings':
@@ -446,7 +467,7 @@ function sectionNarrative(
         ? `Investigation findings are limited to ${packet.findings.length} collected finding key(s).`
         : 'No findings were collected; investigation findings cannot be asserted.';
     default:
-      return `No packet-supported summary. Status: ${status}.`;
+      return `No packet-supported summary. Retrieval status: ${statusPhrase}.`;
   }
 }
 

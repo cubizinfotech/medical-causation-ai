@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-10-28): EWI report 3.10.12 — download rebuild, labels, noise, PubMed
+
+- PDF download rebuilds from stored investigation findings when the on-disk file is missing, empty, or on an older template (fixes common “Download failed” after a completed job). Word export remains available from the same findings.
+- Client-facing stock labels “Unable to verify,” “Not Verified,” and “Not independently verified” are replaced with honest retrieval wording (reported by source only / no matching source / NPI record retrieved / confirmed by source).
+- Park Century school board pages and associate bios (e.g. Kristen) are dropped from depositions/testimony routing. Practice-site publication lists stay under Websites, not Publications. Own-site board/license claims remain subject-stated only.
+- PubMed default article cap raised; query planner adds faculty/UCLA and site:pubmed queries. Faculty and APA/CHEA coverage wording already lists networks and official accreditation URLs when searched.
+- LexisNexis / PACER / TrialSmith remain gated (not subscribed). Adapters kept for when credentials exist.
+- Not deployed until client re-runs after release. Historic reports are not overwritten.
+
 ### Changed (2026-10-27): Caddy HTTPS for the public IP and for domains
 
 - Production IP Caddyfile serves HTTP on port 80 and Let's Encrypt HTTPS on the public IP using the shortlived ACME profile (about 6 days). HTTP is not redirected until HTTPS is confirmed. Domain Caddyfile keeps split-host routing and leaves HSTS off until then.
