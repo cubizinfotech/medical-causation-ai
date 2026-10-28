@@ -254,7 +254,9 @@ describe('EWI report template', () => {
     expect(text('overall-findings')).toContain(
       'Licenses reported to the NPI Registry (NPI 1871685487)',
     );
-    expect(text('overall-findings')).toContain('Verified · Source refs: f2');
+    expect(text('overall-findings')).toContain(
+      'Confirmed by source · Source refs: f2',
+    );
     expect(text('questions')).toBe('');
     expect(text('summary')).toContain(
       '2 item(s) were collected from the sources searched.',
@@ -631,7 +633,7 @@ describe('EWI report template', () => {
         .join('\n') ?? '';
     expect(text).toContain('Catalog record:');
     expect(text).not.toMatch(/Consistent citation:/);
-    expect(text).toMatch(/unable to verify/i);
+    expect(text).toMatch(/author position not established from catalog/i);
   });
 
   it('does not call a truncated catalog list confirmed first authorship', () => {
@@ -681,7 +683,7 @@ describe('EWI report template', () => {
         .find((section) => section.id === 'publications')
         ?.blocks.map((block) => block.text)
         .join('\n') ?? '';
-    expect(text).toMatch(/unable to verify/i);
+    expect(text).toMatch(/author position not established from catalog/i);
     expect(text).not.toMatch(/confirmed first author/i);
   });
 
@@ -1621,14 +1623,14 @@ describe('EWI report source coverage', () => {
         .find((section) => section.id === 'education')
         ?.blocks.map((block) => block.text)
         .join(' ') ?? '';
-    expect(education).toMatch(/was not searched/i);
+    expect(education).toMatch(/No dedicated search was run/i);
     expect(education).not.toMatch(/did not establish/i);
     const criminal =
       document.sections
         .find((section) => section.id === 'criminal')
         ?.blocks.map((block) => block.text)
         .join(' ') ?? '';
-    expect(criminal).toMatch(/was not searched/i);
+    expect(criminal).toMatch(/No dedicated search was run/i);
     expect(criminal).not.toMatch(/did not establish/i);
     expect(criminal).not.toMatch(/no criminal/i);
   });

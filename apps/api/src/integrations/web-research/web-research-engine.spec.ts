@@ -212,7 +212,7 @@ describe('WebResearchEngine', () => {
     );
   });
 
-  it('sends patent, IME and directory queries when the budget cannot run every search', async () => {
+  it('sends legal, IME and directory queries when the budget cannot run every search', async () => {
     const provider = fakeProvider('fake_search', allHits, { budget: 35 });
     await new WebResearchEngine({
       settings: { ...settings, maxQueries: 35 },
@@ -222,7 +222,8 @@ describe('WebResearchEngine', () => {
     const queries = provider.requests
       .map((request) => request.query)
       .join('\n');
-    expect(queries).toMatch(/site:patents\.google\.com/);
+    // Without Lexis/TrialSmith, litigation/court queries outrank patents under budget.
+    expect(queries).toMatch(/Daubert|Rule 702|courtlistener|uscourts\.gov/i);
     expect(queries).toMatch(/independent medical examination/);
     expect(queries).toMatch(/site:dri\.org/);
     expect(queries).toMatch(/site:expertinstitute\.com/);

@@ -525,9 +525,7 @@ describe('EWI 3.10.7 fixture validation', () => {
     expect(sourceIndex).toMatch(/page content read/);
     expect(sourceIndex).not.toMatch(/access: retrieved(?:\.|;|$)/);
     expect(publications).toMatch(/Catalog record found/i);
-    expect(publications).toMatch(
-      /not a comparison against an uploaded CV claim/i,
-    );
+    expect(publications).toMatch(/not a CV comparison/i);
     expect(cv).toMatch(/No CV was uploaded/);
     expect(cv).toMatch(/CV comparison was not performed/);
     expect(summary).toMatch(/CV comparison was not performed/);
@@ -538,7 +536,7 @@ describe('EWI 3.10.7 fixture validation', () => {
     writeFileSync(join(outDir, 'ewi-jason-a-demery-no-cv.pdf'), pdf.buffer);
     const rendered = await pdfText(pdf.buffer);
     expect(pdf.templateVersion).toBe('3.10.12');
-    expect(rendered).toMatch(/3\.10\.9/);
+    expect(rendered).toMatch(/3\.10\.12/);
     expect(rendered).toMatch(/No CV was uploaded/);
     expect(rendered).toMatch(/Catalog record found/);
     expect(rendered).not.toMatch(/No CV versions were collected/);
