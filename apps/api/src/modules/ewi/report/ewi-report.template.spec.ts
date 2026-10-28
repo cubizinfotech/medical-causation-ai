@@ -1142,7 +1142,7 @@ describe('EwiWordReportService', () => {
     expect(summary).toMatch(/Identity not confirmed/);
     expect(summary).toMatch(/2 unique CV claim\(s\) were read/);
     expect(summary).toMatch(/not counted as inconsistencies/);
-    expect(background).toMatch(/registry city BEVERLY HILLS/);
+    expect(background).toMatch(/registry city TUCSON/);
     expect(background).not.toMatch(/Status: Verified/);
     expect(
       document.sections.find((section) => section.id === 'city')?.blocks[0]
