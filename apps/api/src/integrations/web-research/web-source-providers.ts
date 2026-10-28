@@ -52,7 +52,8 @@ export const DEDICATED_SOURCE_TOPICS: Record<string, string[]> = {
   patient_reviews: ['reviews'],
   google_maps: ['places'],
   corporate_affiliations: ['business'],
-  university: ['education', 'university_rules'],
+  // University faculty/CV pages support education — not the forensic-policy section.
+  university: ['education'],
   state_court_records: ['litigation', 'court_documents'],
   patents: ['patents'],
   trademarks: ['patents'],

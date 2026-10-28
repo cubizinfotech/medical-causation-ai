@@ -697,6 +697,33 @@ describe('coverageLine', () => {
     expect([...routed.keys()]).toHaveLength(0);
   });
 
+  it('keeps ABPP/AACN under directories, not IME advertising', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'aacn',
+          'https://www.theaacn.org/view/member-directory/entry/11708/',
+          'directory',
+          [],
+          'strong',
+          'Dr. Jason Demery, Ph.D. - Certified specialist',
+        ),
+        record(
+          'abpp',
+          'https://abpp.org/directory/entry/31600/',
+          'directory',
+          [],
+          'strong',
+          'Dr. Leah Ellenberg - Board Certified',
+        ),
+      ]),
+    );
+    expect(routed.get('directories')?.map((f) => f.url).join(' ')).toMatch(
+      /theaacn\.org|abpp\.org/,
+    );
+    expect(routed.get('ime')).toBeUndefined();
+  });
+
   it('drops associate glassCV.pdf pages from awards and background', () => {
     const routed = routeWebFindings(
       dossier([

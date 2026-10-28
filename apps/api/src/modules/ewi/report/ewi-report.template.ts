@@ -581,20 +581,34 @@ export function buildEwiReportDocument(input: {
           tracker,
         );
       case 'university-rules':
-        // Alumni news/profiles are not forensic-work policy. Only policy /
-        // COI / bylaw pages belong here.
+        // Alumni news, faculty bios, and CVs are not forensic-work policy.
+        // Only conflict-of-interest / outside-activity / consulting policy
+        // pages belong here (client: a CV is not a university rule).
         return evidenceSection(spec, tracker, {
           categories: ['university_rules'],
           titleHints: [
-            'rule',
-            'policy',
-            'bylaw',
             'conflict of interest',
             'outside activity',
-            'consulting',
-            'forensic',
+            'outside consulting',
+            'consulting policy',
+            'faculty handbook',
+            'supplemental compensation',
+            'outside employment',
+            'disclosure of outside',
           ],
-          excludeHints: ['alum', 'alumni', 'alumna', 'alumnus'],
+          excludeHints: [
+            'alum',
+            'alumni',
+            'alumna',
+            'alumnus',
+            'curriculum vita',
+            'curriculum vitae',
+            'resume',
+            'demeryvita',
+            'ellenbergcv',
+            '/cv',
+            'vita.html',
+          ],
         });
       case 'corporate':
         return professionalGroupSection(
@@ -3273,7 +3287,8 @@ function claimEvidence(
     if (isLegalItem(item) || isPresenceItem(item) || isProfessionalItem(item)) {
       return;
     }
-    const hay = `${item.title} ${item.summary ?? ''}`.toLowerCase();
+    const hay =
+      `${item.title} ${item.summary ?? ''} ${item.url ?? ''}`.toLowerCase();
     if (filter.excludeHints?.some((hint) => hay.includes(hint.toLowerCase()))) {
       return;
     }

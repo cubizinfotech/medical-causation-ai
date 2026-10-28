@@ -548,6 +548,15 @@ export function routeWebFindings(
           });
           continue;
         }
+        // Membership / editorial / internship blurbs mis-tagged as publications.
+        if (
+          (sectionId === 'publications' || claim.topic === 'publication') &&
+          /\b(society memberships?|editorial activit|ad hoc reviewer|advisory boards?|program committee|internship)\b/i.test(
+            `${claim.text} ${claim.quote}`,
+          )
+        ) {
+          continue;
+        }
         // Practice-site publication lists are the expert’s own bibliography,
         // not PubMed/OpenAlex catalog hits — do not fill Publications with them.
         if (
@@ -591,13 +600,20 @@ export function routeWebFindings(
           });
           continue;
         }
-        // University faculty pages about teaching are not university rules /
-        // COI policies unless the claim itself is a policy rule.
-        if (
-          sectionId === 'university-rules' &&
-          claim.topic !== 'university_rules'
-        ) {
-          continue;
+        // University faculty pages / CVs are not university rules. Only an
+        // actual COI / outside-activity / consulting-policy claim belongs here.
+        if (sectionId === 'university-rules') {
+          if (claim.topic !== 'university_rules') continue;
+          const policyHay =
+            `${claim.text} ${claim.quote} ${record.title} ${record.url}`.toLowerCase();
+          if (
+            /\b(curriculum vitae|\bcv\b|resume|vitae?)\b/.test(policyHay) &&
+            !/\b(conflict of interest|outside (?:activity|consulting|employment)|consulting policy|faculty handbook|supplemental compensation)\b/.test(
+              policyHay,
+            )
+          ) {
+            continue;
+          }
         }
         if (['order', 'pleading', 'deposition'].includes(claim.topic ?? '')) {
           claimedDocumentType = true;
@@ -763,7 +779,7 @@ export function routeWebFindings(
           ? 'A search result listed this as an official or employer social account connected to the expert’s work. It is not a personal profile of the expert. Profile URL found; the page was not opened because it requires sign-in.'
           : record.read === 'read'
             ? `Page was read. ${record.summary}`.trim()
-            : 'A public search listed this profile URL. The page itself was not opened because it requires sign-in, so profile content was not independently verified.',
+            : 'A public search listed this profile URL. The page itself was not opened because it requires sign-in, so the profile body text was not retrieved by the software.',
         quote: record.match.quote ?? record.snippet,
         basis: 'record',
         basisLabel: BASIS_LABEL.record,
@@ -793,7 +809,14 @@ export function routeWebFindings(
       from: record.read === 'read' ? 'page' : 'snippet',
       verification: verificationFor(sectionId),
     });
-    if (record.kind === 'directory' && !alreadyFiled('directories')) {
+    // Professional boards (ABPP/AACN) are directories/memberships — never IME ads.
+    const host = hostOf(record.url);
+    const boardDirectory =
+      host.includes('abpp.org') || host.includes('theaacn.org');
+    if (
+      (record.kind === 'directory' || boardDirectory) &&
+      !alreadyFiled('directories')
+    ) {
       push(recordFinding('directories', short(record.title, 140)));
     }
     if (
@@ -807,6 +830,7 @@ export function routeWebFindings(
         record.kind === 'ime' ||
         record.kind === 'directory') &&
       !courtLike &&
+      !boardDirectory &&
       isPaidDirectoryRecord(record) &&
       !alreadyFiled('ime')
     ) {
@@ -1087,11 +1111,11 @@ const PUBLIC_SEARCH_LIMIT: Partial<Record<RoutedSectionId, string>> = {
     'A public web search for Daubert, Frye, and Rule 702 mentions was performed. This is not a complete docket review.',
   news: 'Public news search included web and Google News results when those providers ran. A missing article is not proof that none exist.',
   social:
-    'Public search looked for LinkedIn, Facebook, Instagram, X (Twitter), TikTok, YouTube channel, and Bluesky profiles. Only profiles strongly matched to the expert are listed. Login-gated pages were not opened, so profile content was not independently verified.',
+    'Public search looked for LinkedIn, Facebook, Instagram, X (Twitter), TikTok, YouTube channel, and Bluesky profiles. Only profiles strongly matched to the expert are listed. Login-gated pages were not opened, so profile body text was not retrieved by the software.',
   corporate:
     'A public web search for corporate-registry mentions was performed. Book publishers and journal houses named on publication pages are not treated as corporate affiliations. Official secretary-of-state logins were not completed.',
   'patient-reviews':
-    'Public review-site listings were searched when found. When a rating or review page was retrieved, the URL and any rating shown on that page are listed. Patient reviews are third-party opinions, not independently verified clinical facts. If a review site blocked automated reading, that page is listed as unread by the software — not as a comprehensive patient-review file.',
+    'Public review-site listings were searched when found. When a rating or review page was retrieved, the URL and any rating shown on that page are listed. Patient reviews are third-party opinions, not clinical facts confirmed by a board or court. If a review site blocked automated reading, that page is listed as unread by the software — not as a comprehensive patient-review file.',
   'university-accreditation':
     'Official accreditation look-ups (CHEA, U.S. Department of Education College Navigator, and APA CoA program lists when an institution was identified) were searched on the public web. Each query and any resulting page URL are listed when available. That is not a paid official accreditation-database login.',
 };

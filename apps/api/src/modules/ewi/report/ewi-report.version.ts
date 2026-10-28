@@ -110,8 +110,11 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * associate CVs (glassCV/thompson); institution COI policy queries; reject
  * membership/editorial text as publications; practice site/directory strong
  * matches marked retrieved; analysis credentials include directory/CV.
+ * 3.10.14: CV/vita pages never fill university forensic-policy; ABPP/AACN
+ * stay directories not IME ads; drop society-membership blurbs as pubs;
+ * soften social “independently verified” wording.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.10.13';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.14';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis, TrialSmith, and other licensed databases are searched only when authorized for the investigation; licensed PDFs are not stored unless legally permitted.';
