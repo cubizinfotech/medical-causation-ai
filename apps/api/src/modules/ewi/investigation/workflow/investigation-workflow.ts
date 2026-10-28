@@ -669,7 +669,7 @@ export async function executeInvestigationWorkflow(
     const websiteExtraction = extractionFromWebsiteCv(webResearch);
     if (websiteExtraction) {
       try {
-        cvCheck = await compareCv({
+        cvCheck = compareCv({
           extraction: websiteExtraction,
           evidence,
           sourceResults,
