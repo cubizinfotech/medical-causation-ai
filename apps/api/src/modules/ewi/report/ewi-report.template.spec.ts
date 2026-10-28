@@ -1033,7 +1033,7 @@ describe('EwiWordReportService', () => {
         status: 'ambiguous',
         identity: null,
         basis: [],
-        note: 'No NPI Registry record matches the name and specialty in Los Angeles. 1 record(s) match the name and specialty in another city (NPI 1234567893 in BEVERLY HILLS, CA). The city entered for this investigation is not the registry practice city, so the record was not used as a confirmed identity.',
+        note: 'No NPI Registry record matches the name and specialty in Los Angeles. 1 record(s) match the name and specialty in another city (NPI 1234567893 in TUCSON, AZ). The city entered for this investigation is not the registry practice city, so the record was not used as a confirmed identity.',
         notes: [],
         candidates: [
           {
@@ -1041,8 +1041,8 @@ describe('EwiWordReportService', () => {
             name: 'Leah Ellenberg, PhD',
             credential: 'PhD',
             taxonomy: 'Clinical Neuropsychologist',
-            city: 'BEVERLY HILLS',
-            state: 'CA',
+            city: 'TUCSON',
+            state: 'AZ',
             url: 'https://npiregistry.cms.hhs.gov/provider-view/1234567893',
           },
         ],

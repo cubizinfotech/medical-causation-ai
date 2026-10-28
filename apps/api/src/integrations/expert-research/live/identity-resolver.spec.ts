@@ -105,7 +105,7 @@ describe('ExpertIdentityResolver', () => {
     expect(resolution.note).not.toMatch(/practice city/);
   });
 
-  it('does not confirm a full-name match when the registry city is not the city entered', async () => {
+  it('confirms a same-metro practice city (Los Angeles ↔ Beverly Hills)', async () => {
     const { resolver } = resolverFor([
       { ...neurologist, city: 'Beverly Hills', state: 'CA' },
     ]);
@@ -114,30 +114,27 @@ describe('ExpertIdentityResolver', () => {
       city: 'Los Angeles, CA',
       specialty: 'Neurology',
     });
-    expect(resolution.status).toBe('ambiguous');
-    expect(record).toBeNull();
-    expect(resolution.identity).toBeNull();
-    expect(resolution.candidates[0]).toMatchObject({
-      npi: '1234567893',
-      city: 'BEVERLY HILLS',
-    });
-    expect(resolution.note).toMatch(/Identity is not confirmed/);
-    expect(resolution.note).toMatch(/possible NPI record/);
-    expect(resolution.note).toMatch(/Los Angeles/);
-    expect(resolution.note).toMatch(/BEVERLY HILLS/);
-    expect(resolution.note).toMatch(/not used as a confirmed identity/);
-    expect(resolution.note).toMatch(
-      /not required to keep searching public records/,
-    );
+    expect(resolution.status).toBe('confirmed');
+    expect(record?.npi).toBe('1234567893');
+    expect(resolution.identity?.city).toMatch(/BEVERLY HILLS/i);
+    expect(resolution.basis).toEqual(['name', 'practice city', 'specialty']);
   });
 
-  it('keeps a same-specialty record in another city as a candidate only', async () => {
+  it('confirms a same-metro practice city (Phoenix ↔ Scottsdale)', async () => {
     const { resolver } = resolverFor([{ ...neurologist, city: 'Scottsdale' }]);
+    const { resolution, record } = await resolver.resolve(query);
+    expect(resolution.status).toBe('confirmed');
+    expect(record?.npi).toBe('1234567893');
+    expect(resolution.basis).toEqual(['name', 'practice city', 'specialty']);
+  });
+
+  it('keeps a same-specialty record in a different metro as a candidate only', async () => {
+    const { resolver } = resolverFor([{ ...neurologist, city: 'Tucson' }]);
     const { resolution } = await resolver.resolve(query);
     expect(resolution.status).toBe('ambiguous');
     expect(resolution.candidates[0]).toMatchObject({
       npi: '1234567893',
-      city: 'SCOTTSDALE',
+      city: 'TUCSON',
     });
     expect(resolution.note).toMatch(/not used as a confirmed identity/);
   });
@@ -153,9 +150,9 @@ describe('ExpertIdentityResolver', () => {
     expect(resolution.status).toBe('confirmed');
   });
 
-  it('confirms a supplied NPI and notes a different practice city', async () => {
+  it('confirms a supplied NPI and notes a different practice city outside the metro', async () => {
     const { resolver, calls } = resolverFor([
-      { ...neurologist, city: 'Scottsdale' },
+      { ...neurologist, city: 'Tucson' },
     ]);
     const { resolution, record } = await resolver.resolve({
       ...query,
@@ -164,9 +161,26 @@ describe('ExpertIdentityResolver', () => {
     expect(resolution.status).toBe('confirmed');
     expect(record?.npi).toBe('1234567893');
     expect(resolution.basis).toEqual(['NPI supplied', 'name', 'specialty']);
-    expect(resolution.notes[0]).toMatch(/SCOTTSDALE, AZ, not Phoenix/);
+    expect(resolution.notes[0]).toMatch(/TUCSON, AZ, not Phoenix/);
     expect(calls).toHaveLength(1);
     expect(calls[0].url.searchParams.get('number')).toBe('1234567893');
+  });
+
+  it('treats a supplied NPI in the same metro as matching practice city', async () => {
+    const { resolver } = resolverFor([{ ...neurologist, city: 'Scottsdale' }]);
+    const { resolution, record } = await resolver.resolve({
+      ...query,
+      npi: '1234567893',
+    });
+    expect(resolution.status).toBe('confirmed');
+    expect(record?.npi).toBe('1234567893');
+    expect(resolution.basis).toEqual([
+      'NPI supplied',
+      'name',
+      'practice city',
+      'specialty',
+    ]);
+    expect(resolution.notes).toEqual([]);
   });
 
   it('rejects a supplied NPI registered to someone else', async () => {
