@@ -296,10 +296,12 @@ describe('Demery report regression', () => {
     expect(everything).not.toContain('[Court record]');
     expect(everything).not.toMatch(/targeted web search/);
     expect(everything).not.toMatch(/A search cannot prove that nothing exists/);
+    // Must match every coverageLine outcome from section-router (empty, incomplete,
+    // budget-omitted, or not configured) — not the old generic empty-section line.
+    const professionalEmpty =
+      /No dedicated search was run|was not searched|not implemented|returned no matching|dedicated search for this topic ran|planned but not searched|query budget or time limit|did not complete/i;
     for (const id of ['grants', 'patents', 'criminal', 'board-actions']) {
-      expect(sectionText(document, id)).toMatch(
-        /included this topic|was not searched|not implemented|returned no matching record|dedicated search for this topic ran/,
-      );
+      expect(sectionText(document, id)).toMatch(professionalEmpty);
       expect(sectionText(document, id)).not.toMatch(/did not establish/);
     }
   });
