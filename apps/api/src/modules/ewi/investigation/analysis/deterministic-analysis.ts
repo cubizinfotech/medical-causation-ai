@@ -355,20 +355,20 @@ function sectionStatus(
 function assessmentPhrase(status: EwiAssessment): string {
   switch (status) {
     case 'verified':
-      return 'Confirmed by source';
+      return 'Verified';
     case 'partially_verified':
-      return 'Partly matched';
+      return 'Partially Verified';
     case 'conflicting':
       return 'Sources disagree';
     case 'restricted':
-      return 'Restricted source';
+      return 'Unable to Access';
     case 'unavailable':
-      return 'Source not queried';
+      return 'Unable to Access';
     case 'not_found':
-      return 'Not found';
+      return 'Not Found';
     case 'not_verified':
     default:
-      return 'Reported by source only';
+      return 'Not Independently Verified';
   }
 }
 

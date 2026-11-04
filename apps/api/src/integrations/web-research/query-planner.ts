@@ -6,6 +6,7 @@ import { parseCityState } from '../expert-research/live/location';
 import { searchProfessionPhrase } from '../expert-research/live/specialty-match';
 import { contextTerms, type IdentitySubject } from './identity-assess';
 import { officialSourceForAcronym } from './claim-topics';
+import { institutionsFromText } from './research-leads';
 import type { SearchRequest, WebClaimTopic } from './web-research.types';
 
 export type QueryTopic =
@@ -300,7 +301,7 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
   });
   add('advertising', {
     query: `${clause} ${profession} "independent medical" OR IME OR "expert witness services" OR "available for" OR "retained by" OR medicolegal${where}`,
-    prompt: `Find advertising or marketing by ${subjectLine} for expert witness, forensic, consulting or independent examination services, including the person's website, brochure or directory advert.`,
+    prompt: `Find paid expert-witness directory listings or marketplace adverts for ${subjectLine} (SEAK, JurisPro, ExpertPages, ExpertInstitute, ALM Experts, DRI and similar). Do not treat the person's own practice website, university profile, or journal page as expert-witness advertising.`,
   });
   add('directories', {
     query: `${clause} "expert witness" OR "expert directory" OR "forensic" ${profession}`,
@@ -476,7 +477,36 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     });
   }
 
+  // Seed CHEA / USDE / APA queries from institutions named in the attorney note
+  // so accreditation is not deferred until a later follow-up pass.
+  for (const institution of institutionsFromText(
+    subject.context ?? '',
+  ).slice(0, 3)) {
+    addAccreditationQueries(add, institution);
+  }
+
   return plans;
+}
+
+function addAccreditationQueries(
+  add: (
+    topic: QueryTopic,
+    request: Omit<SearchRequest, 'kind'> & { kind?: SearchRequest['kind'] },
+  ) => void,
+  institution: string,
+): void {
+  add('university_accreditation', {
+    query: `site:chea.org ${quote(institution)}`,
+    prompt: `Find whether ${institution} is listed in the Council for Higher Education Accreditation (CHEA) database. Distinguish institutional accreditation from program accreditation. Return the CHEA page URL. A missing listing is not proof the school was unaccredited.`,
+  });
+  add('university_accreditation', {
+    query: `site:ope.ed.gov ${quote(institution)}`,
+    prompt: `Find the U.S. Department of Education College Navigator or accreditation listing for ${institution}. Distinguish institutional accreditation from program accreditation. Return the official page URL. A missing listing is not proof the school was unaccredited.`,
+  });
+  add('university_accreditation', {
+    query: `site:accreditation.apa.org ${quote(institution)} OR site:apa.org/ed/accreditation ${quote(institution)}`,
+    prompt: `Find whether ${institution} appears on the American Psychological Association (APA) accredited-program list (CoA). Distinguish program accreditation from institutional accreditation. Return the exact APA accreditation page URL and whether the program is listed. A missing listing is not proof the school was unaccredited.`,
+  });
 }
 
 /**
@@ -557,7 +587,7 @@ export function planFollowUps(
       'university_accreditation',
       {
         query: `site:chea.org ${quote(institution)}`,
-        prompt: `Find whether ${institution} is listed in the Council for Higher Education Accreditation (CHEA) database. Return the CHEA page URL. A missing listing is not proof the school was unaccredited.`,
+        prompt: `Find whether ${institution} is listed in the Council for Higher Education Accreditation (CHEA) database. Distinguish institutional accreditation from program accreditation. Return the CHEA page URL. A missing listing is not proof the school was unaccredited.`,
       },
       { label: 'CHEA', topics: ['education'] },
     );
@@ -565,7 +595,7 @@ export function planFollowUps(
       'university_accreditation',
       {
         query: `site:ope.ed.gov ${quote(institution)}`,
-        prompt: `Find the U.S. Department of Education College Navigator or accreditation listing for ${institution}. Return the official page URL. A missing listing is not proof the school was unaccredited.`,
+        prompt: `Find the U.S. Department of Education College Navigator or accreditation listing for ${institution}. Distinguish institutional accreditation from program accreditation. Return the official page URL. A missing listing is not proof the school was unaccredited.`,
       },
       { label: 'U.S. Department of Education', topics: ['education'] },
     );
@@ -573,7 +603,7 @@ export function planFollowUps(
       'university_accreditation',
       {
         query: `site:accreditation.apa.org ${quote(institution)} OR site:apa.org/ed/accreditation ${quote(institution)}`,
-        prompt: `Find whether ${institution} appears on the American Psychological Association (APA) accredited-program list (CoA). Return the exact APA accreditation page URL and whether the program is listed. A missing listing is not proof the school was unaccredited.`,
+        prompt: `Find whether ${institution} appears on the American Psychological Association (APA) accredited-program list (CoA). Distinguish program accreditation from institutional accreditation. Return the exact APA accreditation page URL and whether the program is listed. A missing listing is not proof the school was unaccredited.`,
       },
       { label: 'APA CoA', topics: ['education'] },
     );

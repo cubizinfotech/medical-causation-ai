@@ -182,6 +182,36 @@ export function isPaidAdvertisingDirectory(record: WebRecord): boolean {
   return hostMatches(record.url, PAID_ADVERTISING_HOSTS);
 }
 
+const ADVERTISING_CATALOG_IDS = new Set([
+  'ime_websites',
+  'ime_advertising',
+  'advertising',
+]);
+
+function isAdvertisingCatalogId(sourceId: string): boolean {
+  return ADVERTISING_CATALOG_IDS.has(sourceId);
+}
+
+/**
+ * Practice / personal sites must not keep LLM kinds `ime` or `advertising`.
+ * Those kinds are reserved for paid expert-directory listing hosts.
+ */
+export function sanitizeAdvertisingKind(
+  kind: WebRecord['kind'],
+  url: string,
+  directoryId?: string,
+): WebRecord['kind'] {
+  if (kind !== 'ime' && kind !== 'advertising') return kind;
+  if (
+    directoryId &&
+    PAID_ADVERTISING_DIRECTORY_IDS.has(directoryId)
+  ) {
+    return kind;
+  }
+  if (hostMatches(url, PAID_ADVERTISING_HOSTS)) return kind;
+  return 'expert_website';
+}
+
 /**
  * Catalog overlap for practice pages and directories. Own websites and
  * articles that mention forensic work stay websites/publications; only paid
@@ -486,9 +516,15 @@ export class WebSourceProvider extends LiveResearchProvider {
       };
     }
 
-    const records = dossier.records.filter(
-      (r) => sourceIdForRecord(r) === id || recordServesCatalogSource(r, id),
-    );
+    // Paid advertising / IME catalog ids must use the paid-directory host
+    // gate. LLM kind "ime"/"advertising" on a practice site must not enter
+    // via sourceIdForRecord alone.
+    const records = dossier.records.filter((r) => {
+      if (isAdvertisingCatalogId(id)) {
+        return recordServesCatalogSource(r, id);
+      }
+      return sourceIdForRecord(r) === id || recordServesCatalogSource(r, id);
+    });
     const blocked = blockedPagesForSource(dossier.pagesBlocked, id, records);
     const items = [
       ...records.map((record) =>

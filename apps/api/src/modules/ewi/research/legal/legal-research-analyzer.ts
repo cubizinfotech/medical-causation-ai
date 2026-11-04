@@ -146,9 +146,10 @@ export function buildDepositions(matters: LegalMatter[]): DepositionRecord[] {
 }
 
 /**
- * Compares collected statements only when two sources both state a value
- * for the same topic and those values disagree. Silent or missing sources
- * are not treated as contradictions.
+ * Compares collected statements only when two deposition/testimony sources
+ * both state a value for the same identifiable factual topic and those values
+ * disagree. Generic first-word overlap is not enough. Silent or missing
+ * sources are not treated as contradictions.
  */
 export function findTestimonyContradictions(
   matters: LegalMatter[],
@@ -160,12 +161,15 @@ export function findTestimonyContradictions(
     ) {
       return [];
     }
-    return matter.importantStatements.map((statement, index) => ({
-      matter,
-      statement,
-      topic: topicKey(statement),
-      index,
-    }));
+    if (matter.identityMatch === 'uncertain') return [];
+    return matter.importantStatements
+      .map((statement, index) => ({
+        matter,
+        statement,
+        topic: topicKey(statement),
+        index,
+      }))
+      .filter((entry) => entry.topic !== null);
   });
 
   const contradictions: TestimonyContradiction[] = [];
@@ -180,6 +184,12 @@ export function findTestimonyContradictions(
       }
       if (!valuesDisagree(left.statement, right.statement)) continue;
 
+      const urlNote =
+        left.matter.sourceUrl || right.matter.sourceUrl
+          ? ` Sources: ${[left.matter.sourceUrl, right.matter.sourceUrl]
+              .filter(Boolean)
+              .join(' ; ')}.`
+          : '';
       contradictions.push({
         id: `testimony-conflict-${contradictions.length + 1}`,
         statementA: left.statement,
@@ -193,7 +203,7 @@ export function findTestimonyContradictions(
         relatedUrls: [left.matter.sourceUrl, right.matter.sourceUrl].filter(
           (url): url is string => Boolean(url),
         ),
-        description: `Collected statements disagree on ${left.topic}. "${left.statement}" (${left.matter.evidenceReference}) and "${right.statement}" (${right.matter.evidenceReference}). The comparison keeps both statements. It does not decide which is correct.`,
+        description: `Collected sworn statements disagree on ${left.topic}. "${left.statement}" (${left.matter.evidenceReference}) and "${right.statement}" (${right.matter.evidenceReference}).${urlNote} The comparison keeps both statements. It does not decide which is correct.`,
       });
     }
   }
@@ -230,18 +240,17 @@ function sourceAttemptsFor(
     }));
 }
 
-function topicKey(statement: string): string {
+/**
+ * Only identifiable factual topics qualify. Vague first-four-word keys used
+ * to invent contradictions from unrelated snippets.
+ */
+function topicKey(statement: string): string | null {
   const lower = statement.toLowerCase();
   const match = lower.match(
-    /\b(date of (?:injury|accident|exam(?:ination)?|surgery)|years? of experience|board[- ]?certif(?:ied|ication)|license|specialty|reviewed (?:the )?(?:records?|films?)|examined the (?:patient|claimant)|number of (?:imes?|exams?)|compensation|fee|hourly rate|prior testimony)\b/,
+    /\b(date of (?:injury|accident|exam(?:ination)?|surgery)|years? of experience|board[- ]?certif(?:ied|ication)|license(?: number| status)?|specialty|reviewed (?:the )?(?:records?|films?)|examined the (?:patient|claimant)|number of (?:imes?|exams?)|compensation|fee|hourly rate|prior testimony|percentage of (?:plaintiff|defense)|times testified)\b/,
   );
   if (match) return match[1].replace(/\s+/g, ' ');
-  const words = lower
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((word) => word.length > 3)
-    .slice(0, 4);
-  return words.join(' ') || lower.slice(0, 40);
+  return null;
 }
 
 function valuesDisagree(left: string, right: string): boolean {
@@ -253,7 +262,8 @@ function valuesDisagree(left: string, right: string): boolean {
   const leftNeg = /\b(did not|never|no|not|denied)\b/i.test(left);
   const rightNeg = /\b(did not|never|no|not|denied)\b/i.test(right);
   if (leftNeg !== rightNeg) return true;
-  return normalizeText(left) !== normalizeText(right);
+  // Without numbers or negation contrast, differing prose alone is too weak.
+  return false;
 }
 
 function numbersIn(value: string): string[] {

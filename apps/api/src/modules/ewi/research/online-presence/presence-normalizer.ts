@@ -63,7 +63,22 @@ export function normalizePresenceRecords(
   return records;
 }
 
+const NON_PRESENCE_CATEGORIES = new Set([
+  'publication',
+  'legal',
+  'legal_case',
+  'court_order',
+  'motion',
+  'deposition',
+  'testimony',
+  'education',
+  'university',
+  'license',
+  'board_certification',
+]);
+
 export function isPresenceItem(item: ExpertEvidenceItem): boolean {
+  if (NON_PRESENCE_CATEGORIES.has(item.category)) return false;
   return (
     PRESENCE_PROVIDERS.has(item.sourceId) ||
     PRESENCE_CATEGORIES.has(item.category)
@@ -178,6 +193,9 @@ function resolveKind(
       return 'patient_review';
     case 'google_maps':
       return 'google_maps';
+    case 'university':
+      // Faculty / institutional profiles, not advertising directories.
+      return 'expert_website';
     default:
       break;
   }
@@ -195,6 +213,7 @@ function resolveKind(
   if (item.category === 'ime' || item.category === 'advertising') {
     return item.category === 'ime' ? 'ime_website' : 'professional_website';
   }
+  if (item.category === 'profile') return 'expert_website';
   return 'other_public_website';
 }
 

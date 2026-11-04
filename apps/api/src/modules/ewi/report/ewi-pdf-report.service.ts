@@ -33,7 +33,11 @@ export interface EwiReportInput {
   identity?: ExpertIdentityResolution | null;
   cvCheck?: CvCheck | null;
   /** Why CV comparison is present or omitted. */
-  cvComparisonState?: 'compared' | 'not_uploaded' | 'not_read';
+  cvComparisonState?:
+    | 'compared'
+    | 'not_uploaded'
+    | 'not_read'
+    | 'found_unreadable';
   /** Free text the attorney added to the intake form. */
   additionalContext?: string | null;
   /** Global web research: candidates, pages, coverage and limits. */

@@ -24,9 +24,11 @@ import {
 } from './person-name';
 import { specialtyOverlaps, specialtyStems } from './specialty-match';
 
-const TOP_CITED = 10;
-const RECENT = 5;
+/** Confirmed author: retrieve enough works to compare with a typical CV list. */
+const TOP_CITED = 30;
+const RECENT = 20;
 const RETRACTED = 25;
+const MAX_ATTRIBUTED_WORKS = 40;
 
 const PROFILE_NOTE =
   'OpenAlex builds author profiles automatically and can merge or split people with similar names. Confirm key publications against the expert’s CV.';
@@ -156,7 +158,7 @@ export class OpenAlexResearchProvider extends LiveResearchProvider {
       ...retracted.works,
       ...topCited.works,
       ...recent.works,
-    ]);
+    ]).slice(0, MAX_ATTRIBUTED_WORKS);
     const items: ExpertEvidenceItem[] = [
       this.profileItem(chosen, authorIdentity, retracted.count, retrievedAt),
       ...works.map((work) =>
@@ -166,9 +168,13 @@ export class OpenAlexResearchProvider extends LiveResearchProvider {
     const locationNote = locationConfirmed
       ? ` Institution: ${chosen.matchedInstitutions[0]}.`
       : ' Institution location was not listed on the profile, so it was not used to confirm the match.';
+    const listedNote =
+      (chosen.author.works_count ?? 0) > works.length
+        ? ` Listed ${works.length} of ${chosen.author.works_count} profile works (top-cited and recent sample). This is not a claim that every CV publication was found.`
+        : '';
     return {
       items,
-      message: `Matched OpenAlex author ${chosen.author.display_name} (${chosen.author.works_count ?? 0} works) on name and ${chosen.matchedTopics[0] ?? query.specialty} topics.${locationNote}${retracted.count > 0 ? ` ${retracted.count} work(s) are marked retracted.` : ''}`,
+      message: `Matched OpenAlex author ${chosen.author.display_name} (${chosen.author.works_count ?? 0} works) on name and ${chosen.matchedTopics[0] ?? query.specialty} topics.${locationNote}${listedNote}${retracted.count > 0 ? ` ${retracted.count} work(s) are marked retracted.` : ''}`,
     };
   }
 

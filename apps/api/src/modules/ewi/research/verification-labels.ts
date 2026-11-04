@@ -10,12 +10,12 @@ export const INCONSISTENCY_LABELS = [
 export type InconsistencyLabel = (typeof INCONSISTENCY_LABELS)[number];
 
 export const INCONSISTENCY_LABEL_TEXT: Record<InconsistencyLabel, string> = {
-  verified: 'Confirmed by source',
-  partially_verified: 'Partly matched',
+  verified: 'Verified',
+  partially_verified: 'Partially Verified',
   conflicting: 'Sources disagree',
-  not_verified: 'Reported by source only',
-  not_found: 'Not found',
-  unable_to_verify: 'No confirming source in this packet',
+  not_verified: 'Not Independently Verified',
+  not_found: 'Not Found',
+  unable_to_verify: 'Unable to Access',
 };
 
 export const VERIFICATION_FIELDS = [

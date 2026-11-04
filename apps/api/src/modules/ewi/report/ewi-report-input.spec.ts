@@ -54,6 +54,17 @@ describe('cvComparisonState', () => {
         ],
       }),
     ).toBe('not_read');
+    expect(
+      cvComparisonState({
+        sourceStatuses: [
+          {
+            sourceId: 'cv_profile',
+            message:
+              'A public CV or resume URL was found (https://example.com/cv.pdf) but could not be read or parsed for comparison',
+          },
+        ],
+      }),
+    ).toBe('found_unreadable');
   });
 });
 

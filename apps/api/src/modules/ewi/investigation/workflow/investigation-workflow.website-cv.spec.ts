@@ -98,4 +98,58 @@ describe('extractionFromWebsiteCv', () => {
     );
     expect(extraction).toBeNull();
   });
+
+  it('runs website CV claims through finalizeCvClaims junk filters', () => {
+    const extraction = extractionFromWebsiteCv(
+      dossier([
+        record({
+          id: 'leah',
+          url: 'https://leahellenberg.com/ellenbergCV.pdf',
+          title: 'Curriculum Vitae Leah Ellenberg, Ph.D.',
+          summary: 'Ph.D., UCLA, 1978. Clinical neuropsychology.',
+          claims: [
+            {
+              type: 'credential',
+              text: 'January, 2022 CURRICULUM VITAE Leah Ellenberg PERSONAL INFORMATION Business Address 9401 Wilshire',
+              quote:
+                'January, 2022 CURRICULUM VITAE Leah Ellenberg PERSONAL INFORMATION Business Address 9401 Wilshire',
+              topic: 'education',
+              basis: 'subject_stated',
+              from: 'page',
+            },
+            {
+              type: 'credential',
+              text: 'Ph.D. in Clinical Psychology, UCLA, 1978',
+              quote: 'Ph.D. in Clinical Psychology, UCLA, 1978',
+              topic: 'education',
+              basis: 'subject_stated',
+              from: 'page',
+            },
+            {
+              type: 'credential',
+              text: 'In addition, Dr. Glass was honored to be awarded several NIH grants',
+              quote:
+                'In addition, Dr. Glass was honored to be awarded several NIH grants',
+              topic: 'award',
+              basis: 'subject_stated',
+              from: 'page',
+            },
+          ],
+        }),
+      ]),
+      'Leah Ellenberg',
+    );
+    expect(extraction).not.toBeNull();
+    expect(
+      extraction!.claims.every(
+        (c) => !/curriculum vitae|personal information/i.test(c.statement),
+      ),
+    ).toBe(true);
+    expect(
+      extraction!.claims.some((c) => /Ph\.D\./i.test(c.statement)),
+    ).toBe(true);
+    expect(
+      extraction!.claims.some((c) => /Dr\. Glass/i.test(c.statement)),
+    ).toBe(false);
+  });
 });

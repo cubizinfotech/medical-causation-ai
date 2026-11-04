@@ -215,6 +215,8 @@ When a CV was uploaded, the **CV and profiles** stage reads it instead of asking
 
 Licenses, specialty, and payments are compared only when the NPI identity is confirmed. Conflicts and meaningful gaps are added to the inconsistencies (so they also feed the questions). The full check is saved with the result (`cvCheck`), shown in the **CV Check** tab with links to each CV page, and written to the "CV comparison" section of the PDF report.
 
+When no CV was uploaded, a strong-match public CV/resume page that was read during web research can still produce `cvCheck` (including publication title lookup). If a public CV URL was found but could not be read, the report says so explicitly instead of implying comparison ran. Expert Witness Advertising includes only paid directory hosts (SEAK, JurisPro, ExpertPages, and similar)—not the expert’s personal or practice website. Report verification labels use Verified / Self-Reported / Not Found / Unable to Access / Not Independently Verified / Partially Verified (template 3.10.15+). Template 3.10.16+ drops CV header/PII from Education, school/IEP complaints from board actions, associate (Glass) claims from subject sections, legal commentary from Orders, and publishers from Corporate Affiliations; NPPES absence is not a license discrepancy.
+
 ### 5. Finishing: the PDF report and saved results
 
 When all stages are done, the workflow:

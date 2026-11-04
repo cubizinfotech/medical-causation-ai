@@ -44,7 +44,9 @@ export function buildOnlinePresenceDossier(input: {
     ),
     locations: records.filter((record) => record.kind === 'google_maps'),
     otherPublicSites: records.filter(
-      (record) => record.kind === 'other_public_website',
+      (record) =>
+        record.kind === 'other_public_website' &&
+        !looksLikeNonWebsitePresence(record),
     ),
     records,
     sourceAttempts: sourceAttemptsFor(
@@ -60,6 +62,23 @@ export function locationRequiresVerification(record: PresenceRecord): boolean {
     (record.locationFlags.includes('requires_verification') ||
       record.locationFlags.includes('possible_residence') ||
       record.locationFlags.includes('shared_or_hourly_office'))
+  );
+}
+
+/** Journal, court, and news URLs must not pad the Expert Websites catch-all. */
+function looksLikeNonWebsitePresence(record: PresenceRecord): boolean {
+  const hay =
+    `${record.url ?? ''} ${record.title} ${record.summary ?? ''}`.toLowerCase();
+  return (
+    /\b(pubmed\.ncbi|doi\.org|openalex\.org|orcid\.org|researchgate\.net|semanticscholar\.org)\b/.test(
+      hay,
+    ) ||
+    /\b(courtlistener\.com|justia\.com|casetext\.com|leagle\.com|govinfo\.gov|uscourts\.gov)\b/.test(
+      hay,
+    ) ||
+    /\b(complaint|motion to|memorandum opinion|deposition of|journal article)\b/.test(
+      hay,
+    )
   );
 }
 

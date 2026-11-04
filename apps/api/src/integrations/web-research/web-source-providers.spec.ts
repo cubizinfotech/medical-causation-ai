@@ -307,6 +307,50 @@ describe('WebSourceProvider coverage', () => {
     expect(site.items[0].url).toContain('neuropsychologicalsciences.com');
   });
 
+  it('rejects a practice site even when the model labels it ime or advertising', async () => {
+    const mislabeled = dossier([
+      record({
+        id: 'mislabeled-ime',
+        url: 'https://www.drleahellenberg.com/',
+        kind: 'ime',
+        title: 'Forensic Neuropsychology — Leah Ellenberg, Ph.D.',
+        summary:
+          'Dr. Ellenberg offers independent medical examinations and expert witness services.',
+        claims: [
+          {
+            type: 'advertising',
+            text: 'expert witness',
+            quote: 'expert witness services',
+            topic: 'advertising',
+            basis: 'subject_stated',
+            from: 'page',
+          },
+        ],
+      }),
+      record({
+        id: 'mislabeled-ads',
+        url: 'https://www.ellenbergpractice.com/services',
+        kind: 'advertising',
+        title: 'Expert Witness Advertising',
+        summary: 'Available for forensic evaluations.',
+        claims: [
+          {
+            type: 'forensic',
+            text: 'IME',
+            quote: 'forensic evaluations',
+            topic: 'ime',
+            basis: 'subject_stated',
+            from: 'page',
+          },
+        ],
+      }),
+    ]);
+    const ime = await provider('ime_websites', mislabeled).search(query);
+    const ads = await provider('advertising', mislabeled).search(query);
+    expect(ime.items).toHaveLength(0);
+    expect(ads.items).toHaveLength(0);
+  });
+
   it('files an expert-directory page that markets IME services under IME advertising', async () => {
     const listing = dossier([
       record({

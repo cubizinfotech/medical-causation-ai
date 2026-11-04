@@ -283,6 +283,9 @@ describe('Demery report regression', () => {
     expect(sectionText(document, 'orders')).toMatch(/ordered|Order/);
     expect(sectionText(document, 'pleadings')).toMatch(/motion to compel/i);
     expect(sectionText(document, 'testimony-inconsistencies')).toMatch(
+      /No qualifying (?:evidence of )?testimony inconsistency/i,
+    );
+    expect(sectionText(document, 'testimony-inconsistencies')).not.toMatch(
       /testified about 300 times/,
     );
   });

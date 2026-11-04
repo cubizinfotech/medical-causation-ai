@@ -119,12 +119,26 @@ function resolveDocumentType(
   item: ExpertEvidenceItem,
   raw: Record<string, unknown>,
 ): LegalDocumentType {
-  const hay = `${item.title} ${item.summary ?? ''}`.toLowerCase();
+  const hay = `${item.title} ${item.summary ?? ''} ${readString(raw.shortDescription) ?? ''}`.toLowerCase();
   if (/\bnotice of (?:taking )?deposition\b/.test(hay)) {
     return 'pleading';
   }
+  // Journal commentary and news about cases are not pleadings.
+  if (
+    /\b(law review|journal article|commentary|op[- ]ed|blog post)\b/.test(hay) &&
+    !/\b(complaint|motion|petition|answer|order|opinion)\b/.test(hay)
+  ) {
+    if (item.sourceId === 'orders') return 'order';
+    if (item.sourceId === 'motions') return 'motion';
+    if (item.sourceId === 'pleadings') return 'pleading';
+    // Leave non-court commentary out of pleading/order buckets.
+  }
   const stated = readString(raw.documentType)?.toLowerCase();
-  if (stated && isDocumentType(stated)) return stated;
+  if (stated && isDocumentType(stated)) {
+    // Prefer title heuristics when the stated type is a generic "case"
+    // but the document is clearly a pleading or order.
+    if (stated !== 'case') return stated;
+  }
 
   const matterKind = readString(raw.matterKind)?.toLowerCase();
   if (matterKind === 'malpractice') return 'malpractice';
@@ -157,7 +171,51 @@ function resolveDocumentType(
   if (item.sourceId === 'expert_testimony') return 'testimony';
   if (item.sourceId === 'criminal_records') return 'criminal_record';
   if (item.sourceId === 'malpractice_records') return 'malpractice';
+
+  const fromTitle = documentTypeFromTitle(hay);
+  if (fromTitle) return fromTitle;
+  if (stated && isDocumentType(stated)) return stated;
   return 'case';
+}
+
+/** Title/summary cues that identify pleadings, orders, and transcripts. */
+function documentTypeFromTitle(hay: string): LegalDocumentType | null {
+  if (
+    /\b(memorandum opinion|memorandum (?:and )?order|final order|order granting|order denying|opinion of the court|judgment|ruling)\b/.test(
+      hay,
+    ) ||
+    /^\W*(order|opinion|ruling|judgment)\b/.test(hay)
+  ) {
+    return 'order';
+  }
+  // Docket notices that mention a deposition are pleadings, not transcripts.
+  if (
+    /\b(notice of filing|notice of appearance|notice of taking|notice of (?:taking )?deposition)\b/.test(
+      hay,
+    )
+  ) {
+    return 'pleading';
+  }
+  if (
+    /\b(deposition transcript|trial transcript|hearing transcript|videotaped deposition)\b/.test(
+      hay,
+    ) ||
+    (/\bdeposition of\b/.test(hay) && !/\bnotice of\b/.test(hay))
+  ) {
+    return 'deposition';
+  }
+  if (
+    /\b(complaint|amended complaint|answer to complaint|petition for|verified petition|cross[- ]claim|counterclaim|affidavit|declaration of|brief in support|memorandum in support|motion to|motion for|motion in limine|daubert motion|frye motion)\b/.test(
+      hay,
+    )
+  ) {
+    return /\b(motion to|motion for|motion in limine|daubert motion|frye motion|brief in support|memorandum in support)\b/.test(
+      hay,
+    )
+      ? 'motion'
+      : 'pleading';
+  }
+  return null;
 }
 
 function readOrderTags(raw: Record<string, unknown>): OrderSignificanceTag[] {

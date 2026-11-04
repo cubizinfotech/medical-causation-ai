@@ -244,9 +244,10 @@ describe('CV comparison', () => {
   });
 
   it('compares licenses with NPPES both ways, never as verified', () => {
+    // Missing from NPPES is self-reported / incomplete registry — not a discrepancy.
     expect(byTitle('License in California')).toMatchObject({
-      label: 'not_found',
-      severity: 'medium',
+      label: 'not_verified',
+      severity: 'low',
     });
     expect(byTitle('License in Arizona')).toMatchObject({
       label: 'partially_verified',
@@ -293,14 +294,14 @@ describe('CV comparison', () => {
   });
 
   it('marks what no source can check as not checked', () => {
-    expect(byTitle('Board certification')?.label).toBe('unable_to_verify');
+    expect(byTitle('Board certification')?.label).toBe('not_verified');
     expect(byTitle('Affiliation with Barrow')?.label).toBe(
       'partially_verified',
     );
     expect(byTitle('Expert witness experience')?.source?.statement).toContain(
       '1 published opinion(s)',
     );
-    expect(byTitle('MD, Harvard')?.label).toBe('unable_to_verify');
+    expect(byTitle('MD, Harvard')?.label).toBe('not_verified');
   });
 
   it('raises only conflicts and meaningful gaps as inconsistencies', () => {
@@ -309,7 +310,6 @@ describe('CV comparison', () => {
       'conflicting',
       'conflicting',
       'conflicting',
-      'not_found',
       'not_found',
     ]);
     expect(
@@ -373,6 +373,94 @@ describe('CV comparison', () => {
     expect(
       junk.comparisons.filter((row) => row.topic === 'publication'),
     ).toHaveLength(0);
+  });
+
+  it('drops CV header/PII education claims and multi-entry publication dumps', () => {
+    const filtered = compareCv({
+      extraction: {
+        ...extraction,
+        claims: [
+          claim(
+            'cv-hdr',
+            'education',
+            'Curriculum Vitae — Personal Information — Business Address 123 Main St',
+            {},
+          ),
+          claim('cv-edu', 'education', 'Ph.D., UCLA, 1998', {
+            degree: 'Ph.D.',
+            institution: 'UCLA',
+            year: '1998',
+          }),
+          claim(
+            'cv-dump',
+            'publication',
+            'PUBLICATIONS IN PEER REVIEWED Journals Page 4 Ellenberg 1999. Glass 2001. Smith 2003.',
+            {
+              title:
+                'PUBLICATIONS IN PEER REVIEWED Journals Page 4 Ellenberg 1999. Glass 2001. Smith 2003.',
+            },
+          ),
+        ],
+      },
+      evidence,
+      sourceResults,
+      identity,
+      publications: [],
+    });
+    expect(
+      filtered.comparisons.filter((row) => row.topic === 'education'),
+    ).toHaveLength(1);
+    expect(
+      filtered.comparisons.find((row) => row.topic === 'education')?.title,
+    ).toMatch(/Ph\.D\./i);
+    expect(
+      filtered.comparisons.filter((row) => row.topic === 'publication'),
+    ).toHaveLength(0);
+  });
+
+  it('does not resurrect credential-dump memberships or Glass bios via leftovers', () => {
+    const filtered = compareCv({
+      extraction: {
+        ...extraction,
+        claims: [
+          claim(
+            'cv-m',
+            'membership',
+            'Psychology, August, 1975 Ph.D. – Clinical Psychology, April, 1978 LICENSURE Psychologist, PSY #5970 State of California, July, 1979 - Present Psychologist, PSY #0003617 State of Colorado, June, 2011 - Present Diplomate in Clinical Neuropsychology, American Board of Professional Psychology, November, 1989',
+            { name: 'dump' },
+          ),
+          claim(
+            'cv-a',
+            'award',
+            'In addition, Dr. Glass was honored to be awarded several NIH grants',
+            { name: 'Glass NIH' },
+          ),
+          claim(
+            'cv-co',
+            'publication',
+            'Ellenberg, L., Glass, L. (1999). Memory after pediatric TBI. JINS, 5, 139.',
+            { title: 'Memory after pediatric TBI', year: '1999' },
+          ),
+        ],
+      },
+      evidence,
+      sourceResults,
+      identity,
+      publications: [
+        { title: 'Memory after pediatric TBI', status: 'unavailable' },
+      ],
+    });
+    expect(
+      filtered.comparisons.filter((row) => row.cv?.claimId === 'cv-m'),
+    ).toHaveLength(0);
+    expect(
+      filtered.comparisons.filter((row) => row.cv?.claimId === 'cv-a'),
+    ).toHaveLength(0);
+    expect(
+      filtered.comparisons.some((row) =>
+        /Memory after pediatric TBI/i.test(row.title),
+      ),
+    ).toBe(true);
   });
 
   it('keeps a CV publication that catalogs did not search, without calling it disproven', () => {
@@ -689,18 +777,25 @@ describe('CV comparison', () => {
       check.comparisons.filter((row) => row.cv?.claimId === 'cv-p')[0]?.label,
     ).toBe('unable_to_verify');
     expect(
+      check.comparisons.filter((row) => row.label === 'not_verified').map(
+        (row) => row.cv?.claimId,
+      ),
+    ).toEqual(expect.arrayContaining(['cv-a', 'cv-m']));
+    expect(
       check.comparisons.filter((row) => row.label === 'unable_to_verify'),
-    ).toHaveLength(3);
+    ).toHaveLength(1);
     const summary = cvComparisonCountSummary(check);
     expect(summary).toMatch(/3 unique CV claim\(s\) were read/);
     expect(summary).toMatch(
       /Unique CV claims \(3\) = compared \(3\) \+ uncompared \(0\)/,
     );
-    expect(summary).toMatch(/No matching source: 3/);
-    expect(CV_LABEL_TEXT.verified).toBe('Consistent');
-    expect(CV_LABEL_TEXT.conflicting).toBe('Discrepancy identified');
-    expect(CV_LABEL_TEXT.partially_verified).toBe('Possible match');
-    expect(CV_LABEL_TEXT.unable_to_verify).toBe('No matching source');
+    expect(summary).toMatch(/Unable to Access: 1/);
+    expect(summary).toMatch(/Self-Reported: \d+/);
+    expect(CV_LABEL_TEXT.verified).toBe('Verified');
+    expect(CV_LABEL_TEXT.conflicting).toBe('Sources disagree');
+    expect(CV_LABEL_TEXT.partially_verified).toBe('Partially Verified');
+    expect(CV_LABEL_TEXT.unable_to_verify).toBe('Unable to Access');
+    expect(CV_LABEL_TEXT.not_verified).toBe('Self-Reported');
   });
 });
 

@@ -12,6 +12,7 @@ import {
   type PublicationQuery,
 } from '@integrations/expert-research';
 import type { WebRecord, WebResearchDossier } from '@integrations/web-research';
+import { finalizeCvClaims } from '../../cv/cv-claims';
 import { compareCv, cvDiscrepancies } from '../../cv/cv-comparison';
 import type {
   CvCheck,
@@ -672,18 +673,72 @@ export async function executeInvestigationWorkflow(
     );
     if (websiteExtraction) {
       try {
+        const citations: PublicationQuery[] = websiteExtraction.claims
+          .filter(
+            (claim) => claim.category === 'publication' && claim.details.title,
+          )
+          .map((claim) => ({
+            title: claim.details.title!,
+            citation: claim.statement,
+            journal: claim.details.journal,
+            year: parseYear(claim.details.year) ?? parseYear(claim.statement),
+            doi: claim.details.doi,
+            pmid: claim.details.pmid,
+            type: claim.details.publicationType as PublicationQuery['type'],
+          }));
+        let publications: PublicationLookupResult[] = [];
+        if (citations.length > 0 && dependencies.research.lookupPublications) {
+          try {
+            publications = await dependencies.research.lookupPublications(
+              request.expertName,
+              citations,
+            );
+          } catch (error) {
+            dependencies.logger?.warn(
+              `Website CV publication lookup failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+            );
+          }
+        }
         cvCheck = compareCv({
           extraction: websiteExtraction,
           evidence,
           sourceResults,
           identity: identityFromResearch(request, sourceResults, evidence),
-          publications: [],
+          publications,
           expertName: request.expertName,
         });
+        // Replace the early "no uploaded CV" status once a public CV was compared.
+        const cvStatusIndex = sourceStatuses.findIndex(
+          (status) => status.sourceId === 'cv_profile',
+        );
+        const comparedMessage = `Public CV compared from ${websiteExtraction.document.name || websiteExtraction.document.id}. Credentials stated only on the CV remain self-reported.`;
+        if (cvStatusIndex >= 0) {
+          sourceStatuses[cvStatusIndex] = {
+            ...sourceStatuses[cvStatusIndex],
+            checked: true,
+            status: 'ok',
+            message: comparedMessage,
+            itemCount: websiteExtraction.claims.length,
+          };
+        }
       } catch (error) {
         dependencies.logger?.warn(
           `Website CV comparison failed: ${error instanceof Error ? error.message : 'unknown error'}`,
         );
+      }
+    } else {
+      const foundUrls = publicCvCandidateUrls(webResearch, request.expertName);
+      if (foundUrls.length > 0) {
+        const unreadMessage = `A public CV or resume URL was found (${foundUrls.slice(0, 3).join('; ')}) but could not be read or parsed for comparison (login, CAPTCHA, empty PDF text, or thin page). Upload the CV to compare. That is not a finding that the expert has no CV discrepancies.`;
+        const cvStatusIndex = sourceStatuses.findIndex(
+          (status) => status.sourceId === 'cv_profile',
+        );
+        if (cvStatusIndex >= 0) {
+          sourceStatuses[cvStatusIndex] = {
+            ...sourceStatuses[cvStatusIndex],
+            message: unreadMessage,
+          };
+        }
       }
     }
   }
@@ -1035,6 +1090,28 @@ async function readCvSource(
   }
 }
 
+/** Public CV/resume URLs found for this expert (read or unread). */
+export function publicCvCandidateUrls(
+  dossier: WebResearchDossier,
+  expertName?: string,
+): string[] {
+  const urls: string[] = [];
+  for (const record of dossier.records) {
+    if (record.match.level !== 'strong') continue;
+    if (isOtherPersonCvRecord(record, expertName)) continue;
+    if (!cvRecordNamesSubject(record, expertName)) continue;
+    const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
+    if (
+      !/\.pdf($|\?)/i.test(record.url) &&
+      !/\b(curriculum vitae|\bcv\b|resume)\b/.test(hay)
+    ) {
+      continue;
+    }
+    urls.push(record.url);
+  }
+  return [...new Set(urls)].slice(0, 5);
+}
+
 /** Strong-match public CV/resume for this expert → synthetic CV extraction. */
 export function extractionFromWebsiteCv(
   dossier: WebResearchDossier,
@@ -1054,14 +1131,48 @@ export function extractionFromWebsiteCv(
   for (const [index, claim] of (record.claims ?? []).entries()) {
     const category = cvCategoryForWebTopic(claim.topic);
     if (!category) continue;
+    const details =
+      category === 'publication'
+        ? { title: publicationTitleFromText(claim.text || claim.quote) }
+        : category === 'education'
+          ? { institution: claim.text.slice(0, 120) }
+          : {};
     claims.push({
       id: `website-cv-${index + 1}`,
       category,
       statement: claim.text,
-      details: {},
+      details,
       page: 1,
       quote: claim.quote || claim.text,
     });
+  }
+  // Pull bibliography-style lines from the summary when claim extraction was thin.
+  const pubCount = claims.filter((c) => c.category === 'publication').length;
+  if (pubCount < 5) {
+    for (const line of bibliographyLinesFromText(
+      `${record.title}\n${record.summary}`,
+    )) {
+      if (claims.filter((c) => c.category === 'publication').length >= 40) break;
+      const title = publicationTitleFromText(line);
+      if (!title || title.length < 12) continue;
+      if (
+        claims.some(
+          (c) =>
+            c.category === 'publication' &&
+            (c.details.title ?? '').toLowerCase() === title.toLowerCase(),
+        )
+      ) {
+        continue;
+      }
+      claims.push({
+        id: `website-cv-bib-${claims.length + 1}`,
+        category: 'publication',
+        statement: line.slice(0, 400),
+        details: { title },
+        page: 1,
+        quote: line.slice(0, 280),
+      });
+    }
   }
   if (claims.length === 0 && record.summary.trim().length > 40) {
     claims.push({
@@ -1073,7 +1184,10 @@ export function extractionFromWebsiteCv(
       quote: record.summary.slice(0, 280),
     });
   }
-  if (claims.length === 0) return null;
+  const finalized = finalizeCvClaims(
+    claims.map(({ id: _id, ...rest }) => rest),
+  );
+  if (finalized.length === 0) return null;
   return {
     document: {
       id: record.url,
@@ -1083,11 +1197,37 @@ export function extractionFromWebsiteCv(
       ocrPages: [],
     },
     status: 'completed',
-    claims,
+    claims: finalized,
     warnings: [
       `CV was read from the expert’s public website (${record.url}), not from an uploaded file.`,
     ],
   };
+}
+
+function bibliographyLinesFromText(text: string): string[] {
+  return text
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(
+      (line) =>
+        line.length >= 40 &&
+        (/\b(19|20)\d{2}\b/.test(line) ||
+          /\b(et al\.|journal|proceedings|doi:|pmid)\b/i.test(line)),
+    )
+    .slice(0, 40);
+}
+
+function publicationTitleFromText(text: string): string | undefined {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return undefined;
+  // Prefer quoted or sentence-case title before journal/year tail.
+  const quoted = cleaned.match(/[“"]([^”"]{12,180})[”"]/);
+  if (quoted) return quoted[1].trim();
+  const beforeYear = cleaned.split(/\b(?:19|20)\d{2}\b/)[0]?.trim();
+  if (beforeYear && beforeYear.length >= 12 && beforeYear.length <= 220) {
+    return beforeYear.replace(/[.,;:\s]+$/, '');
+  }
+  return cleaned.slice(0, 180);
 }
 
 function isWebsiteCvRecord(

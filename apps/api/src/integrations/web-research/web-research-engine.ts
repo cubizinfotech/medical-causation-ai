@@ -50,6 +50,7 @@ import {
   isBlockedChallengeTitle,
   isCourtSourceUrl,
 } from './source-kind';
+import { sanitizeAdvertisingKind } from './web-source-providers';
 import { usablePortraitCandidates } from './page-portraits';
 import { BraveSearchProvider } from './providers/brave.provider';
 import { GeminiGroundedSearchProvider } from './providers/gemini-grounded.provider';
@@ -227,7 +228,7 @@ function normalizeText(value: string): string {
  * corporate affiliation of the subject (book houses, journals, directories).
  */
 const COMPANY_BLOCKLIST =
-  /^(google|youtube|facebook|meta|microsoft|amazon|apple|twitter|linkedin|webmd|wordpress|squarespace|wix|godaddy|expert institute|jurispro|seak|researchgate|healthgrades|vitals|jason aronson|routledge|springer|elsevier|wiley|sage publications|oxford university press|cambridge university press|taylor (&|and) francis|wolters kluwer|lippincott|mcgraw[- ]?hill|pearson|guilford|apa books|american psychiatric (?:association|publishing))\b/i;
+  /^(google|youtube|facebook|meta|microsoft|amazon|apple|twitter|linkedin|webmd|wordpress|squarespace|wix|godaddy|expert institute|jurispro|seak|researchgate|healthgrades|vitals|jason aronson|informa(?:\s+healthcare(?:\s+usa(?:,?\s*inc\.?)?)?)?|informa plc|routledge|springer|elsevier|wiley|sage publications|oxford university press|cambridge university press|taylor (&|and) francis|wolters kluwer|lippincott|mcgraw[- ]?hill|pearson|guilford|apa books|american psychiatric (?:association|publishing)|cortex|neuropsychologia|journal of)\b/i;
 
 /**
  * Model readings first, then rule-extracted statements the model did not
@@ -1188,6 +1189,8 @@ export class WebResearchEngine {
       ) {
         kind = model.kind;
       }
+      // Practice sites are never paid expert-witness advertising directories.
+      kind = sanitizeAdvertisingKind(kind, w.page.url, url.directoryId);
       const ownPage = isOwnPage(kind, w.page.url, subject.name.last);
       const claimBelongs = (text: string): boolean => {
         if (quoteNamesOtherPerson(text, subject.name)) {

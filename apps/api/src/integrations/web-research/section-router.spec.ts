@@ -135,6 +135,166 @@ describe('routeWebFindings', () => {
     expect(action?.basisLabel).toMatch(/not established|Reported/);
   });
 
+  it('does not file school-student discipline narratives under board actions', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'school',
+          'https://oah.example/case/goggin',
+          'court',
+          [
+            claim(
+              'discipline',
+              'Goggin’s “sometimes” responses stemmed from a single event when Student cried when he was sent to the principal’s office as he believed he was being disciplined.',
+              'allegation',
+            ),
+          ],
+          'strong',
+          'Goggin student discipline',
+        ),
+      ]),
+    );
+    expect(routed.get('board-actions') ?? []).toHaveLength(0);
+  });
+
+  it('still files special-education court records that are not school-office noise', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'sped',
+          'https://www.courtlistener.com/opinion/123/iep-hearing/',
+          'court',
+          [
+            claim(
+              'order',
+              'IT IS HEREBY ORDERED that the IEP team reconvene. The expert testified regarding Student’s classroom placement.',
+              'third_party',
+            ),
+          ],
+          'strong',
+          'Order on Motion — special education IEP hearing',
+        ),
+      ]),
+    );
+    expect(routed.get('orders') ?? []).not.toHaveLength(0);
+  });
+
+  it('does not exclude real opinions merely because the text uses the word holding', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'opinion',
+          'https://www.courtlistener.com/opinion/999/smith-v-jones/',
+          'court',
+          [
+            claim(
+              'order',
+              'The court’s holding affirms the trial court. IT IS ORDERED that the motion is denied.',
+              'third_party',
+            ),
+          ],
+          'strong',
+          'Opinion of the Court — Smith v. Jones',
+        ),
+      ]),
+    );
+    expect(routed.get('orders') ?? []).not.toHaveLength(0);
+  });
+
+  it('does not file associate Dr. Glass bios under the subject’s publications or education', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'glass',
+          'https://www.leahellenberg.com/leila-glass',
+          'expert_website',
+          [
+            claim(
+              'publication',
+              'In addition, Dr. Glass was honored to be awarded several NIH grants to fund her published research work.',
+              'subject_stated',
+            ),
+            claim(
+              'education',
+              'Dr. Glass graduated from the University of Pennsylvania with a B.A. in cognitive neuroscience.',
+              'subject_stated',
+            ),
+          ],
+          'strong',
+          'Leila Glass, Ph.D.',
+        ),
+      ]),
+    );
+    expect(routed.get('publications') ?? []).toHaveLength(0);
+    expect(routed.get('education') ?? []).toHaveLength(0);
+  });
+
+  it('does not file law-firm commentary about court decisions under Orders', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'blog',
+          'https://lawfirm.example/blog/viking-river',
+          'blog',
+          [
+            claim(
+              'order',
+              'California Courts Reject the U.S. Supreme Court’s Holding Almost immediately after the Viking River Cruises decision came out, the California Supreme Court granted review in Adolph v.',
+              'third_party',
+            ),
+          ],
+          'possible',
+          'California Courts Reject the U.S. Supreme Court’s Holding',
+        ),
+      ]),
+    );
+    expect(routed.get('orders') ?? []).toHaveLength(0);
+  });
+
+  it('does not file Informa Healthcare citation publishers under Corporate Affiliations', () => {
+    const routed = routeWebFindings(
+      dossier([], {
+        companies: [
+          {
+            name: 'Informa Healthcare USA, Inc.',
+            url: 'https://leahellenberg.com/publications',
+            quote: 'New York: Informa Healthcare USA, Inc., 2008.',
+            scope: 'own_page',
+          },
+        ],
+      }),
+    );
+    expect(routed.get('corporate') ?? []).toHaveLength(0);
+  });
+
+  it('drops Ellenberg-style CV header education and credential-dump memberships', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'cv-page',
+          'https://leahellenberg.com/ellenbergCV.pdf',
+          'expert_website',
+          [
+            claim(
+              'education',
+              'January, 2022 CURRICULUM VITAE Leah Ellenberg, Ph.D. PERSONAL INFORMATION Name Leah Ellenberg, Ph.D. Business Address 9401 Wilshire Blvd., Suite 730 Beverly Hills, California 90212 Business Telephone (310) 273-2701',
+              'subject_stated',
+            ),
+            claim(
+              'membership',
+              'Psychology, August, 1975 Ph.D. – Clinical Psychology, April, 1978 LICENSURE Psychologist, PSY #5970 State of California, July, 1979 - Present Psychologist, PSY #0003617 State of Colorado, June, 2011 - Present Diplomate in Clinical Neuropsychology, American Board of Professional Psychology, November, 1989 Board Certified Subspecialist in Pediatric Neuropsychology, American Board of Professional Psychology, December,',
+              'subject_stated',
+            ),
+          ],
+          'strong',
+          'Ellenberg CV',
+        ),
+      ]),
+    );
+    expect(routed.get('education') ?? []).toHaveLength(0);
+    expect(routed.get('memberships') ?? []).toHaveLength(0);
+  });
+
   it('files only strongly matched social profiles under Social Media', () => {
     const routed = routeWebFindings(
       dossier([

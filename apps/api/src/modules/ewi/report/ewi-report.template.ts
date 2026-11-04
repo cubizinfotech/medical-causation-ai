@@ -378,7 +378,11 @@ export function buildEwiReportDocument(input: {
   professionalBackground?: ProfessionalBackgroundDossier;
   identity?: ExpertIdentityResolution | null;
   cvCheck?: CvCheck | null;
-  cvComparisonState?: 'compared' | 'not_uploaded' | 'not_read';
+  cvComparisonState?:
+    | 'compared'
+    | 'not_uploaded'
+    | 'not_read'
+    | 'found_unreadable';
   /** Free text the attorney added to the intake form. */
   additionalContext?: string | null;
   /** Global web research: candidates, pages, coverage and limits. */
@@ -450,9 +454,10 @@ export function buildEwiReportDocument(input: {
         );
       case 'university-accreditation':
         return evidenceSection(spec, tracker, {
-          categories: ['accreditation'],
+          // Stored category is `university` (alias of accreditation).
+          categories: ['university', 'accreditation'],
           providers: ['university_accreditation'],
-          titleHints: ['accredit'],
+          titleHints: ['accredit', 'CHEA', 'College Navigator', 'APA CoA'],
         });
       case 'licenses':
         return licensesSection(spec, tracker, input.identity ?? null);
@@ -1391,7 +1396,11 @@ function summarySection(
     webLines?: string[];
     identity?: ExpertIdentityResolution | null;
     cvCheck?: CvCheck | null;
-    cvComparisonState?: 'compared' | 'not_uploaded' | 'not_read';
+    cvComparisonState?:
+      | 'compared'
+      | 'not_uploaded'
+      | 'not_read'
+      | 'found_unreadable';
     discrepancies: ExpertDiscrepancy[];
     websiteCvUrls?: string[];
   },
@@ -1891,17 +1900,23 @@ function summaryHeadline(lead: RoutedFinding): string {
 }
 
 function cvOmissionLine(
-  state: 'compared' | 'not_uploaded' | 'not_read' | undefined,
+  state:
+    | 'compared'
+    | 'not_uploaded'
+    | 'not_read'
+    | 'found_unreadable'
+    | undefined,
   websiteCvUrls: string[] = [],
 ): string {
-  const found =
-    websiteCvUrls.length > 0
-      ? ` A public CV or resume URL was found during web research (${websiteCvUrls.join('; ')}). When that page was read, comparison uses those statements; otherwise upload the CV to compare.`
-      : '';
+  const urls =
+    websiteCvUrls.length > 0 ? ` (${websiteCvUrls.join('; ')})` : '';
   if (state === 'not_read') {
-    return `A CV was uploaded but could not be read. CV comparison was not performed.${found} That is not a finding that the expert has no CV discrepancies.`;
+    return `A CV was uploaded but could not be read. CV comparison was not performed.${websiteCvUrls.length > 0 ? ` A public CV or resume URL was also found${urls}.` : ''} That is not a finding that the expert has no CV discrepancies.`;
   }
-  return `No CV was uploaded. CV comparison was not performed.${found} That is not a finding that the expert has no CV discrepancies.`;
+  if (state === 'found_unreadable' || websiteCvUrls.length > 0) {
+    return `A public CV or resume URL was found during web research${urls}, but the file or page could not be read or parsed for comparison (login, CAPTCHA, empty PDF text, or thin page). CV comparison was not performed. Upload a readable CV to compare. That is not a finding that the expert has no CV discrepancies.`;
+  }
+  return `No CV was uploaded and no readable public CV was compared. CV comparison was not performed. That is not a finding that the expert has no CV discrepancies.`;
 }
 
 function cvComparisonSection(
@@ -1911,7 +1926,11 @@ function cvComparisonSection(
     discrepancies: ExpertDiscrepancy[];
     analysis?: EwiAnalysisDocument;
     cvCheck?: CvCheck | null;
-    cvComparisonState?: 'compared' | 'not_uploaded' | 'not_read';
+    cvComparisonState?:
+      | 'compared'
+      | 'not_uploaded'
+      | 'not_read'
+      | 'found_unreadable';
     webResearch?: WebResearchDossier | null;
   },
   tracker: ClaimTracker,
@@ -2049,7 +2068,19 @@ function publicationsSection(
       blocks: [{ text: EMPTY, style: 'note' }],
     };
   }
-  const blocks: ReportBlock[] = [...comparisonBlocks];
+  const blocks: ReportBlock[] = [
+    {
+      text: 'Independently retrieved catalog records are listed separately from CV-listed citations. Titles listed only on the CV and not found in PubMed, OpenAlex, Crossref, or ORCID are not fabricated as catalog hits. Catalog-only records were not claimed on the CV comparison for this run.',
+      style: 'note',
+    },
+    ...comparisonBlocks,
+  ];
+  if (uniqueItems.length > 0) {
+    blocks.push({
+      text: 'Independently retrieved catalog publications (not matched to a CV citation above)',
+      style: 'subheading',
+    });
+  }
   for (const item of uniqueItems) {
     blocks.push({ text: item.title, style: 'subheading' });
     blocks.push({
@@ -2318,8 +2349,8 @@ function testimonyInconsistenciesSection(
     );
     blocks.push({
       text: hasTestimony
-        ? 'No contradictory testimony was identified from the collected statements.'
-        : EMPTY,
+        ? 'No qualifying testimony inconsistency was identified. Mentions of testimony, court opinions, and unrelated documents are not listed here unless two collected deposition or testimony statements disagree on the same factual topic with supporting source links.'
+        : 'No qualifying evidence of testimony inconsistency was identified. This section lists only concrete contradictions between collected deposition or testimony statements for this expert.',
       style: 'note',
     });
     return { id: spec.id, title: spec.title, blocks };
@@ -3435,9 +3466,9 @@ function firstAuthorComparisonBlocks(
   );
   if (rows.length === 0) return [];
   const blocks: ReportBlock[] = [
-    { text: 'First-author and CV comparison', style: 'subheading' },
+    { text: 'CV-listed publications compared with catalogs', style: 'subheading' },
     {
-      text: 'Each CV citation is compared with the catalog record (OpenAlex, PubMed, Crossref, or ORCID) by title, authors, DOI, and PubMed identifier when present. A verified author-position discrepancy means the CV listed the expert first (or in another stated place) and the catalog author list disagrees. “Misrepresentation” is not used unless the catalogs actually disagree with the CV. Equal-contribution notes are kept when the source stated them.',
+      text: 'Each CV citation is compared with the catalog record (OpenAlex, PubMed, Crossref, or ORCID) by title, authors, DOI, and PubMed identifier when present. “Not found in catalogs” means the title was searched and no qualifying match was returned — not that the publication does not exist. A verified author-position discrepancy means the CV listed the expert first (or in another stated place) and the catalog author list disagrees. “Misrepresentation” is not used unless the catalogs actually disagree with the CV. Equal-contribution notes are kept when the source stated them.',
       style: 'note',
     },
   ];

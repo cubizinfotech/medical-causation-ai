@@ -329,7 +329,8 @@ export function catalogSourceFor(
     case 'university':
       return { sourceId: 'university', category: 'profile' };
     case 'publication':
-      return { sourceId: 'other_public_websites', category: 'publication' };
+      // Scholarly records belong under Publications, not Expert Websites.
+      return { sourceId: 'web_search', category: 'publication' };
     case 'profile':
       return { sourceId: 'web_search', category: 'profile' };
     default:

@@ -58,8 +58,12 @@ export function prepareEwiReportInput(
   };
 }
 
-/** Why section 8 is empty: compared, never uploaded, or uploaded but unread. */
-export type CvComparisonState = 'compared' | 'not_uploaded' | 'not_read';
+/** Why section 8 is empty or how comparison ran. */
+export type CvComparisonState =
+  | 'compared'
+  | 'not_uploaded'
+  | 'not_read'
+  | 'found_unreadable';
 
 export function cvComparisonState(result: {
   cvCheck?: EwiInvestigationResult['cvCheck'] | null;
@@ -69,7 +73,14 @@ export function cvComparisonState(result: {
   const cv = result.sourceStatuses?.find(
     (status) => status.sourceId === 'cv_profile',
   );
-  if (/uploaded CV/i.test(cv?.message ?? '')) return 'not_read';
+  const message = cv?.message ?? '';
+  if (/could not be read or parsed for comparison/i.test(message)) {
+    return 'found_unreadable';
+  }
+  if (/uploaded CV/i.test(message)) return 'not_read';
+  if (/public CV or resume URL was found/i.test(message)) {
+    return 'found_unreadable';
+  }
   return 'not_uploaded';
 }
 

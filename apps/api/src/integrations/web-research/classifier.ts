@@ -39,6 +39,7 @@ Rules:
 - Quote exactly. Every "quote" must be copied character-for-character from the page text.
 - Summaries state only what the page says. No opinions, no guesses, no legal conclusions.
 - A claim is something the page says the subject did, advertised, was credentialed in, or was accused of. Mark accusations as type "allegation".
+- kind "advertising" or "ime" is ONLY for paid expert-witness directory listing pages (for example SEAK, JurisPro, ExpertPages, ExpertInstitute, ALM Experts, DRI). The subject's own practice site, personal website, university profile, journal article, or news page is NEVER "advertising" or "ime" — use "expert_website", "university", "publication", or "news" instead even when the page markets forensic or IME services.
 Return ONLY JSON.`;
 
 const KIND_LIST = WEB_SOURCE_KINDS.join(', ');

@@ -509,10 +509,8 @@ describe('EWI 3.10.7 fixture validation', () => {
     );
     expect(depositions).not.toMatch(/Notice of Filing/i);
     expect(depositions).not.toMatch(/deposition of Jane Smith is scheduled/i);
-    const misc = sectionText(document, 'misc');
-    expect(misc).toMatch(/Notice of Filing/);
-    expect(misc).toMatch(/transcript was not retrieved/i);
-    expect(misc).toMatch(/not deposition testimony/i);
+    expect(pleadings).toMatch(/Notice of Filing/);
+    expect(sectionText(document, 'misc')).not.toMatch(/Notice of Filing/);
     expect(sectionText(document, 'overall-findings')).not.toMatch(
       /Notice of Filing/,
     );
@@ -524,7 +522,7 @@ describe('EWI 3.10.7 fixture validation', () => {
     expect(sourceIndex).toMatch(/docket metadata only/);
     expect(sourceIndex).toMatch(/page content read/);
     expect(sourceIndex).not.toMatch(/access: retrieved(?:\.|;|$)/);
-    expect(publications).toMatch(/Catalog record found/i);
+    expect(publications).toMatch(/catalog record/i);
     expect(publications).toMatch(/not a CV comparison/i);
     expect(cv).toMatch(/No CV was uploaded/);
     expect(cv).toMatch(/CV comparison was not performed/);
@@ -535,10 +533,10 @@ describe('EWI 3.10.7 fixture validation', () => {
     const pdf = await service.build(prepared);
     writeFileSync(join(outDir, 'ewi-jason-a-demery-no-cv.pdf'), pdf.buffer);
     const rendered = await pdfText(pdf.buffer);
-    expect(pdf.templateVersion).toBe('3.10.14');
-    expect(rendered).toMatch(/3\.10\.14/);
+    expect(pdf.templateVersion).toBe('3.10.16');
+    expect(rendered).toMatch(/3\.10\.15/);
     expect(rendered).toMatch(/No CV was uploaded/);
-    expect(rendered).toMatch(/Catalog record found/);
+    expect(rendered).toMatch(/catalog record/i);
     expect(rendered).not.toMatch(/No CV versions were collected/);
   }, 20000);
 

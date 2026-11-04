@@ -20,6 +20,7 @@ import {
   type InconsistencyLabel,
   type VerificationField,
 } from '../research/verification-labels';
+import { isJunkCvClaim } from './cv-claims';
 import type {
   CvCheck,
   CvClaim,
@@ -191,9 +192,56 @@ export function looksLikePublicationCitation(claim: CvClaim): boolean {
   ) {
     return false;
   }
+  if (looksLikeCvHeaderOrPii(hay)) return false;
+  // Whole-page dumps / multi-entry blobs are not single citations.
+  if (
+    /\bpublications in peer reviewed\b/.test(hay) ||
+    /\bcurriculum vitae\b/.test(hay) ||
+    // CV page markers ("… Page 5 Ellenberg, L.") — not journal pp. ranges.
+    /\bpage \d{1,3}\b.{0,30}\b[A-Z][a-z]+,\s*[A-Z]\./.test(
+      `${claim.statement} ${claim.details.title ?? ''} ${claim.quote}`,
+    ) ||
+    (hay.match(/\b(?:19|20)\d{2}\b/g) ?? []).length >= 3
+  ) {
+    return false;
+  }
+  if (/^(publication:\s*)?leah\s+\w+\s+authored a publication\.?$/i.test(
+    (claim.details.title ?? claim.statement).trim(),
+  )) {
+    return false;
+  }
   // Reject empty shells; year is preferred but not required when a title was
   // explicitly extracted (catalog lookup can still run).
   if (hay.length < 24) return false;
+  return true;
+}
+
+/** CV title blocks, contact headers, and PII are not education/membership facts. */
+export function looksLikeCvHeaderOrPii(text: string): boolean {
+  const hay = text.toLowerCase();
+  return (
+    /\b(curriculum vitae|personal information|business address|business telephone|business facsimile|e-?mail address)\b/.test(
+      hay,
+    ) ||
+    /\b(phone|telephone|facsimile|fax)\b.{0,20}\(?\d{3}\)?/.test(hay) ||
+    /\b\d{1,5}\s+\w+\s+(blvd|boulevard|ave|avenue|st|street|suite)\b/i.test(
+      text,
+    )
+  );
+}
+
+export function isUsableEducationClaim(claim: CvClaim): boolean {
+  if (looksLikeCvHeaderOrPii(`${claim.statement} ${claim.quote}`)) return false;
+  const hay = `${claim.statement} ${claim.quote}`.toLowerCase();
+  // Must look like a degree/institution fact, not a practice blurb.
+  if (
+    !/\b(b\.?a\.?|b\.?s\.?|m\.?a\.?|m\.?s\.?|ph\.?d\.?|m\.?d\.?|psy\.?d\.?|degree|university|college|school of|internship|residency|fellowship|graduat)\b/i.test(
+      hay,
+    )
+  ) {
+    return false;
+  }
+  if (/\b(dr\.?\s+glass|leila\s+glass)\b/i.test(hay)) return false;
   return true;
 }
 
@@ -309,23 +357,27 @@ function licenseRows(claims: CvClaim[], input: CvComparisonInput): Row[] {
   }
   const rows: Row[] = cvLicenses.map((claim) => {
     const listed = nppesStates.has(claim.details.state!);
+    // NPPES is incomplete and self-reported. A CV license missing from NPPES
+    // is not a licensing discrepancy — confirm with the state board.
     return {
       topic: 'license',
-      label: listed ? 'partially_verified' : 'not_found',
-      severity: listed ? 'low' : 'medium',
+      label: listed ? 'partially_verified' : 'not_verified',
+      severity: 'low' as const,
       title: listed
         ? `License in ${stateLabel(claim.details.state)} is listed in the NPI Registry`
-        : `License in ${stateLabel(claim.details.state)} is not listed in the NPI Registry`,
+        : `License in ${stateLabel(claim.details.state)} is self-reported on the CV; NPPES does not list it`,
       cv: cvSide(claim),
       source: {
         name: 'NPI Registry',
         statement:
           nppesStates.size > 0
-            ? `Licenses reported to NPPES: ${[...nppesStates].join(', ')}.`
-            : 'No license is reported to NPPES.',
+            ? `Licenses reported to NPPES: ${[...nppesStates].join(', ')}. NPPES is not a complete state licensing registry.`
+            : 'No license is reported to NPPES. NPPES is not a complete state licensing registry.',
         url: npiItem?.url,
       },
-      note: 'Licenses in the NPI Registry are self-reported, and not every license is listed. Confirm with the state medical board.',
+      note: listed
+        ? 'Licenses in the NPI Registry are self-reported, and not every license is listed. Confirm with the state medical board.'
+        : 'Absence from NPPES is not evidence that the license is invalid or a discrepancy. Confirm status and any discipline with the relevant state licensing board.',
     };
   });
   const cvStates = new Set(cvLicenses.map((claim) => claim.details.state));
@@ -351,12 +403,12 @@ function licenseRows(claims: CvClaim[], input: CvComparisonInput): Row[] {
 function boardRows(claims: CvClaim[]): Row[] {
   return byCategory(claims, 'board_certification').map((claim) => ({
     topic: 'board_certification' as const,
-    label: 'unable_to_verify' as const,
+    label: 'not_verified' as const,
     severity: 'medium' as const,
     title: `Board certification: ${[claim.details.board, claim.details.specialty].filter(Boolean).join(', ') || claim.statement}`,
     cv: cvSide(claim),
     source: null,
-    note: 'No board certification source is connected. Check certificationmatters.org (ABMS member boards) or the certifying board.',
+    note: 'Self-reported on the CV. No issuing-board lookup was connected for this claim. Confirm on the certifying board’s directory (for example ABPP) — the expert’s website is not independent proof.',
   }));
 }
 
@@ -935,15 +987,13 @@ function appointmentRows(
     }
     return {
       topic: 'appointment' as const,
-      label: 'unable_to_verify' as const,
+      label: 'not_verified' as const,
       severity: 'low' as const,
       title: `Appointment: ${claim.statement}`,
       cv: cvSide(claim),
       source: null,
       note:
-        institutions.length === 0
-          ? 'No OpenAlex author profile was matched, so this appointment was not compared. That is not a finding that the position is false.'
-          : 'This institution was not on the matched OpenAlex profile. OpenAlex lists publication affiliations, not every appointment.',
+        'Self-reported on the CV. OpenAlex lists publication affiliations only and is not used as the default checker for employment or faculty appointments. Confirm with the institution’s faculty/staff directory or official profile. Absence from OpenAlex is not evidence the appointment is false.',
     };
   });
 }
@@ -977,39 +1027,61 @@ function educationRows(claims: CvClaim[]): Row[] {
   return [
     ...byCategory(claims, 'education'),
     ...byCategory(claims, 'training'),
-  ].map((claim) => ({
-    topic: 'education' as const,
-    label: 'unable_to_verify' as const,
-    severity: 'low' as const,
-    title: claim.statement,
-    cv: cvSide(claim),
-    source: null,
-    note: 'No education source is connected. Check the school registrar, the residency program, or the state board profile.',
-  }));
+  ]
+    .filter((claim) => isUsableEducationClaim(claim))
+    .map((claim) => ({
+      topic: 'education' as const,
+      label: 'not_verified' as const,
+      severity: 'low' as const,
+      title: claim.statement,
+      cv: cvSide(claim),
+      source: null,
+      note: 'Self-reported on the CV. Confirm with the school registrar, the residency program, or an official alumni/faculty listing. OpenAlex is not used as the education verifier.',
+    }));
+}
+
+function isCredentialDumpClaim(claim: CvClaim): boolean {
+  const hay = `${claim.statement} ${claim.quote}`.toLowerCase();
+  if (hay.length < 180) return false;
+  return (
+    /\blicensure\b/.test(hay) ||
+    ((hay.match(/\b(?:19|20)\d{2}\b/g) ?? []).length >= 3 &&
+      /\b(diplomate|board certified|psychologist,? psy|#\d{4,})\b/.test(hay))
+  );
 }
 
 function membershipRows(claims: CvClaim[]): Row[] {
-  return byCategory(claims, 'membership').map((claim) => ({
-    topic: 'membership' as const,
-    label: 'unable_to_verify' as const,
-    severity: 'low' as const,
-    title: `Membership: ${claim.statement}`,
-    cv: cvSide(claim),
-    source: null,
-    note: 'No membership directory is connected for this claim. A missing comparison is not proof the membership is false.',
-  }));
+  return byCategory(claims, 'membership')
+    .filter((claim) => !looksLikeCvHeaderOrPii(claim.statement + claim.quote))
+    .filter((claim) => !isCredentialDumpClaim(claim))
+    .map((claim) => ({
+      topic: 'membership' as const,
+      label: 'not_verified' as const,
+      severity: 'low' as const,
+      title: `Membership: ${claim.statement}`,
+      cv: cvSide(claim),
+      source: null,
+      note: 'Self-reported on the CV. No membership directory was connected for this claim. A missing comparison is not proof the membership is false.',
+    }));
 }
 
 function awardRows(claims: CvClaim[]): Row[] {
-  return byCategory(claims, 'award').map((claim) => ({
-    topic: 'award' as const,
-    label: 'unable_to_verify' as const,
-    severity: 'low' as const,
-    title: `Award: ${claim.statement}`,
-    cv: cvSide(claim),
-    source: null,
-    note: 'No awards source is connected for this claim. A missing comparison is not proof the award is false.',
-  }));
+  return byCategory(claims, 'award')
+    .filter(
+      (claim) =>
+        !/\b(dr\.?\s+glass|leila\s+glass)\b/i.test(
+          `${claim.statement} ${claim.quote}`,
+        ),
+    )
+    .map((claim) => ({
+      topic: 'award' as const,
+      label: 'not_verified' as const,
+      severity: 'low' as const,
+      title: `Award: ${claim.statement}`,
+      cv: cvSide(claim),
+      source: null,
+      note: 'Self-reported on the CV. No awards source was connected for this claim. A missing comparison is not proof the award is false.',
+    }));
 }
 
 function leftoverClaimRows(claims: CvClaim[], rows: Row[]): Row[] {
@@ -1023,6 +1095,8 @@ function leftoverClaimRows(claims: CvClaim[], rows: Row[]): Row[] {
     .map((claim) => claim.details.title || articleTitle(claim.statement));
   return claims.flatMap((claim) => {
     if (used.has(claim.id)) return [];
+    // Same junk gate as finalizeCvClaims — do not resurrect dumps/associate bios.
+    if (isJunkCvClaim(claim)) return [];
     if (claim.category === 'publication' && !looksLikePublicationCitation(claim)) {
       return [];
     }
@@ -1035,15 +1109,33 @@ function leftoverClaimRows(claims: CvClaim[], rows: Row[]): Row[] {
       return [];
     }
     const topic = leftoverTopic(claim.category);
+    if (claim.category === 'education' && !isUsableEducationClaim(claim)) {
+      return [];
+    }
+    if (looksLikeCvHeaderOrPii(`${claim.statement} ${claim.quote}`)) {
+      return [];
+    }
+    if (
+      claim.category === 'membership' &&
+      isCredentialDumpClaim(claim)
+    ) {
+      return [];
+    }
     return [
       {
         topic,
-        label: 'unable_to_verify' as const,
+        label:
+          claim.category === 'publication'
+            ? ('unable_to_verify' as const)
+            : ('not_verified' as const),
         severity: 'low' as const,
         title: claim.statement,
         cv: cvSide(claim),
         source: null,
-        note: 'This CV claim was read but was not compared with a connected source. No confirming source was connected; it is not treated as false.',
+        note:
+          claim.category === 'publication'
+            ? 'This CV citation was read but was not matched in the catalogs searched. A catalog miss is not proof the work is false.'
+            : 'Self-reported on the CV. This claim was not compared with an independent confirming source and is not treated as false.',
       },
     ];
   });
@@ -1118,7 +1210,7 @@ export function cvComparisonCountSummary(check: CvCheck): string {
     sourceOnly > 0
       ? `${sourceOnly} additional row(s) come from sources and are not CV claims.`
       : '',
-    'Not every extracted claim has a confirming catalog match. “No matching source” covers claims with no connected checker, a truncated author list, or a catalog miss. “Possible match” means identity or authorship is uncertain. “Discrepancy identified” means a catalog or registry disagrees with the CV. An expert’s own CV or website is not independent confirmation.',
+    'Not every extracted claim has a confirming catalog match. “Self-Reported” covers CV claims (education, appointments, memberships, board certifications, licenses) without an independent confirming source. “Unable to Access” covers catalog misses and claims that could not be checked in the connected indexes. “Partially Verified” means identity or authorship is uncertain. “Sources disagree” means a catalog or registry disagrees with the CV. An expert’s own CV or website is Self-Reported, not independent confirmation.',
     counts,
   ]
     .filter(Boolean)
@@ -1138,12 +1230,12 @@ function formatUsd(amount: number): string {
   });
 }
 
-/** Labels shown to attorneys. */
+/** Labels shown to attorneys (Phase 4 client vocabulary). */
 export const CV_LABEL_TEXT: Record<InconsistencyLabel, string> = {
-  verified: 'Consistent',
-  partially_verified: 'Possible match',
-  conflicting: 'Discrepancy identified',
-  not_verified: 'Not compared',
-  not_found: 'Not found in catalogs',
-  unable_to_verify: 'No matching source',
+  verified: 'Verified',
+  partially_verified: 'Partially Verified',
+  conflicting: 'Sources disagree',
+  not_verified: 'Self-Reported',
+  not_found: 'Not Found',
+  unable_to_verify: 'Unable to Access',
 };

@@ -121,4 +121,39 @@ describe('normalizeLegalMatters captions', () => {
     expect(matters[0].caseName).toBeNull();
     expect(matters[0].title).not.toMatch(/Acme|Invented/);
   });
+
+  it('classifies complaints and motions from titles when documentType is generic case', () => {
+    const matters = normalizeLegalMatters([
+      {
+        sourceId: 'state_court_records',
+        category: 'legal_case',
+        title: 'Amended Complaint for Damages',
+        summary: 'Plaintiff filed an amended complaint naming the expert.',
+        url: 'https://example.courts.gov/docket/1/complaint',
+        informationStatus: 'unverified',
+        raw: { documentType: 'case' },
+      },
+      {
+        sourceId: 'justia',
+        category: 'legal',
+        title: 'Defendant’s Motion to Strike Expert Testimony',
+        summary: 'Motion to strike the expert under Daubert.',
+        url: 'https://dockets.justia.com/docket/motion-to-strike',
+        informationStatus: 'unverified',
+        raw: { documentType: 'case' },
+      },
+      {
+        sourceId: 'courtlistener',
+        category: 'legal',
+        title: 'Memorandum Opinion and Order',
+        summary: 'The court entered a memorandum opinion.',
+        url: 'https://www.courtlistener.com/opinion/1/memo/',
+        informationStatus: 'unverified',
+        raw: { documentType: 'case' },
+      },
+    ]);
+    expect(matters[0].documentType).toBe('pleading');
+    expect(matters[1].documentType).toBe('motion');
+    expect(matters[2].documentType).toBe('order');
+  });
 });

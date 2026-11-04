@@ -56,22 +56,30 @@ function isIrrelevantNoiseRecord(record: WebRecord): boolean {
   if (/\bboard of trustees\b/.test(hay) && /\b(school|academy|college)\b/.test(hay)) {
     return true;
   }
-  // Practice-site associate pages (e.g. /kristen.html, /dylan.html, glassCV.pdf).
+  // Practice-site associate pages (e.g. /kristen.html, /leila-glass, glassCV.pdf).
   if (
-    /\/(kristen|dylan|jesse|fischer|thompson|glass)(\.html?)?$/i.test(path) ||
-    /\/(associates?|team|staff)\/(kristen|dylan|jesse|thompson|glass)/i.test(
+    /\/(kristen|dylan|jesse|fischer|thompson|glass|leila-?glass)(\.html?)?$/i.test(
       path,
     ) ||
-    /(?:^|\/)(kristen|dylan|jesse|fischer|thompson|glass)[_-]?cv(?:\.pdf)?$/i.test(
+    /\/(associates?|team|staff)\/(kristen|dylan|jesse|thompson|glass|leila)/i.test(
       path,
     ) ||
-    /(?:^|\/)c\.?v\.?-?(kristen|dylan|jesse|fischer|thompson|glass)/i.test(path)
+    /(?:^|\/)(kristen|dylan|jesse|fischer|thompson|glass|leila[-_]?glass)[_-]?cv(?:\.pdf)?$/i.test(
+      path,
+    ) ||
+    /(?:^|\/)c\.?v\.?-?(kristen|dylan|jesse|fischer|thompson|glass|leila)/i.test(
+      path,
+    )
   ) {
     return true;
   }
   if (
-    /\b(kristen\s+thompson|leila\s+glass|jesse\s+fischer)\b/.test(hay) &&
-    /\b(curriculum vitae|\bcv\b|resume)\b/.test(hay) &&
+    /\b(kristen\s+thompson|leila\s+glass|jesse\s+fischer|dr\.?\s+glass)\b/.test(
+      hay,
+    ) &&
+    /\b(curriculum vitae|\bcv\b|resume|graduated|nih grants|published research)\b/.test(
+      hay,
+    ) &&
     !/\bleah\s+ellenberg\b/.test(hay.slice(0, 240))
   ) {
     return true;
@@ -82,7 +90,59 @@ function isIrrelevantNoiseRecord(record: WebRecord): boolean {
   ) {
     return true;
   }
+  // School-office / named student-discipline narratives (Ellenberg Goggin noise).
+  // Do NOT drop every special-education / IEP case record — those can be
+  // legitimate court filings where the expert testified. Board-action routing
+  // still excludes school narratives in sectionsFor(discipline).
+  if (
+    /\b(goggin|principal.?s office|sent to the principal)\b/.test(hay) &&
+    /\b(student|school|teacher|classroom)\b/.test(hay)
+  ) {
+    return true;
+  }
   return false;
+}
+
+/** Claims about an associate (Glass, etc.) must not fill the subject’s sections. */
+function claimAboutOtherPerson(claim: WebClaim, record: WebRecord): boolean {
+  const hay = `${claim.text} ${claim.quote}`.toLowerCase();
+  if (!/\b(dr\.?\s+glass|leila\s+glass|kristen\s+thompson|jesse\s+fischer)\b/.test(hay)) {
+    return false;
+  }
+  // If the claim itself centers the associate, drop it even on the practice site.
+  if (/\b(dr\.?\s+glass|leila\s+glass)\b/.test(hay) && !/\bleah\s+ellenberg\b/.test(hay)) {
+    return true;
+  }
+  const pageHay = `${record.title} ${record.summary}`.toLowerCase();
+  return (
+    /\b(leila\s+glass|dr\.?\s+glass)\b/.test(pageHay) &&
+    !/\bleah\s+ellenberg\b/.test(hay.slice(0, 120))
+  );
+}
+
+/** Legal commentary / news about courts is not an Order. */
+function isLegalCommentaryNotOrder(record: WebRecord, claimText: string): boolean {
+  const hay = `${record.url} ${record.title} ${record.summary} ${claimText}`.toLowerCase();
+  if (record.kind === 'news' || record.kind === 'blog') return true;
+  // Avoid bare tokens like "holding" or "update" — real opinions use those words.
+  if (
+    /\b(almost immediately after|courts reject|granted review in|law[- ]?firm (?:blog|newsletter|update)|legal (?:blog|commentary|newsletter)|commentary|newsletter)\b/.test(
+      hay,
+    ) &&
+    !/\b(it is (hereby )?ordered|ordered that|memorandum opinion|final order|opinion of the court)\b/.test(
+      hay,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Book/journal publishers named in citations are not corporate affiliations. */
+function isPublisherNotAffiliation(name: string): boolean {
+  return /\b(informa(?:\s+healthcare(?:\s+usa(?:,?\s*inc\.?)?)?)?|informa plc|jason aronson|springer|elsevier|wiley|routledge|guilford|sage publications|sage publishing|oxford university press|cambridge university press|taylor (&|and) francis|wolters kluwer|lippincott|apa books|american psychiatric)\b/i.test(
+    name,
+  );
 }
 
 /**
@@ -220,7 +280,9 @@ const TOPIC_SECTIONS: Partial<Record<WebClaimTopic, RoutedSectionId[]>> = {
   order: ['orders'],
   pleading: ['pleadings'],
   deposition: ['depositions'],
-  testimony: ['testimony-inconsistencies'],
+  // Single mentions of testimony are not inconsistencies. Contradictions are
+  // built only from paired deposition/testimony statements in the legal dossier.
+  // (topic kept for claim extraction; no automatic report section.)
   university_rules: ['university-rules'],
 };
 
@@ -257,6 +319,17 @@ function sectionsFor(claim: WebClaim): RoutedSectionId[] {
   const topic = claim.topic ?? 'other';
   const text = `${claim.text} ${claim.quote}`;
   if (topic === 'discipline' || topic === 'criminal') {
+    // School / student / IEP narratives are not state licensing board actions.
+    if (
+      /\b(student|principal|iep|special education|classroom|teacher|goggin)\b/i.test(
+        text,
+      ) &&
+      !/\b(license|licensure|medical board|psychology board|board of medicine)\b/i.test(
+        text,
+      )
+    ) {
+      return [];
+    }
     if (
       topic === 'criminal' ||
       /\b(arrest|convict|criminal|charged|felony|misdemeanor)\w*/i.test(text)
@@ -264,16 +337,19 @@ function sectionsFor(claim: WebClaim): RoutedSectionId[] {
       return ['criminal'];
     }
     if (
-      /\b(board|licens|sanction|revok|suspen|reprimand|probation|administrative complaint|disciplin)\w*/i.test(
+      /\b(administrative complaint|licensing board|medical board|psychology board|board of medicine|board of psychology|license (?:revoked|suspended|sanctioned)|licensure)\b/i.test(
         text,
-      )
+      ) ||
+      (/\b(sanction|revok|suspen|reprimand|probation)\w*/i.test(text) &&
+        /\b(license|licensure|board)\b/i.test(text))
     ) {
       return ['board-actions'];
     }
-    if (/\b(malpractice|lawsuit|sued|complaint|negligen)\w*/i.test(text)) {
+    if (/\b(malpractice|lawsuit|sued|complaint against|negligen)\w*/i.test(text)) {
       return ['lawsuits'];
     }
-    return ['board-actions'];
+    // Generic "disciplined" without a licensing board → do not invent board actions.
+    return [];
   }
   const sections = [...(TOPIC_SECTIONS[topic] ?? [])];
   // Fees and rates, whatever page type they appear on.
@@ -386,6 +462,10 @@ export function caseCaption(title: string, summary = ''): string {
 
 function courtDocumentSection(record: WebRecord): RoutedSectionId | null {
   const text = `${record.title} ${record.url} ${record.summary}`.toLowerCase();
+  // Law-firm blogs and news commentary about courts are not court orders.
+  if (isLegalCommentaryNotOrder(record, text)) {
+    return null;
+  }
   // A title that opens with "Order on motion…" is an order, not a motion.
   if (
     /^\W*(order|opinion|ruling|judgment|memorandum opinion)\b/i.test(
@@ -493,6 +573,31 @@ export function routeWebFindings(
     let claimedDocumentType = false;
     for (const claim of record.claims) {
       const basis = claim.basis ?? 'third_party';
+      if (claimAboutOtherPerson(claim, record)) continue;
+      const claimHay = `${claim.text} ${claim.quote}`;
+      if (
+        claim.topic === 'education' &&
+        (/\b(curriculum vitae|personal information|business address|business telephone)\b/i.test(
+          claimHay,
+        ) ||
+          claimAboutOtherPerson(claim, record))
+      ) {
+        continue;
+      }
+      // Whole CV credential blocks mis-tagged as membership/board/license.
+      if (
+        (claim.topic === 'membership' ||
+          claim.topic === 'board_certification' ||
+          claim.topic === 'license') &&
+        claimHay.length > 220 &&
+        (/\blicensure\b/i.test(claimHay) ||
+          ((claimHay.match(/\b(?:19|20)\d{2}\b/g) ?? []).length >= 3 &&
+            /\b(diplomate|board certified|psychologist,? psy)\b/i.test(
+              claimHay,
+            )))
+      ) {
+        continue;
+      }
       if (
         claim.topic === 'criminal' &&
         !CRIMINAL_RECORD_KINDS.has(record.kind)
@@ -522,6 +627,15 @@ export function routeWebFindings(
         if (
           CREDENTIAL_SECTIONS.has(sectionId) &&
           record.match.level !== 'strong'
+        ) {
+          continue;
+        }
+        if (
+          sectionId === 'orders' &&
+          isLegalCommentaryNotOrder(
+            record,
+            `${claim.text} ${claim.quote}`,
+          )
         ) {
           continue;
         }
@@ -892,6 +1006,14 @@ export function routeWebFindings(
   // Businesses named on pages that name the expert.
   const companyNames = new Set<string>();
   for (const tie of dossier.companies ?? []) {
+    if (isPublisherNotAffiliation(tie.name)) continue;
+    // Citation lines like "New York: Informa Healthcare USA, Inc., 2008."
+    if (
+      /\b(new york|london|oxford|cambridge)\s*:\s*/i.test(tie.quote ?? '') ||
+      /\b(19|20)\d{2}\.\s*$/.test((tie.quote ?? '').trim())
+    ) {
+      continue;
+    }
     const key = tie.name.toLowerCase();
     const record = dossier.records.find((r) => r.url === tie.url) ?? null;
     const first = !companyNames.has(key);

@@ -17,7 +17,7 @@ import {
 import { parsePersonName } from './person-name';
 
 const MAX_CANDIDATES = 5;
-const MAX_WORKS = 12;
+const MAX_WORKS = 40;
 
 /**
  * ORCID Public API. A name hit is a candidate until affiliation, specialty,

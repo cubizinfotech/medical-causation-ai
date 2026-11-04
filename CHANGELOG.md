@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-11-04): EWI report 3.10.16 — Ellenberg accuracy (education, licensing, pubs, orders, corporate, CV)
+
+- Education no longer shows CV title blocks, personal address, or phone as degree findings; usable education claims require a degree/institution cue and are labelled Self-Reported pending registrar/official confirmation.
+- School/IEP/student-discipline narratives (e.g. Goggin/principal’s office) are excluded from State Licensing/Board Actions; board-action routing requires licensing-board cues.
+- Associate bios (Leila Glass and similar) are filtered from the subject’s publications, education, and related sections.
+- Legal commentary and law-firm blog posts about court decisions are not classified as Orders.
+- Book/journal publishers named in citations (e.g. Informa Healthcare) are not treated as corporate affiliations of the expert.
+- A CV license missing from NPPES is Self-Reported / incomplete registry, not an inconsistency; confirm with the state board.
+- Academic appointments and education claims are not defaulted to Unable to Access solely because OpenAlex has no match; OpenAlex is publication-affiliation context only when it lists the institution.
+- Multi-entry CV page dumps and “authored a publication” shells are dropped from publication claim extraction.
+- Pre-push hardening: whole-record school noise limited to Goggin/principal-office patterns (IEP/special-ed court filings are not dropped wholesale); order commentary filter no longer treats bare “holding”/“update” as non-orders; leftover CV rows no longer resurrect junk dumps; website CVs run through `finalizeCvClaims`; Glass bio filter keeps bibliographic co-authorship; Informa citation publishers excluded from Corporate.
+- Remaining limits unchanged: non-subscribed LexisNexis/TrialSmith/PACER, login-gated CVs, state-board APIs beyond Florida, historic frozen PDFs.
+
+### Changed (2026-11-04): EWI report 3.10.15 — accuracy, classification, verification labels
+
+- Expert Witness Advertising accepts only paid directory hosts (SEAK, JurisPro, ExpertPages, etc.). Practice sites labeled `ime`/`advertising` by the model are reclassified and excluded from those catalog sources.
+- Pleadings/motions/orders are typed from document titles so complaints and motions do not default to generic `case` and dump into Miscellaneous.
+- Testimony Inconsistencies lists only paired deposition/testimony statements that disagree on an identifiable factual topic; lone “expert witness” marketing mentions are not routed there.
+- Public CV URLs drive comparison when readable (including publication title lookup). Found-but-unreadable CVs get an accurate status instead of implying no CV work ran.
+- OpenAlex and ORCID retrieve up to ~40 confirmed-author works; Publications section separates CV-listed vs independently retrieved records.
+- APA/CHEA/USDE accreditation queries seed from institutions named in attorney context; University Accreditation section matches stored `university` category evidence and always shows the query trail when available.
+- Report verification display uses Phase 4 client vocabulary (Verified, Self-Reported, Not Found, Unable to Access, Not Independently Verified, Partially Verified) without treating own-site claims as independent credential proof.
+- Remaining limits unchanged: login/CAPTCHA/paywall CVs, non-Florida license boards, unpaid PACER/TrialSmith/LexisNexis, YouTube third-party captions. Historic frozen PDFs are not overwritten.
+
 ### Changed (2026-10-28): EWI report 3.10.12 — download rebuild, labels, noise, PubMed
 
 - PDF download rebuilds from stored investigation findings when the on-disk file is missing, empty, or on an older template (fixes common “Download failed” after a completed job). Word export remains available from the same findings.

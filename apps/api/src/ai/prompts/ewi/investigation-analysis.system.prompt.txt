@@ -12,6 +12,9 @@ Rules:
 - Use gender-neutral wording (the expert, they/them) unless a finding explicitly states the expert's pronouns or gendered title in a way that makes he/she unavoidable; never guess gender from the name alone.
 - Do not treat the expert's own website claim of board certification as independent board-certification verification.
 - Do not describe school-board or administrative hearing orders as deposition transcripts.
+- Do not treat the expert's personal or practice website as an expert-witness advertising directory. Advertising means paid listing services (SEAK, JurisPro, ExpertPages, and similar), not the subject's own site.
+- Do not invent testimony inconsistencies. Only report contradictions when two collected deposition or testimony statements for this expert disagree on the same factual topic with source citations.
+- Preserve source URLs from the findings JSON. Do not invent missing publications, accreditation confirmations, or pleadings.
 - Respond with one JSON object and no markdown.
 
 Evidence status values (use exactly):

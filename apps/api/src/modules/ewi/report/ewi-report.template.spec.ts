@@ -46,7 +46,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.14');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.16');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -255,7 +255,7 @@ describe('EWI report template', () => {
       'Licenses reported to the NPI Registry (NPI 1871685487)',
     );
     expect(text('overall-findings')).toContain(
-      'Confirmed by source · Source refs: f2',
+      'Verified · Source refs: f2',
     );
     expect(text('questions')).toBe('');
     expect(text('summary')).toContain(
@@ -1136,8 +1136,8 @@ describe('EwiWordReportService', () => {
         .join('\n') ?? '';
     expect(cv).toMatch(/2 unique CV claim\(s\) were read/);
     expect(cv).toMatch(/2 compared, 0 uncompared/);
-    expect(cv).toMatch(/Consistent: 1; No matching source: 1/);
-    expect(cv).toMatch(/\[Consistent\]/);
+    expect(cv).toMatch(/Verified: 1; Unable to Access: 1/);
+    expect(cv).toMatch(/\[Verified\]/);
     expect(cv).not.toMatch(
       /Not confirmed in the catalogs searched: Memory after pediatric TBI/,
     );

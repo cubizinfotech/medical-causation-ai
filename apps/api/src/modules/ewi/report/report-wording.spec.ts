@@ -43,12 +43,12 @@ describe('report wording', () => {
     ).toBe('The NPI Registry lists an Ohio license.');
   });
 
-  it('labels only outcomes worth acting on', () => {
-    expect(findingLabel('verified')).toBe('Confirmed by source');
+  it('labels verification outcomes with Phase 4 client vocabulary', () => {
+    expect(findingLabel('verified')).toBe('Verified');
     expect(findingLabel('conflicting')).toBe('Sources disagree');
-    expect(findingLabel('restricted')).toMatch(/Restricted/);
-    expect(findingLabel('not_verified')).toBeNull();
-    expect(findingLabel('not_found')).toBeNull();
+    expect(findingLabel('restricted')).toBe('Unable to Access');
+    expect(findingLabel('not_verified')).toBe('Not Independently Verified');
+    expect(findingLabel('not_found')).toBe('Not Found');
   });
 
   it('drops the "not verified" caution from a question basis', () => {
@@ -81,19 +81,19 @@ describe('report wording', () => {
 
   it('states an evidence-standard status on every collected record', () => {
     expect(evidenceStatusLine(item())).toBe(
-      'Status: NPI Registry record retrieved. Source: npi_registry.',
+      'Status: Self-Reported (NPI Registry record retrieved). Source: npi_registry.',
     );
     expect(evidenceStatusLine(item({ informationStatus: 'verified' }))).toBe(
-      'Status: Confirmed by source. Source: npi_registry.',
+      'Status: Verified. Source: npi_registry.',
     );
     expect(evidenceStatusLine(item({ informationStatus: 'conflicting' }))).toBe(
       'Status: Sources disagree. Source: npi_registry.',
     );
     expect(evidenceStatusLine(item({ access: 'restricted' }))).toBe(
-      'Status: Restricted source (body not stored). Source: npi_registry.',
+      'Status: Unable to Access. Source: npi_registry.',
     );
     expect(evidenceStatusLine(item({ informationStatus: 'unavailable' }))).toBe(
-      'Status: Not found. Source: npi_registry.',
+      'Status: Not Found. Source: npi_registry.',
     );
     expect(
       evidenceStatusLine(
@@ -104,7 +104,7 @@ describe('report wording', () => {
         }),
       ),
     ).toBe(
-      'Status: Catalog record found (not a CV comparison). Source: pubmed.',
+      'Status: Verified (catalog record; not a CV comparison). Source: pubmed.',
     );
     expect(sourceIndexStatus(item())).toBe(
       '; access: catalog record retrieved',

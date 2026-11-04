@@ -113,8 +113,18 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * 3.10.14: CV/vita pages never fill university forensic-policy; ABPP/AACN
  * stay directories not IME ads; drop society-membership blurbs as pubs;
  * soften social “independently verified” wording.
+ * 3.10.15: paid-directory-only advertising gate (LLM kind cannot promote
+ * practice sites); pleadings title heuristics; testimony inconsistencies
+ * require paired sworn statements; public CV compare + publication lookup;
+ * OpenAlex/ORCID recall raised; APA/CHEA seeded from context; publication
+ * kind out of Expert Websites; Phase 4 verification display labels.
+ * 3.10.16: CV header/PII out of Education; school/IEP (Goggin) out of board
+ * actions; associate (Glass) claims filtered; legal commentary ≠ Orders;
+ * publishers ≠ corporate affiliations; NPPES miss ≠ license discrepancy;
+ * appointments/education Self-Reported (not OpenAlex Unable to Access);
+ * junk multi-entry CV publication dumps dropped.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.10.14';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.16';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis, TrialSmith, and other licensed databases are searched only when authorized for the investigation; licensed PDFs are not stored unless legally permitted.';

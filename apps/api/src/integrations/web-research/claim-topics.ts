@@ -418,8 +418,10 @@ const RULES: readonly TopicRule[] = [
   },
   {
     topic: 'testimony',
+    // Marketing copy that says "expert witness" is not testimony.
+    // Require sworn/hearing language or examination of the witness.
     pattern:
-      /\b(?:testified|testimony|took the stand|direct examination|cross-examination|expert witness)\b/i,
+      /\b(?:testified (?:that|to|under|before|at)|sworn testimony|trial testimony|hearing testimony|took the stand|direct examination|cross[- ]examination|testimony (?:was|is|of|regarding|concerning))\b/i,
     kinds: COURTISH,
   },
   {
@@ -545,6 +547,21 @@ const PROFILE_KINDS: ReadonlySet<WebSourceKind> = new Set([
 
 const MAX_PER_TOPIC = 3;
 const MAX_FACTS = 16;
+/** Curriculum vitae / resume pages list many publications; raise caps. */
+const CV_MAX_PER_TOPIC = 40;
+const CV_MAX_FACTS = 80;
+
+function pageLooksLikeCurriculumVitae(
+  url: string,
+  title: string | null,
+  text: string,
+): boolean {
+  const hay = `${url} ${title ?? ''} ${text.slice(0, 2500)}`.toLowerCase();
+  return (
+    /\b(curriculum vitae|\bcv\b|resume)\b/.test(hay) ||
+    /\.pdf($|\?)/i.test(url)
+  );
+}
 
 /**
  * Statements on a page that fall under a report topic. Each quote is a
@@ -568,6 +585,13 @@ export function extractFacts(input: FactInput): WebClaim[] {
   const ownProfile =
     (input.ownPage || PROFILE_KINDS.has(input.kind) || pageIsSubjectProfile) &&
     !directoryLike;
+  const cvPage = pageLooksLikeCurriculumVitae(
+    input.url,
+    input.title,
+    input.text,
+  );
+  const maxFacts = cvPage ? CV_MAX_FACTS : MAX_FACTS;
+  const maxPerTopic = cvPage ? CV_MAX_PER_TOPIC : MAX_PER_TOPIC;
 
   const claims: WebClaim[] = [];
   const perTopic = new Map<WebClaimTopic, number>();
@@ -583,7 +607,7 @@ export function extractFacts(input: FactInput): WebClaim[] {
       /policy|handbook|coi|conflict/i.test(input.url));
 
   for (let i = 0; i < pieces.length; i++) {
-    if (claims.length >= MAX_FACTS) break;
+    if (claims.length >= maxFacts) break;
     const piece = pieces[i];
     const namesSubject = quoteNamesSubject(piece, input.subject.name);
     const namesOther = quoteNamesOtherPerson(piece, input.subject.name);
@@ -591,7 +615,9 @@ export function extractFacts(input: FactInput): WebClaim[] {
     if (!ownProfile && !namesSubject && !pageLooksLikePolicy) continue;
     for (const rule of RULES) {
       if (rule.kinds && !rule.kinds.includes(input.kind)) continue;
-      if ((perTopic.get(rule.topic) ?? 0) >= MAX_PER_TOPIC) continue;
+      const topicCap =
+        cvPage && rule.topic === 'publication' ? CV_MAX_PER_TOPIC : maxPerTopic;
+      if ((perTopic.get(rule.topic) ?? 0) >= topicCap) continue;
       const hit = new RegExp(rule.pattern.source, rule.pattern.flags).exec(
         piece,
       );

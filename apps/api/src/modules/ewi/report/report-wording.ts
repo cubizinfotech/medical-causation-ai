@@ -17,11 +17,13 @@ const UNVERIFIED =
 const SINGLE_ACCOUNT = /\bCould not verify a single account\.\s*/gi;
 
 const FINDING_LABEL: Partial<Record<EwiAssessment, string>> = {
-  verified: 'Confirmed by source',
-  partially_verified: 'Partly matched',
+  verified: 'Verified',
+  partially_verified: 'Partially Verified',
   conflicting: 'Sources disagree',
-  restricted: 'Restricted source; content not stored',
-  unavailable: 'Source not queried',
+  restricted: 'Unable to Access',
+  unavailable: 'Unable to Access',
+  not_found: 'Not Found',
+  not_verified: 'Not Independently Verified',
 };
 
 /** The label of an overall finding, or null when there is nothing to flag. */
@@ -77,23 +79,31 @@ export function questionBasis(basis: string): string {
  * never treated as independent verification.
  */
 export function evidenceStatusLine(item: ExpertEvidenceItem): string {
+  const ownSite =
+    item.sourceId === 'expert_website' ||
+    item.sourceId === 'cv_profile' ||
+    item.sourceId === 'other_public_websites' ||
+    item.category === 'cv' ||
+    item.category === 'website';
   const status =
     item.access === 'restricted'
-      ? 'Restricted source (body not stored)'
+      ? 'Unable to Access'
       : item.informationStatus === 'conflicting'
         ? 'Sources disagree'
         : item.informationStatus === 'verified'
-          ? 'Confirmed by source'
+          ? 'Verified'
           : item.informationStatus === 'unavailable'
-            ? 'Not found'
+            ? 'Not Found'
             : item.category === 'publication' &&
                 ['pubmed', 'openalex', 'crossref', 'orcid'].includes(
                   item.sourceId,
                 )
-              ? 'Catalog record found (not a CV comparison)'
+              ? 'Verified (catalog record; not a CV comparison)'
               : item.sourceId === 'npi_registry'
-                ? 'NPI Registry record retrieved'
-                : 'Reported by source only';
+                ? 'Self-Reported (NPI Registry record retrieved)'
+                : ownSite
+                  ? 'Self-Reported'
+                  : 'Not Independently Verified';
   return `Status: ${status}. Source: ${item.sourceId}.`;
 }
 

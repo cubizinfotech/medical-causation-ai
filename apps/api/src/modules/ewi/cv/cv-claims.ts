@@ -307,6 +307,7 @@ export function finalizeCvClaims(
   let publications = 0;
   const kept: Array<Omit<CvClaim, 'id'>> = [];
   for (const claim of drafts) {
+    if (isJunkCvClaim(claim)) continue;
     const key = `${claim.category}|${normalizeForMatch(claim.details.title ?? claim.statement)}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -318,4 +319,63 @@ export function finalizeCvClaims(
     if (kept.length >= MAX_CLAIMS) break;
   }
   return kept.map((claim, index) => ({ id: `cv-${index + 1}`, ...claim }));
+}
+
+/**
+ * Drop CV title blocks, contact headers, multi-entry dumps, and associate bios.
+ * Shared by finalize and leftover comparison so filtered claims are not
+ * re-emitted as Self-Reported.
+ */
+export function isJunkCvClaim(claim: Omit<CvClaim, 'id'>): boolean {
+  const hay = `${claim.statement} ${claim.quote} ${claim.details.title ?? ''}`.toLowerCase();
+  if (
+    /\b(curriculum vitae|personal information|business address|business telephone|business facsimile|e-?mail address)\b/.test(
+      hay,
+    )
+  ) {
+    return true;
+  }
+  if (claim.category === 'publication') {
+    if (/\bpublications in peer reviewed\b/.test(hay)) return true;
+    if (/\bpage \d+\b/.test(hay) && hay.length > 280) return true;
+    if ((hay.match(/\b(?:19|20)\d{2}\b/g) ?? []).length >= 3) return true;
+    if (/authored a publication\.?$/.test(hay)) return true;
+    // Associate bios mis-tagged as publications — keep bibliographic co-authorship.
+    if (
+      /\b(dr\.?\s+glass|leila\s+glass)\b/i.test(hay) &&
+      /\b(honored|graduated|her published|nih grants|dr\.?\s+glass was|in addition, dr\.?\s+glass)\b/i.test(
+        hay,
+      )
+    ) {
+      return true;
+    }
+  }
+  if (
+    claim.category === 'education' &&
+    !/\b(b\.?a\.?|b\.?s\.?|m\.?a\.?|m\.?s\.?|ph\.?d\.?|m\.?d\.?|psy\.?d\.?|degree|university|college|internship|residency|fellowship)\b/i.test(
+      hay,
+    )
+  ) {
+    return true;
+  }
+  // Extractor sometimes dumps whole CV credential blocks into membership/board.
+  if (
+    (claim.category === 'membership' ||
+      claim.category === 'board_certification' ||
+      claim.category === 'license') &&
+    hay.length > 220 &&
+    (/\blicensure\b/.test(hay) ||
+      ((hay.match(/\b(?:19|20)\d{2}\b/g) ?? []).length >= 3 &&
+        /\b(diplomate|board certified|psychologist,? psy)\b/.test(hay)))
+  ) {
+    return true;
+  }
+  // Associate bio claims (not bibliographic co-authorship).
+  if (
+    claim.category !== 'publication' &&
+    /\b(dr\.?\s+glass|leila\s+glass)\b/i.test(hay)
+  ) {
+    return true;
+  }
+  return false;
 }
