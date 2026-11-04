@@ -1152,7 +1152,8 @@ export function extractionFromWebsiteCv(
     for (const line of bibliographyLinesFromText(
       `${record.title}\n${record.summary}`,
     )) {
-      if (claims.filter((c) => c.category === 'publication').length >= 40) break;
+      if (claims.filter((c) => c.category === 'publication').length >= 40)
+        break;
       const title = publicationTitleFromText(line);
       if (!title || title.length < 12) continue;
       if (
@@ -1185,7 +1186,13 @@ export function extractionFromWebsiteCv(
     });
   }
   const finalized = finalizeCvClaims(
-    claims.map(({ id: _id, ...rest }) => rest),
+    claims.map(({ category, statement, details, page, quote }) => ({
+      category,
+      statement,
+      details,
+      page,
+      quote,
+    })),
   );
   if (finalized.length === 0) return null;
   return {
@@ -1230,10 +1237,7 @@ function publicationTitleFromText(text: string): string | undefined {
   return cleaned.slice(0, 180);
 }
 
-function isWebsiteCvRecord(
-  record: WebRecord,
-  expertName?: string,
-): boolean {
+function isWebsiteCvRecord(record: WebRecord, expertName?: string): boolean {
   if (record.match.level !== 'strong') return false;
   if (record.read !== 'read' && !(record.claims && record.claims.length > 0)) {
     return false;
@@ -1257,10 +1261,7 @@ function isWebsiteCvRecord(
   return cvRecordNamesSubject(record, expertName);
 }
 
-function scoreWebsiteCvRecord(
-  record: WebRecord,
-  expertName?: string,
-): number {
+function scoreWebsiteCvRecord(record: WebRecord, expertName?: string): number {
   const parsed = parsePersonName(expertName ?? '');
   const surname = (parsed?.last ?? '').toLowerCase().replace(/[^a-z]/g, '');
   const first = (parsed?.first ?? '').toLowerCase().replace(/[^a-z]/g, '');
@@ -1312,15 +1313,15 @@ function isOtherPersonCvRecord(
   const summaryHead = record.summary.slice(0, 400).toLowerCase();
   // Filename like Jesse+Fischer+CV.pdf — reject unless this is the expert’s
   // own host (where a generic cv.pdf can still be theirs).
-  if (file.includes('cv') || file.includes('resume') || file.includes('vitae')) {
+  if (
+    file.includes('cv') ||
+    file.includes('resume') ||
+    file.includes('vitae')
+  ) {
     if (surname && !file.includes(surname) && !onOwnHost) return true;
   }
   if (/\b(curriculum vitae|resume)\b/.test(title)) {
-    if (
-      surname &&
-      !title.includes(parsed.last.toLowerCase()) &&
-      !onOwnHost
-    ) {
+    if (surname && !title.includes(parsed.last.toLowerCase()) && !onOwnHost) {
       return true;
     }
   }
@@ -1344,10 +1345,7 @@ function isOtherPersonCvRecord(
   return false;
 }
 
-function cvRecordNamesSubject(
-  record: WebRecord,
-  expertName?: string,
-): boolean {
+function cvRecordNamesSubject(record: WebRecord, expertName?: string): boolean {
   const parsed = parsePersonName(expertName ?? '');
   if (!parsed) return true;
   const surname = parsed.last.toLowerCase();
