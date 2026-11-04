@@ -1,4 +1,30 @@
-import { createCanvas } from '@napi-rs/canvas';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
+
+/** Prefer a real TTF so scanned-PDF OCR tests work on headless Linux CI. */
+function registerScannedTestFont(): string {
+  const family = 'EwiScannedTestSans';
+  if (GlobalFonts.has(family)) return family;
+  const candidates = [
+    // Shipped with pdfjs-dist (workspace dependency) — available in CI.
+    join(
+      dirname(require.resolve('pdfjs-dist/package.json')),
+      'standard_fonts',
+      'LiberationSans-Regular.ttf',
+    ),
+    // Common system fallbacks
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+    'C:\\Windows\\Fonts\\arial.ttf',
+  ];
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    GlobalFonts.registerFromPath(path, family);
+    return family;
+  }
+  return 'sans-serif';
+}
 
 /**
  * Builds a small text PDF for tests: one entry per page, each a list of
@@ -61,17 +87,19 @@ export function makeScannedTestPdf(
 ): Buffer {
   const width = 1275;
   const height = 1650;
+  const fontFamily = registerScannedTestFont();
   const images = pages.map((lines) => {
     const canvas = createCanvas(width, height);
     const context = canvas.getContext('2d');
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, width, height);
     context.fillStyle = '#111111';
-    context.font = '30px serif';
+    // Larger sans-serif glyphs OCR more reliably than thin serif fallbacks.
+    context.font = `bold 40px ${fontFamily}`;
     lines.forEach((line, index) =>
-      context.fillText(line, 110, 160 + index * 48),
+      context.fillText(line, 110, 180 + index * 64),
     );
-    return canvas.toBuffer('image/jpeg', 85);
+    return canvas.toBuffer('image/jpeg', 95);
   });
 
   const fontId = 3;

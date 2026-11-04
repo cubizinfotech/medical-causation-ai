@@ -420,8 +420,9 @@ const RULES: readonly TopicRule[] = [
     topic: 'testimony',
     // Marketing copy that says "expert witness" is not testimony.
     // Require sworn/hearing language or examination of the witness.
+    // "testified for the defense/plaintiff" is genuine news/court language.
     pattern:
-      /\b(?:testified (?:that|to|under|before|at)|sworn testimony|trial testimony|hearing testimony|took the stand|direct examination|cross[- ]examination|testimony (?:was|is|of|regarding|concerning))\b/i,
+      /\b(?:testified (?:that|to|under|before|at|for|as)|sworn testimony|trial testimony|hearing testimony|took the stand|direct examination|cross[- ]examination|testimony (?:was|is|of|regarding|concerning))\b/i,
     kinds: COURTISH,
   },
   {
@@ -558,8 +559,7 @@ function pageLooksLikeCurriculumVitae(
 ): boolean {
   const hay = `${url} ${title ?? ''} ${text.slice(0, 2500)}`.toLowerCase();
   return (
-    /\b(curriculum vitae|\bcv\b|resume)\b/.test(hay) ||
-    /\.pdf($|\?)/i.test(url)
+    /\b(curriculum vitae|\bcv\b|resume)\b/.test(hay) || /\.pdf($|\?)/i.test(url)
   );
 }
 
