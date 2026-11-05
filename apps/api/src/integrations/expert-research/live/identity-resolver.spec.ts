@@ -319,9 +319,14 @@ describe('parseCityState', () => {
       city: 'Charleston',
       state: 'WV',
     });
+    // Bare state names (including multi-word "New York") are state-only.
     expect(parseCityState('New York')).toEqual({
+      city: '',
+      state: 'NY',
+    });
+    expect(parseCityState('New York, NY')).toEqual({
       city: 'New York',
-      state: null,
+      state: 'NY',
     });
   });
 });

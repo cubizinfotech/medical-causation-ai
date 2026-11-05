@@ -534,7 +534,9 @@ describe('EWI 3.10.7 fixture validation', () => {
     writeFileSync(join(outDir, 'ewi-jason-a-demery-no-cv.pdf'), pdf.buffer);
     const rendered = await pdfText(pdf.buffer);
     expect(pdf.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
-    expect(rendered).toMatch(/3\.10\.16/);
+    expect(rendered).toMatch(
+      new RegExp(EWI_REPORT_TEMPLATE_VERSION.replace(/\./g, '\\.')),
+    );
     expect(rendered).toMatch(/No CV was uploaded/);
     expect(rendered).toMatch(/catalog record/i);
     expect(rendered).not.toMatch(/No CV versions were collected/);
