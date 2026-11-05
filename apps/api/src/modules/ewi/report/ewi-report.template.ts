@@ -379,10 +379,7 @@ export function buildEwiReportDocument(input: {
   identity?: ExpertIdentityResolution | null;
   cvCheck?: CvCheck | null;
   cvComparisonState?:
-    | 'compared'
-    | 'not_uploaded'
-    | 'not_read'
-    | 'found_unreadable';
+    'compared' | 'not_uploaded' | 'not_read' | 'found_unreadable';
   /** Free text the attorney added to the intake form. */
   additionalContext?: string | null;
   /** Global web research: candidates, pages, coverage and limits. */
@@ -395,6 +392,7 @@ export function buildEwiReportDocument(input: {
   const practiceState = parseCityState(input.city).state;
   const routedWeb = routeWebFindings(input.webResearch, {
     stateCodes: practiceState ? [practiceState] : [],
+    expertName: input.expertName,
   });
   const tracker: ClaimTracker = {
     claimed: new Set<number>(),
@@ -1054,15 +1052,10 @@ function withWebFindings(
     own.some((block) => block.style !== 'note' && block.style !== 'citation') ||
     Boolean(
       verification &&
-        (section.id === 'board-certifications' || section.id === 'licenses'),
+      (section.id === 'board-certifications' || section.id === 'licenses'),
     );
   if (!hasFindingBlocks) {
-    const emptyLine = coverageLine(
-      dossier,
-      section.id,
-      coverage,
-      expertName,
-    );
+    const emptyLine = coverageLine(dossier, section.id, coverage, expertName);
     blocks.push({
       text: emptyLine,
       style: 'note',
@@ -1386,10 +1379,7 @@ function summarySection(
     identity?: ExpertIdentityResolution | null;
     cvCheck?: CvCheck | null;
     cvComparisonState?:
-      | 'compared'
-      | 'not_uploaded'
-      | 'not_read'
-      | 'found_unreadable';
+      'compared' | 'not_uploaded' | 'not_read' | 'found_unreadable';
     discrepancies: ExpertDiscrepancy[];
     websiteCvUrls?: string[];
   },
@@ -1506,6 +1496,14 @@ const WEB_BASIS_RANK: Record<RoutedFinding['basis'], number> = {
   record: 4,
 };
 
+const SUMMARY_OMIT_SUBJECT_STATED: ReadonlySet<RoutedSectionId> = new Set([
+  'certification-orgs',
+  'publications',
+  'board-certifications',
+  'licenses',
+  'memberships',
+]);
+
 /** One line per section the web research filled, with who stands behind it. */
 function webSummaryLines(
   routed: Map<RoutedSectionId, RoutedFinding[]>,
@@ -1517,6 +1515,16 @@ function webSummaryLines(
     if (!list || list.length === 0) continue;
     const strongList = [...list]
       .filter((finding) => finding.matchLevel === 'strong')
+      .filter((finding) => {
+        // Own-site credential noise stays out of Exec Summary / Overall.
+        if (
+          SUMMARY_OMIT_SUBJECT_STATED.has(sectionId) &&
+          finding.basis === 'subject_stated'
+        ) {
+          return false;
+        }
+        return true;
+      })
       .sort(
         (left, right) =>
           WEB_BASIS_RANK[left.basis] - WEB_BASIS_RANK[right.basis],
@@ -1856,8 +1864,9 @@ export function publicCvUrlsFromWeb(
     if (surname && file.includes(surname)) score += 4;
     scored.push({ url: record.url, score });
   }
-  return [...new Set(scored.sort((a, b) => b.score - a.score).map((r) => r.url))]
-    .slice(0, 5);
+  return [
+    ...new Set(scored.sort((a, b) => b.score - a.score).map((r) => r.url)),
+  ].slice(0, 5);
 }
 
 /** Prefer a full statement over a truncated page title in the summary. */
@@ -1877,15 +1886,10 @@ function summaryHeadline(lead: RoutedFinding): string {
 
 function cvOmissionLine(
   state:
-    | 'compared'
-    | 'not_uploaded'
-    | 'not_read'
-    | 'found_unreadable'
-    | undefined,
+    'compared' | 'not_uploaded' | 'not_read' | 'found_unreadable' | undefined,
   websiteCvUrls: string[] = [],
 ): string {
-  const urls =
-    websiteCvUrls.length > 0 ? ` (${websiteCvUrls.join('; ')})` : '';
+  const urls = websiteCvUrls.length > 0 ? ` (${websiteCvUrls.join('; ')})` : '';
   if (state === 'not_read') {
     return `A CV was uploaded but could not be read. CV comparison was not performed.${websiteCvUrls.length > 0 ? ` A public CV or resume URL was also found${urls}.` : ''} That is not a finding that the expert has no CV discrepancies.`;
   }
@@ -1903,10 +1907,7 @@ function cvComparisonSection(
     analysis?: EwiAnalysisDocument;
     cvCheck?: CvCheck | null;
     cvComparisonState?:
-      | 'compared'
-      | 'not_uploaded'
-      | 'not_read'
-      | 'found_unreadable';
+      'compared' | 'not_uploaded' | 'not_read' | 'found_unreadable';
     webResearch?: WebResearchDossier | null;
   },
   tracker: ClaimTracker,
@@ -2552,7 +2553,9 @@ function blockedPageReason(reason: string): string {
   if (/404|not found|http\s*404/i.test(text)) {
     return `Not found (HTTP 404 or equivalent). This address was not a live page for the automated fetch. ${text}`;
   }
-  if (/login|sign[- ]?in|auth|captcha|bot|robots|403|401|cloudflare/i.test(text)) {
+  if (
+    /login|sign[- ]?in|auth|captcha|bot|robots|403|401|cloudflare/i.test(text)
+  ) {
     return `Automated fetch blocked (login, bot check, or robots). A person in a browser may still open it. ${text}`;
   }
   return text || 'Automated fetch did not get usable page text.';
@@ -3392,7 +3395,10 @@ function firstAuthorComparisonBlocks(
   );
   if (rows.length === 0) return [];
   const blocks: ReportBlock[] = [
-    { text: 'CV-listed publications compared with catalogs', style: 'subheading' },
+    {
+      text: 'CV-listed publications compared with catalogs',
+      style: 'subheading',
+    },
     {
       text: 'Each CV citation is compared with the catalog record (OpenAlex, PubMed, Crossref, or ORCID) by title, authors, DOI, and PubMed identifier when present. “Not found in catalogs” means the title was searched and no qualifying match was returned — not that the publication does not exist. A verified author-position discrepancy means the CV listed the expert first (or in another stated place) and the catalog author list disagrees. “Misrepresentation” is not used unless the catalogs actually disagree with the CV. Equal-contribution notes are kept when the source stated them.',
       style: 'note',

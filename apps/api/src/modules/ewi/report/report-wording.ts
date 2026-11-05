@@ -85,25 +85,43 @@ export function evidenceStatusLine(item: ExpertEvidenceItem): string {
     item.sourceId === 'other_public_websites' ||
     item.category === 'cv' ||
     item.category === 'website';
-  const status =
-    item.access === 'restricted'
-      ? 'Unable to Access'
-      : item.informationStatus === 'conflicting'
-        ? 'Sources disagree'
-        : item.informationStatus === 'verified'
-          ? 'Verified'
-          : item.informationStatus === 'unavailable'
-            ? 'Not Found'
-            : item.category === 'publication' &&
-                ['pubmed', 'openalex', 'crossref', 'orcid'].includes(
-                  item.sourceId,
-                )
-              ? 'Verified (catalog record; not a CV comparison)'
-              : item.sourceId === 'npi_registry'
-                ? 'Self-Reported (NPI Registry record retrieved)'
-                : ownSite
-                  ? 'Self-Reported'
-                  : 'Not Independently Verified';
+  // Directory / university / court existence is not a Verified credential or policy.
+  const existenceOnly =
+    item.category === 'directory' ||
+    item.category === 'university' ||
+    item.category === 'university_rules' ||
+    item.category === 'court' ||
+    item.category === 'litigation' ||
+    item.sourceId === 'courtlistener' ||
+    item.sourceId === 'university' ||
+    item.sourceId === 'university_rules' ||
+    item.sourceId === 'other_expert_directories';
+  const catalogPub =
+    item.category === 'publication' &&
+    ['pubmed', 'openalex', 'crossref', 'orcid'].includes(item.sourceId);
+
+  let status: string;
+  if (ownSite) {
+    status = 'Self-Reported';
+  } else if (item.access === 'restricted') {
+    status = 'Unable to Access';
+  } else if (item.informationStatus === 'unavailable') {
+    status = 'Not Found';
+  } else if (item.informationStatus === 'conflicting') {
+    status = 'Sources disagree';
+  } else if (existenceOnly) {
+    status = 'Not Independently Verified';
+  } else if (item.informationStatus === 'verified') {
+    status = catalogPub
+      ? 'Verified (catalog record; not a CV comparison)'
+      : 'Verified';
+  } else if (catalogPub) {
+    status = 'Verified (catalog record; not a CV comparison)';
+  } else if (item.sourceId === 'npi_registry') {
+    status = 'Self-Reported (NPI Registry record retrieved)';
+  } else {
+    status = 'Not Independently Verified';
+  }
   return `Status: ${status}. Source: ${item.sourceId}.`;
 }
 

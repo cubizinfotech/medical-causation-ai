@@ -14,11 +14,7 @@ import { parsePersonName } from '../../../integrations/expert-research/live/pers
 import { parseCityState } from '../../../integrations/expert-research/live/location';
 import { clusterRecords } from '../../../integrations/web-research/identity-clusterer';
 
-function claim(
-  topic: WebClaim['topic'],
-  text: string,
-  quote = text,
-): WebClaim {
+function claim(topic: WebClaim['topic'], text: string, quote = text): WebClaim {
   return {
     type: topic === 'criminal' ? 'allegation' : 'other',
     text,
@@ -30,8 +26,7 @@ function claim(
 }
 
 function webRecord(
-  over: Partial<WebRecord> &
-    Pick<WebRecord, 'id' | 'url' | 'kind' | 'match'>,
+  over: Partial<WebRecord> & Pick<WebRecord, 'id' | 'url' | 'kind' | 'match'>,
 ): WebRecord {
   return {
     title: over.title ?? 'Page',
@@ -104,7 +99,7 @@ const possibleMatch = {
   classifiedBy: 'rules' as const,
 };
 
-describe('Graham-class report regression (3.10.17)', () => {
+describe('Graham-class report regression (3.10.18)', () => {
   it('parses bare state intake as state-only so Fort Lauderdale is same-state', () => {
     expect(parseCityState('Florida')).toEqual({ city: '', state: 'FL' });
     const assessment = assessIdentity(
@@ -150,7 +145,9 @@ describe('Graham-class report regression (3.10.17)', () => {
       generatedAt: '2026-11-04T16:39:00.000Z',
       webResearch: dossier([justia]),
     });
-    expect(sectionText(report, 'criminal')).not.toMatch(/different individual/i);
+    expect(sectionText(report, 'criminal')).not.toMatch(
+      /different individual/i,
+    );
     expect(sectionText(report, 'summary')).not.toMatch(/Criminal Records:/i);
   });
 
@@ -293,5 +290,211 @@ describe('Graham-class report regression (3.10.17)', () => {
     });
     expect(sectionText(report, 'summary')).not.toMatch(/Criminal Records:/i);
     expect(sectionText(report, 'background')).toMatch(/Fort Lauderdale/i);
+  });
+
+  it('keeps own-site AACN / publication claims out of Cert Orgs and Publications', () => {
+    const about = webRecord({
+      id: 'about',
+      url: 'https://dralexrivera.example/about',
+      kind: 'other',
+      match: strongMatch,
+      title: 'About Dr. Rivera',
+      summary:
+        'Dr. Alex Rivera is a member of AACN and publishes in Neuropsychology Review.',
+      claims: [
+        {
+          type: 'credential',
+          text: 'Certification organization: AACN',
+          quote:
+            'Member of the American Academy of Clinical Neuropsychology (AACN)',
+          topic: 'certification_org',
+          basis: 'subject_stated',
+          from: 'page',
+        },
+        {
+          type: 'credential',
+          text: 'Publication: Neuropsychology Review article',
+          quote: 'Rivera, A. (2020). Sample article. Neuropsychology Review.',
+          topic: 'publication',
+          basis: 'subject_stated',
+          from: 'page',
+        },
+      ],
+    });
+    const routed = routeWebFindings(dossier([about]), {
+      expertName: 'Alex Rivera',
+    });
+    expect(routed.get('certification-orgs')).toBeUndefined();
+    expect(routed.get('publications')).toBeUndefined();
+    expect(routed.get('websites')?.length ?? 0).toBeGreaterThan(0);
+    const report = buildEwiReportDocument({
+      expertName: 'Alex Rivera',
+      city: 'Florida',
+      specialty: 'neuropsychology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-11-05T12:00:00.000Z',
+      webResearch: dossier([about]),
+    });
+    expect(sectionText(report, 'summary')).not.toMatch(/AACN/i);
+    expect(sectionText(report, 'summary')).not.toMatch(
+      /Neuropsychology Review/i,
+    );
+  });
+
+  it('groups multiple paths of the same practice host under Expert Websites', () => {
+    const pages = [
+      '/',
+      '/about',
+      '/forensic-evaluations',
+      '/expert-witness',
+    ].map((path, i) =>
+      webRecord({
+        id: `site-${i}`,
+        url: `https://dralexrivera.example${path}`,
+        kind: 'expert_website',
+        match: strongMatch,
+        title: `Practice ${path}`,
+        summary: 'Practice site for Dr. Alex Rivera.',
+        claims: [
+          {
+            type: 'other',
+            text: `Website page ${path}`,
+            quote: 'Dr. Alex Rivera neuropsychological evaluations',
+            topic: 'advertising',
+            basis: 'subject_stated',
+            from: 'page',
+          },
+        ],
+      }),
+    );
+    const routed = routeWebFindings(dossier(pages), {
+      expertName: 'Alex Rivera',
+    });
+    const websites = routed.get('websites') ?? [];
+    expect(websites.length).toBeLessThanOrEqual(2);
+    expect(websites.some((f) => /also listed/i.test(f.statement))).toBe(true);
+  });
+
+  it('excludes multi-person registry dumps from Directories without a subject row', () => {
+    const registry = webRecord({
+      id: 'dir-dump',
+      url: 'https://www.ca.cjis20.org/isc/pdf/Expert-Registry.pdf',
+      kind: 'directory',
+      match: strongMatch,
+      title: 'Expert Registry',
+      summary:
+        'Coffman, Michael C., Psy.D. PY9832 5720 5th Ave. Archer Vanessa L. Psychologist PY5597 11301 South Dixie Hwy Arias Alejandro J. Psychologist PY6085',
+      claims: [],
+    });
+    const routed = routeWebFindings(dossier([registry]), {
+      expertName: 'Alex Rivera',
+    });
+    expect(routed.get('directories')).toBeUndefined();
+  });
+
+  it('does not file unread RECAP notices under Pleadings', () => {
+    const notice = webRecord({
+      id: 'recap',
+      url: 'https://www.courtlistener.com/docket/123/notice-of-filing/',
+      kind: 'court',
+      read: 'snippet_only',
+      match: strongMatch,
+      title: 'NOTICE OF FILING OF OFFICIAL TRANSCRIPT',
+      summary: 'Notice of filing naming Nicole Vaccarella',
+      claims: [
+        claim(
+          'pleading',
+          'Pleading: NOTICE OF FILING OF OFFICIAL TRANSCRIPT',
+          'NOTICE OF FILING OF OFFICIAL TRANSCRIPT',
+        ),
+      ],
+    });
+    const routed = routeWebFindings(dossier([notice]), {
+      expertName: 'Alex Rivera',
+    });
+    expect(routed.get('pleadings')).toBeUndefined();
+    expect(routed.get('orders')).toBeUndefined();
+    expect(routed.get('depositions')).toBeUndefined();
+  });
+
+  it('routes practicum brochures to Background, not university-rules', () => {
+    const brochure = webRecord({
+      id: 'practicum',
+      url: 'https://nova.edu/psychology/practicum-sites.pdf',
+      kind: 'university',
+      match: strongMatch,
+      title: 'NSU Clinical Psychology Practicum Training Site Brochure',
+      summary:
+        'This practicum brochure lists clinical training sites for NSU students.',
+      claims: [
+        {
+          type: 'other',
+          text: 'University rules: practicum training site listing',
+          quote: 'Clinical training site brochure for practicum placement',
+          topic: 'university_rules',
+          basis: 'third_party',
+          from: 'page',
+        },
+      ],
+    });
+    const routed = routeWebFindings(dossier([brochure]), {
+      expertName: 'Alex Rivera',
+    });
+    expect(routed.get('university-rules')).toBeUndefined();
+    expect(
+      routed
+        .get('background')
+        ?.some((f) => /practicum|training/i.test(f.title)),
+    ).toBe(true);
+  });
+
+  it('splits cross-genre possible matches instead of one mega §39 bucket', () => {
+    const news = webRecord({
+      id: 'news',
+      url: 'https://www.militarytimes.com/news/alex-rivera/',
+      kind: 'news',
+      match: possibleMatch,
+      title: 'Alex Rivera joins unit',
+      summary: 'A service member named Alex Rivera',
+      claims: [],
+    });
+    const npi = webRecord({
+      id: 'npi',
+      url: 'https://npiregistry.cms.hhs.gov/provider-view/1999999999',
+      kind: 'other',
+      match: possibleMatch,
+      title: 'NPI Registry — different Alex Rivera',
+      summary: 'Alex Rivera NPI 1999999999 Ohio',
+      claims: [],
+    });
+    const scholarly = webRecord({
+      id: 'rg',
+      url: 'https://www.researchgate.net/profile/Alex-Rivera-99',
+      kind: 'publication',
+      match: possibleMatch,
+      title: 'Alex Rivera ResearchGate',
+      summary: 'Publications by Alex Rivera',
+      claims: [],
+    });
+    const subject = {
+      name: parsePersonName('Alex Rivera')!,
+      city: 'Florida',
+      specialty: 'neuropsychology',
+    };
+    const { candidates } = clusterRecords(
+      [news, npi, scholarly],
+      new Map([
+        ['news', { written: 'Alex Rivera', credential: null, state: null }],
+        ['npi', { written: 'Alex Rivera', credential: 'MD', state: 'OH' }],
+        ['rg', { written: 'Alex Rivera', credential: 'PhD', state: null }],
+      ]),
+      subject,
+      'Alex Rivera, neuropsychology, Florida',
+    );
+    const possible = candidates.filter((c) => c.id.startsWith('cand-possible'));
+    expect(possible.every((c) => c.recordIds.length <= 2)).toBe(true);
+    expect(possible.some((c) => c.recordIds.length === 3)).toBe(false);
   });
 });

@@ -65,6 +65,8 @@ export function verifyClaims(
     for (const claim of record.claims) {
       if (!claim.topic) continue;
       if (!VERIFIED_TOPICS.includes(claim.topic)) continue;
+      // Own-site / subject_stated bibliography never drives catalog confirmation.
+      if (claim.basis === 'subject_stated') continue;
       const list = byTopic.get(claim.topic) ?? [];
       list.push({ record, claim });
       byTopic.set(claim.topic, list);

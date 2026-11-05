@@ -449,10 +449,12 @@ const RULES: readonly TopicRule[] = [
   {
     topic: 'university_rules',
     // Only policy / COI / consulting-rule language — not "instructor of record"
-    // on a syllabus or faculty bio alone.
+    // on a syllabus or faculty bio alone, and not practicum placement brochures.
     pattern:
-      /\b(?:conflict of interest|outside (?:activity|employment|consulting)|consulting policy|faculty handbook|academic (?:policy|rule)|disclosure of outside|policy on consulting)\b/i,
+      /\b(?:conflict of interest|outside (?:activity|employment|consulting)|consulting policy|faculty handbook|academic (?:policy|rule)|disclosure of outside|policy on consulting|supplemental compensation)\b/i,
     and: /\b(?:University|College|Professor|Faculty|policy|handbook)\b/i,
+    unless:
+      /\b(?:practicum|clinical training site|training site brochure|placement site|externship site|internship site brochure)\b/i,
   },
 ];
 

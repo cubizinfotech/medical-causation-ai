@@ -46,7 +46,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.17');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.18');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -94,9 +94,7 @@ describe('EWI report template', () => {
         .find((section) => section.id === 'board-certifications')
         ?.blocks.map((block) => block.text)
         .join(' '),
-    ).toBe(
-      'No dedicated search was run for this topic in this investigation.',
-    );
+    ).toBe('No dedicated search was run for this topic in this investigation.');
     expect(
       document.sections.find((section) => section.id === 'questions'),
     ).toBeUndefined();
@@ -254,9 +252,7 @@ describe('EWI report template', () => {
     expect(text('overall-findings')).toContain(
       'Licenses reported to the NPI Registry (NPI 1871685487)',
     );
-    expect(text('overall-findings')).toContain(
-      'Verified · Source refs: f2',
-    );
+    expect(text('overall-findings')).toContain('Verified · Source refs: f2');
     expect(text('questions')).toBe('');
     expect(text('summary')).toContain(
       '2 item(s) were collected from the sources searched.',

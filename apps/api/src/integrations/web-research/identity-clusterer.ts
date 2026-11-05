@@ -178,25 +178,53 @@ export function clusterRecords(
     });
   }
   // Own-site possible pages belong under Websites/Background, not §39.
+  // Split remaining possibles by fingerprint + source genre so military news,
+  // unrelated scholarly profiles, and different NPIs do not share one bucket.
   const possibleForDisambiguation = possibleRecords.filter(
     (record) => !isExpertOwnedRecord(record, subject.name.last),
   );
-  if (possibleForDisambiguation.length > 0) {
+  const possibleBuckets = new Map<string, WebRecord[]>();
+  for (const record of possibleForDisambiguation) {
+    const fp = fingerprints.get(record.id);
+    const genre = possibleMatchGenre(record);
+    const key = `${(fp?.written ?? '').toLowerCase()}|${fp?.credential ?? ''}|${fp?.state ?? ''}|${genre}`;
+    const bucket = possibleBuckets.get(key) ?? [];
+    bucket.push(record);
+    possibleBuckets.set(key, bucket);
+  }
+  let possibleIndex = 0;
+  for (const [, bucket] of possibleBuckets) {
+    // Drop single-hit cross-genre noise unless it carries a coherent alternate
+    // identity signal (written name + credential or state distinct from subject).
+    if (bucket.length === 1) {
+      const only = bucket[0];
+      const fp = fingerprints.get(only.id);
+      const subjectState = parseCityState(subject.city || '').state;
+      const coherent =
+        Boolean(fp?.written) &&
+        (Boolean(fp?.credential) ||
+          Boolean(fp?.state && subjectState && fp.state !== subjectState));
+      if (!coherent) continue;
+    }
+    possibleIndex += 1;
     const candidate = {
-      id: 'cand-possible',
+      id:
+        possibleIndex === 1
+          ? 'cand-possible'
+          : `cand-possible-${possibleIndex}`,
       label: `Possible match pages for ${subjectLabel.split(',')[0]} (not treated as confirmed credentials)`,
       role: 'other' as const,
       confidence: 'medium' as const,
       basis: [
         'These pages only partly agree with the name, profession or place given. They are listed as possible matches and are not treated as the subject’s credentials.',
       ],
-      recordIds: possibleForDisambiguation.map((r) => r.id),
+      recordIds: bucket.map((r) => r.id),
     };
     if (
       isAmbiguityWorthReporting({
         label: candidate.label,
         basis: candidate.basis,
-        records: possibleForDisambiguation,
+        records: bucket,
         subjectSpecialty: subject.specialty,
       })
     ) {
@@ -239,6 +267,53 @@ export function clusterRecords(
       candidateId: assignment.get(record.id) ?? null,
     })),
   };
+}
+
+/** Coarse source genre so cross-genre “possible” dumps do not merge. */
+export function possibleMatchGenre(
+  record: Pick<WebRecord, 'kind' | 'url' | 'title' | 'summary'>,
+): string {
+  const host = (() => {
+    try {
+      return new URL(record.url).hostname.replace(/^www\./, '').toLowerCase();
+    } catch {
+      return '';
+    }
+  })();
+  const hay = `${record.title} ${record.summary} ${host}`.toLowerCase();
+  if (
+    record.kind === 'court' ||
+    record.kind === 'justia' ||
+    /courtlistener|recap|pacer|justia\.com/.test(host)
+  ) {
+    return 'court';
+  }
+  if (
+    record.kind === 'publication' ||
+    /researchgate|pubmed|openalex|orcid|scholar\.google|semanticscholar/.test(
+      host,
+    )
+  ) {
+    return 'scholarly';
+  }
+  if (/npi|npiregistry|cms\.gov|hhs\.gov/.test(host) || /\bnpi\b/.test(hay)) {
+    return 'npi';
+  }
+  if (
+    /flhealth|myfloridalicense|license|board of/.test(host) ||
+    record.kind === 'directory'
+  ) {
+    return 'license_directory';
+  }
+  if (
+    record.kind === 'news' ||
+    record.kind === 'blog' ||
+    /militarytimes|starsandstripes|news|times\.com|post\.com/.test(host)
+  ) {
+    return 'news';
+  }
+  if (record.kind === 'university') return 'university';
+  return record.kind || 'other';
 }
 
 function otherLabel(

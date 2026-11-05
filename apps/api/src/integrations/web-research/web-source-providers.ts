@@ -202,10 +202,7 @@ export function sanitizeAdvertisingKind(
   directoryId?: string,
 ): WebRecord['kind'] {
   if (kind !== 'ime' && kind !== 'advertising') return kind;
-  if (
-    directoryId &&
-    PAID_ADVERTISING_DIRECTORY_IDS.has(directoryId)
-  ) {
+  if (directoryId && PAID_ADVERTISING_DIRECTORY_IDS.has(directoryId)) {
     return kind;
   }
   if (hostMatches(url, PAID_ADVERTISING_HOSTS)) return kind;
@@ -363,26 +360,44 @@ export function presenceKindFor(record: WebRecord): string | undefined {
   }
 }
 
+const KNOWN_PAID_DIRECTORY_HOST =
+  /\b(seakexperts|jurispro|experts\.com|expertpages|almexperts|forensisgroup)\b/i;
+
 /**
  * A strong identity match is not independent verification of credentials
- * the expert (or a practice site) stated. Court/catalog/maps/issuer-directory
- * pages can be marked verified as records that exist. Expert websites and
- * social profiles stay unverified so own-site claims are never treated as
- * credential proof.
+ * the expert (or a practice site) stated. Issuing-body / paid expert directory
+ * / catalog pages can be marked verified as records that exist. Court hits,
+ * university pages, and generic LLM-"directory" PDFs stay unverified —
+ * existence ≠ Verified credential or policy.
  */
 function webInformationStatus(
   record: WebRecord,
 ): ExpertEvidenceItem['informationStatus'] {
   if (record.match.level !== 'strong') return 'unverified';
-  if (
-    record.kind === 'court' ||
-    record.kind === 'justia' ||
-    record.kind === 'maps' ||
-    record.kind === 'publication' ||
-    record.kind === 'directory' ||
-    record.kind === 'university'
-  ) {
+  if (record.kind === 'maps' || record.kind === 'publication') {
     return 'verified';
+  }
+  if (record.kind === 'directory') {
+    try {
+      const host = new URL(record.url).hostname;
+      if (
+        KNOWN_PAID_DIRECTORY_HOST.test(host) ||
+        host.includes('abpp.org') ||
+        host.includes('theaacn.org')
+      ) {
+        return 'verified';
+      }
+    } catch {
+      /* ignore */
+    }
+    return 'unverified';
+  }
+  if (
+    record.kind === 'university' ||
+    record.kind === 'court' ||
+    record.kind === 'justia'
+  ) {
+    return 'unverified';
   }
   return 'unverified';
 }

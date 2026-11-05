@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-11-05): EWI report 3.10.18 — own-site routing, directories/court/university gates, §39 genre split
+
+- Own-site / `subject_stated` credential claims (boards, cert orgs, licenses, memberships, publications) route to Expert Websites (Self-Reported), not independent credential/catalog sections; Exec Summary omits that noise.
+- Expert Websites group by host (primary URL + “also listed” paths) instead of one source entry per path.
+- Multi-person registry dumps are gated out of Directories unless a subject-near listing line exists (cautious third-party wording, not Verified).
+- Unread court/RECAP hits no longer fill subject Pleadings / Orders / Depositions.
+- Practicum / clinical-training-site brochures go to Background; university-rules requires real COI / outside-activity policy language.
+- `verifyClaims` ignores `subject_stated` publication claims for issuing-body confirmation; empty vs failed catalog wording preserved.
+- §39 possible matches split by fingerprint + source genre (news vs NPI vs scholarly vs court).
+- Directory / university / court existence labels as Not Independently Verified (not Verified); paid/issuer directories may still verify as records.
+- Graham-class regressions extended; live Nicole Graham regen still requires post-deploy APIs. No commit/deploy in this change set alone.
+
 ### Changed (2026-11-05): EWI report 3.10.17 — identity, evidence gate, §39, Graham-class accuracy
 
 - Bare state intake (`Florida` / `FL`) is state-only, not a fake city; NPI/web corroboration can use same-state place matches.

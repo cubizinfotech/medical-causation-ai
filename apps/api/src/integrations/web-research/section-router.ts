@@ -9,7 +9,9 @@
  * Pure and deterministic: the same dossier always gives the same sections, and
  * nothing is added that a page did not say.
  */
+import { parsePersonName } from '../expert-research/live/person-name';
 import {
+  isOwnPage,
   officialSourceFor,
   organizationsIn,
   TOPIC_LABEL,
@@ -19,9 +21,11 @@ import {
   corporateClaimMatchesSource,
   gateSubjectClaim,
   isMultiPersonRegistryDump,
+  isPracticeSiteKind,
   matchAllowsSubjectFinding,
   normalizeFindingUrl,
 } from './evidence-gate';
+import { quoteNamesSubject } from './identity-assess';
 import { looksLikeCourtDocument } from './source-kind';
 import { sosDeepLinksFor } from './sos-business-search';
 import { isPaidAdvertisingDirectory } from './web-source-providers';
@@ -37,6 +41,68 @@ import type {
 
 function isPaidDirectoryRecord(record: WebRecord): boolean {
   return isPaidAdvertisingDirectory(record);
+}
+
+const OWN_SITE_CREDENTIAL_SECTIONS: ReadonlySet<RoutedSectionId> = new Set([
+  'board-certifications',
+  'certification-orgs',
+  'licenses',
+  'memberships',
+  'publications',
+]);
+
+const COURT_SUBJECT_SECTIONS: ReadonlySet<RoutedSectionId> = new Set([
+  'orders',
+  'pleadings',
+  'depositions',
+]);
+
+const PRACTICUM_LISTING =
+  /\b(practicum|clinical training site|training site brochure|placement site|externship site|internship site brochure)\b/i;
+
+const REAL_UNIVERSITY_POLICY =
+  /\b(conflict of interest|outside (?:activity|consulting|employment)|consulting policy|supplemental compensation|disclosure of outside)\b/i;
+
+/** Practice site / subject_stated page — never independent credential proof. */
+function isOwnSiteRecord(
+  record: WebRecord,
+  claim: WebClaim | null,
+  surname: string,
+): boolean {
+  if (claim?.basis === 'subject_stated') return true;
+  if (isPracticeSiteKind(record.kind)) return true;
+  if (surname && isOwnPage(record.kind, record.url, surname)) return true;
+  return false;
+}
+
+function pushOwnSiteStatement(
+  push: (finding: RoutedFinding) => void,
+  base: Omit<
+    RoutedFinding,
+    | 'sectionId'
+    | 'title'
+    | 'statement'
+    | 'quote'
+    | 'basis'
+    | 'basisLabel'
+    | 'from'
+    | 'verification'
+  >,
+  claim: WebClaim,
+  verification: WebVerification | null,
+  label: string,
+): void {
+  push({
+    ...base,
+    sectionId: 'websites',
+    title: label,
+    statement: `${claim.text} This is the expert’s own statement (website or profile). It is not independent verification.`,
+    quote: claim.quote,
+    basis: 'subject_stated',
+    basisLabel: BASIS_LABEL.subject_stated,
+    from: claim.from ?? 'page',
+    verification,
+  });
 }
 
 /**
@@ -61,7 +127,10 @@ function isIrrelevantNoiseRecord(record: WebRecord): boolean {
   })();
   const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
   if (host.includes('parkcenturyschool')) return true;
-  if (/\bboard of trustees\b/.test(hay) && /\b(school|academy|college)\b/.test(hay)) {
+  if (
+    /\bboard of trustees\b/.test(hay) &&
+    /\b(school|academy|college)\b/.test(hay)
+  ) {
     return true;
   }
   // Practice-site associate pages (e.g. /kristen.html, /leila-glass, glassCV.pdf).
@@ -161,8 +230,12 @@ function claimAboutOtherPerson(claim: WebClaim, record: WebRecord): boolean {
 }
 
 /** Legal commentary / news about courts is not an Order. */
-function isLegalCommentaryNotOrder(record: WebRecord, claimText: string): boolean {
-  const hay = `${record.url} ${record.title} ${record.summary} ${claimText}`.toLowerCase();
+function isLegalCommentaryNotOrder(
+  record: WebRecord,
+  claimText: string,
+): boolean {
+  const hay =
+    `${record.url} ${record.title} ${record.summary} ${claimText}`.toLowerCase();
   if (record.kind === 'news' || record.kind === 'blog') return true;
   // Avoid bare tokens like "holding" or "update" — real opinions use those words.
   if (
@@ -385,7 +458,9 @@ function sectionsFor(claim: WebClaim): RoutedSectionId[] {
     ) {
       return ['board-actions'];
     }
-    if (/\b(malpractice|lawsuit|sued|complaint against|negligen)\w*/i.test(text)) {
+    if (
+      /\b(malpractice|lawsuit|sued|complaint against|negligen)\w*/i.test(text)
+    ) {
       return ['lawsuits'];
     }
     // Generic "disciplined" without a licensing board → do not invent board actions.
@@ -563,6 +638,8 @@ function courtDocumentSection(record: WebRecord): RoutedSectionId | null {
 export interface RouteWebFindingsOptions {
   /** Two-letter state codes for official SOS business-search deep links. */
   stateCodes?: readonly string[];
+  /** Expert display name — used for own-site / subject-row directory gates. */
+  expertName?: string;
 }
 
 /** Everything the web run found, filed by report section. */
@@ -572,6 +649,13 @@ export function routeWebFindings(
 ): Map<RoutedSectionId, RoutedFinding[]> {
   const routed = new Map<RoutedSectionId, RoutedFinding[]>();
   if (!dossier) return routed;
+  const person =
+    (options.expertName ? parsePersonName(options.expertName) : null) ?? {
+      first: '',
+      last: '',
+      middle: [] as string[],
+    };
+  const surname = person.last.trim();
   const verifications = dossier.verifications ?? [];
   const verificationFor = (
     section: RoutedSectionId,
@@ -611,7 +695,7 @@ export function routeWebFindings(
     const base = {
       url: record.url,
       sourceTitle: record.title,
-      matchLevel: matchLevel as 'strong' | 'possible',
+      matchLevel: matchLevel,
       retrievedAt: record.retrievedAt,
       publishedAt: record.publishedAt,
       rating: record.rating ?? null,
@@ -688,10 +772,7 @@ export function routeWebFindings(
         }
         if (
           sectionId === 'orders' &&
-          isLegalCommentaryNotOrder(
-            record,
-            `${claim.text} ${claim.quote}`,
-          )
+          isLegalCommentaryNotOrder(record, `${claim.text} ${claim.quote}`)
         ) {
           continue;
         }
@@ -756,19 +837,23 @@ export function routeWebFindings(
         ) {
           continue;
         }
-        // Practice-site publication lists are the expert’s own bibliography,
-        // not PubMed/OpenAlex catalog hits — do not fill Publications with them.
+        // Own-site / subject_stated credential topics never fill independent
+        // credential or catalog sections (Cert Orgs, Pubs, boards, licenses).
         if (
-          sectionId === 'publications' &&
-          (record.kind === 'expert_website' ||
-            record.kind === 'advertising' ||
-            record.kind === 'profile')
+          OWN_SITE_CREDENTIAL_SECTIONS.has(sectionId) &&
+          !isIssuingBodyCredentialClaim(record, claim, basis) &&
+          isOwnSiteRecord(record, claim, surname)
         ) {
+          const pubOnly = sectionId === 'publications';
           push({
             ...base,
             sectionId: 'websites',
-            title: `Expert’s own publication list: ${short(record.title, 90)}`,
-            statement: `${claim.text} This is listed on the expert’s own site or profile. It is not a PubMed/OpenAlex catalog confirmation.`,
+            title: pubOnly
+              ? `Expert’s own publication list: ${short(record.title, 90)}`
+              : `Expert’s own statement: ${short(record.title, 90)}`,
+            statement: pubOnly
+              ? `${claim.text} This is listed on the expert’s own site or profile. It is not a PubMed/OpenAlex catalog confirmation.`
+              : `${claim.text} This is the expert’s own statement (website or profile). It is not independent verification of the credential.`,
             quote: claim.quote,
             basis: 'subject_stated',
             basisLabel: BASIS_LABEL.subject_stated,
@@ -777,45 +862,51 @@ export function routeWebFindings(
           });
           continue;
         }
-        // Hard rule: the expert’s own website/CV may be listed as their
-        // statement, but must not support board certification or license proof.
-        // Only issuing-body / primary_source pages stay in credential sections.
-        if (
-          (sectionId === 'board-certifications' || sectionId === 'licenses') &&
-          !isIssuingBodyCredentialClaim(record, claim, basis)
-        ) {
-          push({
-            ...base,
-            sectionId: 'websites',
-            title: `Expert’s own statement: ${short(record.title, 90)}`,
-            statement: `${claim.text} This is the expert’s own statement (website or profile). It is not independent verification of the credential.`,
-            quote: claim.quote,
-            // Never keep a “primary source / issuing body” label after the
-            // hard rule moves the claim off the credential section.
-            basis: 'subject_stated',
-            basisLabel: BASIS_LABEL.subject_stated,
-            from: claim.from ?? 'page',
-            verification: verificationFor('websites'),
-          });
-          continue;
-        }
-        // University faculty pages / CVs are not university rules. Only an
-        // actual COI / outside-activity / consulting-policy claim belongs here.
+        // University: practicum / training-site brochures → Background.
+        // Real university-rules require COI / outside-activity policy language.
         if (sectionId === 'university-rules') {
+          const policyHay = `${claim.text} ${claim.quote} ${record.title} ${record.summary} ${record.url}`;
+          if (PRACTICUM_LISTING.test(policyHay)) {
+            push({
+              ...base,
+              sectionId: 'background',
+              title: `Listed as a clinical training / practicum site: ${short(record.title, 90)}`,
+              statement:
+                'This page lists a clinical training, practicum, or placement site. It is not a university conflict-of-interest or outside-activity policy.',
+              quote: claim.quote,
+              basis:
+                claim.basis === 'subject_stated'
+                  ? 'subject_stated'
+                  : 'third_party',
+              basisLabel:
+                BASIS_LABEL[
+                  claim.basis === 'subject_stated'
+                    ? 'subject_stated'
+                    : 'third_party'
+                ],
+              from: claim.from ?? 'page',
+              verification: null,
+            });
+            continue;
+          }
           if (claim.topic !== 'university_rules') continue;
-          const policyHay =
-            `${claim.text} ${claim.quote} ${record.title} ${record.url}`.toLowerCase();
-          if (
-            /\b(curriculum vitae|\bcv\b|resume|vitae?)\b/.test(policyHay) &&
-            !/\b(conflict of interest|outside (?:activity|consulting|employment)|consulting policy|faculty handbook|supplemental compensation)\b/.test(
-              policyHay,
-            )
-          ) {
+          if (!REAL_UNIVERSITY_POLICY.test(policyHay)) {
+            if (
+              /\b(curriculum vitae|\bcv\b|resume|vitae?|faculty|instructor)\b/i.test(
+                policyHay,
+              )
+            ) {
+              continue;
+            }
             continue;
           }
         }
         if (['order', 'pleading', 'deposition'].includes(claim.topic ?? '')) {
           claimedDocumentType = true;
+        }
+        // Unread court filings do not fill subject Pleadings/Orders/Depositions.
+        if (COURT_SUBJECT_SECTIONS.has(sectionId) && record.read !== 'read') {
+          continue;
         }
         // Model-tagged "deposition" claims that are only a notice of
         // deposition belong under pleadings, not deposition transcripts.
@@ -825,6 +916,7 @@ export function routeWebFindings(
             `${claim.text} ${claim.quote} ${record.title}`,
           )
         ) {
+          if (record.read !== 'read') continue;
           push({
             ...base,
             sectionId: 'pleadings',
@@ -839,6 +931,19 @@ export function routeWebFindings(
           continue;
         }
         if (sectionId === 'certification-orgs') {
+          if (
+            !isIssuingBodyCredentialClaim(record, claim, basis) &&
+            isOwnSiteRecord(record, claim, surname)
+          ) {
+            pushOwnSiteStatement(
+              push,
+              base,
+              claim,
+              verificationFor('websites'),
+              `Expert’s own statement: ${short(record.title, 90)}`,
+            );
+            continue;
+          }
           const official = officialSourceFor(record.url);
           for (const org of organizationsIn(`${claim.text} ${claim.quote}`)) {
             // A page is the primary source only for its own organization:
@@ -936,7 +1041,8 @@ export function routeWebFindings(
     }
 
     // Court pages: file by document type when no statement already did.
-    if (courtLike && !claimedDocumentType) {
+    // Unread RECAP/docket hits stay out of subject Pleadings/Orders/Depositions.
+    if (courtLike && !claimedDocumentType && record.read === 'read') {
       const sectionId = courtDocumentSection(record);
       if (sectionId) {
         push({
@@ -947,7 +1053,7 @@ export function routeWebFindings(
           quote: record.match.quote,
           basis: 'record',
           basisLabel: BASIS_LABEL.record,
-          from: record.read === 'read' ? 'page' : 'snippet',
+          from: 'page',
           verification: null,
         });
       }
@@ -1016,7 +1122,55 @@ export function routeWebFindings(
       (record.kind === 'directory' || boardDirectory) &&
       !alreadyFiled('directories')
     ) {
-      push(recordFinding('directories', short(record.title, 140)));
+      const dumpHay = `${record.title}\n${record.summary}\n${record.snippet ?? ''}`;
+      if (isMultiPersonRegistryDump(dumpHay) && !boardDirectory) {
+        const subjectNear =
+          Boolean(surname) &&
+          quoteNamesSubject(dumpHay, person) &&
+          (/\b[A-Z]{2}\d{4,}\b/.test(dumpHay) ||
+            /\blicense\b/i.test(dumpHay) ||
+            /\b\d{1,5}\s+\w+\s+(st|street|ave|avenue|rd|road|blvd|dr|drive)\b/i.test(
+              dumpHay,
+            ));
+        if (subjectNear) {
+          push({
+            ...recordFinding(
+              'directories',
+              `Subject listing in multi-person registry: ${short(record.title, 100)}`,
+            ),
+            statement:
+              'This page is a multi-person expert or court registry. Only the subject’s near listing line was used. It is not independent verification of credentials.',
+            basis: 'third_party',
+            basisLabel: BASIS_LABEL.third_party,
+            verification: null,
+          });
+        }
+      } else {
+        push(recordFinding('directories', short(record.title, 140)));
+      }
+    }
+    // University practicum / training-site brochures → Background, not policy.
+    if (
+      (record.kind === 'university' ||
+        PRACTICUM_LISTING.test(
+          `${record.title} ${record.summary} ${record.url}`,
+        )) &&
+      PRACTICUM_LISTING.test(
+        `${record.title} ${record.summary} ${record.url}`,
+      ) &&
+      !alreadyFiled('background')
+    ) {
+      push({
+        ...recordFinding(
+          'background',
+          `Listed as a clinical training / practicum site: ${short(record.title, 90)}`,
+        ),
+        statement:
+          'This page lists a clinical training, practicum, or placement site. It is not a university conflict-of-interest or outside-activity policy.',
+        basis: 'third_party',
+        basisLabel: BASIS_LABEL.third_party,
+        verification: null,
+      });
     }
     if (
       (record.kind === 'video' || record.kind === 'presentation') &&
@@ -1033,7 +1187,10 @@ export function routeWebFindings(
       isPaidDirectoryRecord(record) &&
       !alreadyFiled('ime')
     ) {
-      push(recordFinding('ime', short(record.title, 140)));
+      const imeDump = `${record.title}\n${record.summary}\n${record.snippet ?? ''}`;
+      if (!isMultiPersonRegistryDump(imeDump)) {
+        push(recordFinding('ime', short(record.title, 140)));
+      }
     }
     if (record.kind === 'review' && !alreadyFiled('patient-reviews')) {
       push(recordFinding('patient-reviews', short(record.title, 140)));
@@ -1182,6 +1339,56 @@ export function routeWebFindings(
       }
     }
     list.splice(0, list.length, ...byPage.values());
+
+    // Expert Websites: one practice-site finding per host, with path aliases.
+    if (sectionId === 'websites') {
+      const byHost = new Map<string, RoutedFinding[]>();
+      for (const finding of list) {
+        const h = hostOf(finding.url);
+        const bucket = byHost.get(h) ?? [];
+        bucket.push(finding);
+        byHost.set(h, bucket);
+      }
+      const grouped: RoutedFinding[] = [];
+      for (const [, pages] of byHost) {
+        pages.sort(
+          (a, b) =>
+            BASIS_ORDER[a.basis] - BASIS_ORDER[b.basis] ||
+            strength(b.quote) - strength(a.quote),
+        );
+        const lead = pages[0];
+        if (pages.length === 1) {
+          grouped.push(lead);
+          continue;
+        }
+        const paths = [
+          ...new Set(
+            pages.map((p) => {
+              try {
+                const path = new URL(p.url).pathname.replace(/\/$/, '') || '/';
+                return path;
+              } catch {
+                return p.url;
+              }
+            }),
+          ),
+        ].filter((p) => p !== '/');
+        const also =
+          paths.length > 0
+            ? ` Also listed: ${paths.slice(0, 6).join(', ')}.`
+            : '';
+        grouped.push({
+          ...lead,
+          title: short(
+            lead.title.replace(/^Website:\s*/i, '') || hostOf(lead.url),
+            100,
+          ),
+          statement: `${lead.statement}${also}`.trim(),
+        });
+      }
+      list.splice(0, list.length, ...grouped);
+    }
+
     list.sort(
       (a, b) =>
         BASIS_ORDER[a.basis] - BASIS_ORDER[b.basis] ||

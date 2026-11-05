@@ -129,7 +129,11 @@ describe('routeWebFindings', () => {
     );
     expect(routed.get('education')).toHaveLength(1);
     expect(routed.get('university-accreditation')).toBeUndefined();
-    expect(routed.get('memberships')).toHaveLength(1);
+    // Own-site membership claims are Self-Reported under Websites, not Memberships.
+    expect(routed.get('memberships')).toBeUndefined();
+    expect(
+      routed.get('websites')?.some((f) => /National Academy/i.test(f.statement)),
+    ).toBe(true);
     expect(routed.get('grants')).toHaveLength(1);
     const action = routed.get('board-actions')?.[0];
     expect(action?.basisLabel).toMatch(/not established|Reported/);
