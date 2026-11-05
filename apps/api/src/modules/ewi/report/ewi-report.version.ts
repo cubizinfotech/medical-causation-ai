@@ -123,8 +123,11 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * publishers ≠ corporate affiliations; NPPES miss ≠ license discrepancy;
  * appointments/education Self-Reported (not OpenAlex Unable to Access);
  * junk multi-entry CV publication dumps dropped.
+ * 3.10.17: bare-state intake; strong-only subject sections; evidence gate
+ * (snippet adverse, registry dumps, corporate URL mismatch); own-site
+ * consistency/dedupe; §39 ambiguity-only; reviews priority; Graham fixtures.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.10.16';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.17';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis, TrialSmith, and other licensed databases are searched only when authorized for the investigation; licensed PDFs are not stored unless legally permitted.';

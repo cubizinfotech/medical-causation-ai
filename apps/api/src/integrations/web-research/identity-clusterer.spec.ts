@@ -87,7 +87,7 @@ describe('clusterRecords', () => {
     );
   });
 
-  it('never attributes a bare same-name page to the subject', () => {
+  it('never attributes a bare same-name page to the subject or dumps it in §39', () => {
     const { candidates } = clusterRecords(
       [record('r3', 'weak' as MatchLevel)],
       new Map([
@@ -99,11 +99,10 @@ describe('clusterRecords', () => {
     expect(
       candidates.find((candidate) => candidate.role === 'subject'),
     ).toBeUndefined();
-    const unconfirmed = candidates.find(
-      (candidate) => candidate.id === 'cand-unconfirmed',
-    );
-    expect(unconfirmed?.recordIds).toEqual(['r3']);
-    expect(unconfirmed?.basis[0]).toMatch(/not attributed to the subject/);
+    expect(
+      candidates.find((candidate) => candidate.id === 'cand-unconfirmed'),
+    ).toBeUndefined();
+    expect(candidates.filter((c) => c.role === 'other')).toHaveLength(0);
   });
 
   it('splits different people who share the name by state and middle initial', () => {

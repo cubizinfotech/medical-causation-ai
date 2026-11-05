@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-11-05): EWI report 3.10.17 — identity, evidence gate, §39, Graham-class accuracy
+
+- Bare state intake (`Florida` / `FL`) is state-only, not a fake city; NPI/web corroboration can use same-state place matches.
+- Subject report sections require a **strong** identity match; `possible` pages stay for §39 disambiguation only.
+- Central `evidence-gate`: reject different-person claims, unread adverse snippets, multi-person registry office dumps, and corporate claims whose URL slug names a different entity.
+- Own-domain pages: sibling strong practice-site pages promote consistently; cross-section claim dedupe; own sites excluded from §39 dumps.
+- §39 Other People lists only meaningful identity ambiguity (not different-first-name obituaries, sports, or weak leftovers).
+- Patient-reviews query priority raised so the category is less often budget-starved; empty/skipped coverage wording unchanged in meaning.
+- Exec Summary / overall web lines promote only strong gated findings.
+- Regression fixtures: `ewi-report.graham-regression.spec.ts`, `evidence-gate.spec.ts`. Live Nicole Graham regeneration still requires post-deploy APIs.
+- No CAPTCHA/login bypass; Lexis/TrialSmith/PACER remain gated.
+
 ### Changed (2026-11-04): EWI report 3.10.16 — Ellenberg accuracy (education, licensing, pubs, orders, corporate, CV)
 
 - Education no longer shows CV title blocks, personal address, or phone as degree findings; usable education claims require a degree/institution cue and are labelled Self-Reported pending registrar/official confirmation.

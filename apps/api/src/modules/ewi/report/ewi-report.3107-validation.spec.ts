@@ -533,7 +533,7 @@ describe('EWI 3.10.7 fixture validation', () => {
     const pdf = await service.build(prepared);
     writeFileSync(join(outDir, 'ewi-jason-a-demery-no-cv.pdf'), pdf.buffer);
     const rendered = await pdfText(pdf.buffer);
-    expect(pdf.templateVersion).toBe('3.10.16');
+    expect(pdf.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(rendered).toMatch(/3\.10\.16/);
     expect(rendered).toMatch(/No CV was uploaded/);
     expect(rendered).toMatch(/catalog record/i);
@@ -590,7 +590,8 @@ describe('EWI 3.10.7 fixture validation', () => {
     });
     const routed = routeWebFindings(dossier([possibleMembership]));
     expect(routed.get('directories')).toBeUndefined();
-    expect(routed.get('memberships')?.[0].matchLevel).toBe('possible');
+    // Possible pages no longer fill subject credential sections.
+    expect(routed.get('memberships')).toBeUndefined();
     const report = buildEwiReportDocument({
       expertName: 'Jason A. Demery',
       city: 'Gainesville',
@@ -601,16 +602,12 @@ describe('EWI 3.10.7 fixture validation', () => {
       generatedAt: '2026-10-26T12:00:00.000Z',
       webResearch: dossier([possibleMembership]),
     });
-    expect(sectionText(report, 'memberships')).toMatch(
+    expect(sectionText(report, 'memberships')).not.toMatch(
       /Possible matches \(not confirmed memberships or affiliations\)/,
     );
-    expect(sectionText(report, 'memberships')).toMatch(/possible match/i);
     expect(sectionText(report, 'memberships')).not.toMatch(/Status: Verified/);
-    expect(sectionText(report, 'summary')).toMatch(/Possible match/);
-    expect(sectionText(report, 'summary')).not.toMatch(/Status: Verified/);
-    expect(sectionText(report, 'overall-findings')).toMatch(/Possible match/);
-    expect(sectionText(report, 'overall-findings')).not.toMatch(
-      /Memberships: (?!Possible match)/,
+    expect(sectionText(report, 'summary')).not.toMatch(
+      /Memberships:.*Possible match/i,
     );
   });
 

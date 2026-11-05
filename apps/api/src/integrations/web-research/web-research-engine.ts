@@ -1308,6 +1308,61 @@ export class WebResearchEngine {
       };
     });
 
+    // Own-domain consistency: when one practice-site page is strong, sibling
+    // pages on the same host that name the subject inherit at least that floor
+    // (unless already other_person).
+    const strongOwnHosts = new Set<string>();
+    for (const record of records) {
+      if (record.match.level !== 'strong') continue;
+      if (!isOwnPage(record.kind, record.url, subject.name.last)) continue;
+      try {
+        strongOwnHosts.add(
+          new URL(record.url).hostname.replace(/^www\./, '').toLowerCase(),
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+    const consistentRecords =
+      strongOwnHosts.size === 0
+        ? records
+        : records.map((record) => {
+            if (
+              record.match.level === 'strong' ||
+              record.match.level === 'other_person' ||
+              record.match.level === 'none'
+            ) {
+              return record;
+            }
+            if (!isOwnPage(record.kind, record.url, subject.name.last)) {
+              return record;
+            }
+            let host = '';
+            try {
+              host = new URL(record.url).hostname
+                .replace(/^www\./, '')
+                .toLowerCase();
+            } catch {
+              return record;
+            }
+            if (!strongOwnHosts.has(host)) return record;
+            return {
+              ...record,
+              match: {
+                ...record.match,
+                level: 'strong' as const,
+                confidence:
+                  record.match.confidence === 'high'
+                    ? ('high' as const)
+                    : ('medium' as const),
+                basis: [
+                  ...record.match.basis,
+                  'Same expert-controlled website as another page that strongly matches the subject.',
+                ],
+              },
+            };
+          });
+
     const subjectLabel = [
       displayName(subject.name),
       subject.specialty,
@@ -1316,7 +1371,7 @@ export class WebResearchEngine {
       .filter(Boolean)
       .join(', ');
     const clustered = clusterRecords(
-      records,
+      consistentRecords,
       fingerprints,
       subject,
       subjectLabel,

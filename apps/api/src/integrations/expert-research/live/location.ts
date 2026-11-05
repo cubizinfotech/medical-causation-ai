@@ -75,7 +75,7 @@ export function stateName(code: string | null | undefined): string | null {
   return code ? (STATE_NAMES[code.toUpperCase()] ?? null) : null;
 }
 
-/** "Phoenix, AZ", "Phoenix, Arizona 85004" or "Phoenix" -> city and state. */
+/** "Phoenix, AZ", "Phoenix, Arizona 85004", "Phoenix", or bare "Florida" / "FL". */
 export function parseCityState(input: string): CityState {
   const parts = input
     .split(',')
@@ -90,6 +90,11 @@ export function parseCityState(input: string): CityState {
   }
   // "Phoenix AZ" or "Gainesville Florida" without a comma.
   const withoutZip = input.trim().replace(/\s+\d{5}(?:-\d{4})?$/, '');
+  // Bare state name or code ("Florida", "FL") is state-only — not a city.
+  const bareState = stateCode(withoutZip);
+  if (bareState && !withoutZip.includes(' ')) {
+    return { city: '', state: bareState };
+  }
   const spaced = withoutZip.match(/^(.+?)\s+([A-Za-z]{2})$/);
   if (spaced && STATE_NAMES[spaced[2].toUpperCase()]) {
     return { city: spaced[1].trim(), state: spaced[2].toUpperCase() };
@@ -99,13 +104,34 @@ export function parseCityState(input: string): CityState {
     (a, b) => b.length - a.length,
   );
   for (const name of stateNames) {
+    if (lower === name.toLowerCase()) {
+      return { city: '', state: CODE_BY_NAME.get(name.toLowerCase()) ?? null };
+    }
     const needle = ` ${name.toLowerCase()}`;
     if (!lower.endsWith(needle)) continue;
     const city = withoutZip.slice(0, withoutZip.length - name.length).trim();
-    if (!city) continue;
+    if (!city) {
+      return { city: '', state: CODE_BY_NAME.get(name.toLowerCase()) ?? null };
+    }
     return { city, state: CODE_BY_NAME.get(name.toLowerCase()) ?? null };
   }
   return { city: withoutZip, state: null };
+}
+
+/** True when a practice location is in the given two-letter state. */
+export function inState(
+  location: { city?: string | null; state?: string | null },
+  state: string | null | undefined,
+): boolean {
+  if (!state) return false;
+  const wanted = stateCode(state);
+  if (!wanted) return false;
+  if (location.state && stateCode(location.state) === wanted) return true;
+  if (location.city) {
+    const parsed = parseCityState(location.city);
+    if (parsed.state === wanted) return true;
+  }
+  return false;
 }
 
 /** Lower-case city with common abbreviations spelled out ("St." -> "saint"). */

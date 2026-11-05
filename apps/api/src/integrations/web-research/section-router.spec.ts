@@ -416,7 +416,7 @@ describe('routeWebFindings', () => {
             ),
             claim('ime', 'compulsory medical examination of a plaintiff'),
           ],
-          'possible',
+          'strong',
           'Order granting motion to compel CME',
         ),
       ]),
@@ -748,7 +748,7 @@ describe('coverageLine', () => {
     expect(routed.get('directories')?.[0].matchLevel).toBe('strong');
   });
 
-  it('files a possible-match court order as a possible match, not as IME', () => {
+  it('keeps possible-match court pages out of subject sections (including IME)', () => {
     const routed = routeWebFindings(
       dossier([
         record(
@@ -762,7 +762,7 @@ describe('coverageLine', () => {
       ]),
     );
     expect(routed.get('ime')).toBeUndefined();
-    expect(routed.get('orders')?.[0].matchLevel).toBe('possible');
+    expect(routed.get('orders')).toBeUndefined();
   });
 
   it('files a motion that mentions a deposition as a pleading, not a deposition', () => {

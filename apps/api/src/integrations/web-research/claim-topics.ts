@@ -19,6 +19,19 @@ import type {
   WebSourceKind,
 } from './web-research.types';
 
+const CLAIM_NAMES_DIFFERENT_PERSON =
+  /\b(?:different (?:individual|person|party|parties)|pertain(?:s)? to a different|involve(?:s)? different|not (?:the|this) (?:same )?(?:expert|subject|person|individual)|another (?:person|individual) named)\b/i;
+
+function looksLikeMultiPersonRegistry(text: string): boolean {
+  const licenseHits = text.match(
+    /\b(?:PY|ME|OS|CH|DN|RN|PA|PT)\d{3,6}\b|\blicense(?:\s*#| number)?\s*[:.]?\s*\d{4,}\b/gi,
+  );
+  const personLines = text.match(
+    /\b[A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+,?\s+(?:Psy\.?D\.?|Ph\.?D\.?|M\.?D\.?|D\.?O\.?|Ed\.?D\.?)\b/g,
+  );
+  return (licenseHits?.length ?? 0) >= 3 || (personLines?.length ?? 0) >= 3;
+}
+
 export const TOPIC_LABEL: Record<WebClaimTopic, string> = {
   education: 'Education',
   board_certification: 'Board certification',
@@ -624,6 +637,18 @@ export function extractFacts(input: FactInput): WebClaim[] {
       if (!hit) continue;
       if (rule.and && !rule.and.test(piece)) continue;
       if (rule.unless && rule.unless.test(piece)) continue;
+      if (
+        rule.topic === 'office' &&
+        looksLikeMultiPersonRegistry(`${input.title ?? ''} ${input.text}`)
+      ) {
+        continue;
+      }
+      if (
+        (rule.topic === 'criminal' || rule.topic === 'discipline') &&
+        CLAIM_NAMES_DIFFERENT_PERSON.test(piece)
+      ) {
+        continue;
+      }
       // Institutional COI / outside-consulting policies rarely name the expert.
       const policyWithoutName =
         rule.topic === 'university_rules' && pageLooksLikePolicy && !namesOther;
@@ -738,6 +763,10 @@ export function factsFromSnippet(input: {
     for (const rule of RULES) {
       if (rule.kinds && !rule.kinds.includes(input.kind)) continue;
       if (rule.topic === 'office') continue;
+      // Adverse claims need a read page; snippets that admit a different person
+      // must never become subject findings.
+      if (rule.topic === 'criminal' || rule.topic === 'discipline') continue;
+      if (CLAIM_NAMES_DIFFERENT_PERSON.test(piece)) continue;
       const hit = new RegExp(rule.pattern.source, rule.pattern.flags).exec(
         piece,
       );

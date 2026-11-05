@@ -126,9 +126,9 @@ export const QUERY_PRIORITY: Record<QueryTopic, number> = {
   video: 25,
   business: 26,
   university_rules: 30,
+  reviews: 28,
   news: 40,
   news_adverse: 41,
-  reviews: 42,
   places: 43,
   context: 99,
 };

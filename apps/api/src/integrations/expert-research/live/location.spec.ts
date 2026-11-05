@@ -1,4 +1,29 @@
-import { citiesMatch, metroPeerCities, normalizeCity } from './location';
+import {
+  citiesMatch,
+  metroPeerCities,
+  normalizeCity,
+  parseCityState,
+} from './location';
+
+describe('parseCityState', () => {
+  it('treats a bare state name or code as state-only, not a city', () => {
+    expect(parseCityState('Florida')).toEqual({ city: '', state: 'FL' });
+    expect(parseCityState('FL')).toEqual({ city: '', state: 'FL' });
+    expect(parseCityState('California')).toEqual({ city: '', state: 'CA' });
+    expect(parseCityState('New York')).toEqual({ city: '', state: 'NY' });
+  });
+
+  it('still parses city and state together', () => {
+    expect(parseCityState('Fort Lauderdale, FL')).toEqual({
+      city: 'Fort Lauderdale',
+      state: 'FL',
+    });
+    expect(parseCityState('Gainesville Florida')).toEqual({
+      city: 'Gainesville',
+      state: 'FL',
+    });
+  });
+});
 
 describe('citiesMatch metro groups', () => {
   it('treats Los Angeles and Beverly Hills as the same metro', () => {

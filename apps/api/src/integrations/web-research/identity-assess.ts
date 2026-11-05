@@ -7,6 +7,8 @@ import {
 import {
   metroPeerCities,
   parseCityState,
+  stateCode,
+  stateName,
 } from '../expert-research/live/location';
 import { specialtyStems } from '../expert-research/live/specialty-match';
 import type { MatchConfidence, MatchLevel } from './web-research.types';
@@ -368,7 +370,7 @@ export function assessIdentity(
         near.includes(t) ||
         nearStems.some((w) => w.startsWith(t) || t.startsWith(w)),
     );
-  const { city } = parseCityState(subject.city || '');
+  const { city, state } = parseCityState(subject.city || '');
   const cityLower = city.toLowerCase();
   // Exact city token, or a same-metro city listed near the name (e.g. Los
   // Angeles subject with Beverly Hills on the page).
@@ -376,6 +378,21 @@ export function assessIdentity(
     cityLower.length > 2 &&
     (near.includes(cityLower) ||
       metroCityTokens(city).some((token) => near.includes(token)));
+  // Bare-state intake ("Florida") or city+state: state code / full name near
+  // the subject name counts as place corroboration when city is absent or
+  // already matched.
+  const stateNear = (() => {
+    if (!state) return false;
+    const code = stateCode(state) ?? state;
+    const full = (stateName(code) ?? '').toLowerCase();
+    const nearHasCode = new RegExp(
+      `(?<![\\p{L}])${code}(?![\\p{L}])`,
+      'iu',
+    ).test(near);
+    const nearHasName = full.length > 3 && near.includes(full);
+    return nearHasCode || nearHasName;
+  })();
+  const placeNear = cityNear || (stateNear && cityLower.length === 0);
   const contextHits = contextTerms(subject.context).filter((term) =>
     near.includes(fold(term)),
   );
@@ -441,6 +458,10 @@ export function assessIdentity(
       `"${subject.specialty}" or a related term appears next to the name.`,
     );
   if (cityNear) basis.push(`${city} appears next to the name.`);
+  else if (placeNear && state)
+    basis.push(
+      `${stateName(state) ?? state} appears next to the name (state-level place match).`,
+    );
   if (contextHits.length > 0) {
     basis.push(
       `Terms from the intake note appear next to the name: ${contextHits.slice(0, 4).join(', ')}.`,
@@ -450,7 +471,7 @@ export function assessIdentity(
   const corroborators =
     (npiOnPage ? 2 : 0) +
     (specialtyNear ? 1 : 0) +
-    (cityNear ? 1 : 0) +
+    (placeNear ? 1 : 0) +
     (contextHits.length > 0 ? 1 : 0);
 
   let level: MatchLevel;
@@ -520,7 +541,7 @@ export function assessIdentity(
     quote,
     corroboration: {
       npi: npiOnPage,
-      city: Boolean(cityNear),
+      city: Boolean(placeNear),
       specialty: specialtyNear,
       context: contextHits,
     },

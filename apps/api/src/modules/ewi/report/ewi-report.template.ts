@@ -1027,25 +1027,14 @@ function withWebFindings(
     seenFinding.add(key);
     return true;
   });
+  // Possible-match pages are reserved for §39 disambiguation; subject
+  // sections only print strong, evidence-gated findings.
   const confirmedFindings = findings.filter(
-    (finding) => finding.matchLevel !== 'possible',
-  );
-  const possibleFindings = findings.filter(
-    (finding) => finding.matchLevel === 'possible',
+    (finding) => finding.matchLevel === 'strong',
   );
   const blocks: ReportBlock[] = [...own];
   for (const finding of confirmedFindings) {
     blocks.push(...webFindingBlocks(finding));
-  }
-  if (possibleFindings.length > 0) {
-    const heading =
-      section.id === 'memberships' || section.id === 'corporate'
-        ? 'Possible matches (not confirmed memberships or affiliations)'
-        : 'Possible matches (not confirmed)';
-    blocks.push({ text: heading, style: 'subheading' });
-    for (const finding of possibleFindings) {
-      blocks.push(...webFindingBlocks(finding));
-    }
   }
   const verification = sectionVerification(dossier, section.id);
   // Show issuing-body verification even when own-site claims were filed under
@@ -1061,7 +1050,7 @@ function withWebFindings(
   }
   const coverage = structuredCoverage(section.id, statuses);
   const hasFindingBlocks =
-    findings.length > 0 ||
+    confirmedFindings.length > 0 ||
     own.some((block) => block.style !== 'note' && block.style !== 'citation') ||
     Boolean(
       verification &&
@@ -1540,25 +1529,23 @@ function webSummaryLines(
         : '';
     const more =
       list.length > 1 ? ` (${list.length} items in the section)` : '';
-    const possibleCount = list.filter(
-      (finding) => finding.matchLevel === 'possible',
-    ).length;
-    const strongCount = list.filter(
+    const strongList = list.filter(
       (finding) => finding.matchLevel === 'strong',
-    ).length;
-    if (
-      possibleCount > 0 &&
-      strongCount > 0 &&
-      (sectionId === 'memberships' || sectionId === 'corporate')
-    ) {
-      lines.push(
-        `${plainTitle(sectionId)}: ${strongCount} confirmed-identity listing(s); ${possibleCount} possible match(es), not treated as verified. ${lead.basisLabel}. ${headline}.${quote}${more}`,
-      );
-      continue;
-    }
-    const possible = lead.matchLevel === 'possible' ? 'Possible match. ' : '';
+    );
+    if (strongList.length === 0) continue;
+    const strongLead = strongList[0] ?? lead;
+    const strongHeadline = summaryHeadline(strongLead);
+    const strongQuote =
+      strongLead.quote &&
+      !strongHeadline.includes(strongLead.quote.slice(0, 48).trim())
+        ? ` “${strongLead.quote.slice(0, 220).trim()}”`
+        : '';
+    const strongMore =
+      strongList.length > 1
+        ? ` (${strongList.length} items in the section)`
+        : '';
     lines.push(
-      `${plainTitle(sectionId)}: ${possible}${lead.basisLabel}. ${headline}.${quote}${more}`,
+      `${plainTitle(sectionId)}: ${strongLead.basisLabel}. ${strongHeadline}.${strongQuote}${strongMore}`,
     );
   }
   for (const verification of dossier?.verifications ?? []) {
@@ -2437,45 +2424,6 @@ function webDate(value: string | null | undefined): string | null {
   return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 10);
 }
 
-function webRecordBlocks(record: WebRecord): ReportBlock[] {
-  const published = webDate(record.publishedAt);
-  const blocks: ReportBlock[] = [
-    {
-      text: `${record.title || record.url}${published ? ` (${published})` : ''}`,
-      style: 'item',
-    },
-  ];
-  const description = record.summary || record.snippet;
-  if (description) blocks.push({ text: description });
-  if (record.match.quote) {
-    blocks.push({
-      text: `“${record.match.quote}”${record.match.quoteVerified ? '' : ' (quote not confirmed on the page)'}`,
-      style: 'citation',
-    });
-  }
-  if (record.match.conflicts.length > 0) {
-    blocks.push({
-      text: `Differences from the expert: ${record.match.conflicts.join('; ')}`,
-      style: 'note',
-    });
-  }
-  if (record.read === 'restricted' || record.read === 'failed') {
-    blocks.push({
-      text: record.readNote ?? 'The page could not be read.',
-      style: 'note',
-    });
-  }
-  blocks.push({ text: record.url, link: record.url, style: 'citation' });
-  if (record.archiveUrl) {
-    blocks.push({
-      text: `Archived copy: ${record.archiveUrl}`,
-      link: record.archiveUrl,
-      style: 'citation',
-    });
-  }
-  return blocks;
-}
-
 function webCandidateBlocks(
   candidate: WebCandidate,
   records: WebRecord[],
@@ -2555,7 +2503,12 @@ function webResearchSection(
   const byId = new Map(dossier.records.map((record) => [record.id, record]));
   if (others.length > 0) {
     blocks.push({
-      text: `${others.length} other ${others.length === 1 ? 'person' : 'people'} with a similar name ${others.length === 1 ? 'was' : 'were'} found and kept separate.`,
+      text: `${others.length} other ${others.length === 1 ? 'person' : 'people'} with a similar name ${others.length === 1 ? 'was' : 'were'} found and kept separate because identity could reasonably be confused with the expert.`,
+      style: 'note',
+    });
+  } else {
+    blocks.push({
+      text: 'No meaningful alternate identity requiring disambiguation was found. Unrelated surname hits, obituaries, and different first names are not listed here.',
       style: 'note',
     });
   }
@@ -2566,24 +2519,8 @@ function webResearchSection(
     blocks.push(...webCandidateBlocks(candidate, records));
   }
 
-  const otherIds = new Set(others.flatMap((candidate) => candidate.recordIds));
-  const leftover = dossier.records.filter(
-    (record) =>
-      !otherIds.has(record.id) &&
-      record.match.level !== 'other_person' &&
-      record.match.level !== 'none' &&
-      record.match.level !== 'strong' &&
-      record.kind !== 'social',
-  );
-  if (leftover.length > 0) {
-    blocks.push({
-      text: 'Other public pages',
-      style: 'subheading',
-    });
-    for (const record of leftover.slice(0, 12)) {
-      blocks.push(...webRecordBlocks(record));
-    }
-  }
+  // Weak leftovers and non-ambiguous surname hits are intentionally omitted
+  // from the attorney-facing section (they previously flooded §39).
 
   if (dossier.pagesBlocked.length > 0) {
     blocks.push({

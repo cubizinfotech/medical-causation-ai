@@ -15,6 +15,13 @@ export {
 } from './web-source-providers';
 export { assessIdentity, subjectFromQuery } from './identity-assess';
 export {
+  gateSubjectClaim,
+  matchAllowsSubjectFinding,
+  corporateClaimMatchesSource,
+  isAmbiguityWorthReporting,
+  isMultiPersonRegistryDump,
+} from './evidence-gate';
+export {
   BASIS_LABEL,
   coverageLine,
   displayStructuredCoverage,

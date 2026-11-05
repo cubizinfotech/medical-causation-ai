@@ -4,6 +4,10 @@ import {
   stateCode,
   stateName,
 } from '../expert-research/live/location';
+import {
+  isAmbiguityWorthReporting,
+  isExpertOwnedRecord,
+} from './evidence-gate';
 import type {
   MatchConfidence,
   WebCandidate,
@@ -118,8 +122,6 @@ export function clusterRecords(
     string,
     { label: string; basis: string[]; records: WebRecord[] }
   >();
-  const unconfirmed: WebRecord[] = [];
-
   for (const record of records) {
     if (record.match.level === 'none') continue;
     if (record.match.level === 'strong') {
@@ -132,8 +134,8 @@ export function clusterRecords(
     }
     const fingerprint = fingerprints.get(record.id);
     // A page is a different person only on positive evidence: another middle
-    // name, or a different state than the one given. A credential alone, or
-    // a page that simply says nothing, stays "unconfirmed".
+    // name, or a different state than the one given. Weak leftovers without
+    // distinguishing evidence stay off §39 (not dumped as "unconfirmed").
     const subjectState = parseCityState(subject.city || '').state;
     const subjectMiddle = subject.name.middle[0]?.toLowerCase() ?? '';
     const pageMiddle = middleOf(fingerprint?.written ?? null);
@@ -159,8 +161,6 @@ export function clusterRecords(
       }
       group.records.push(record);
       groups.set(key, group);
-    } else {
-      unconfirmed.push(record);
     }
   }
 
@@ -177,20 +177,44 @@ export function clusterRecords(
       recordIds: subjectRecords.map((r) => r.id),
     });
   }
-  if (possibleRecords.length > 0) {
-    candidates.push({
+  // Own-site possible pages belong under Websites/Background, not §39.
+  const possibleForDisambiguation = possibleRecords.filter(
+    (record) => !isExpertOwnedRecord(record, subject.name.last),
+  );
+  if (possibleForDisambiguation.length > 0) {
+    const candidate = {
       id: 'cand-possible',
       label: `Possible match pages for ${subjectLabel.split(',')[0]} (not treated as confirmed credentials)`,
-      role: 'other',
-      confidence: 'medium',
+      role: 'other' as const,
+      confidence: 'medium' as const,
       basis: [
         'These pages only partly agree with the name, profession or place given. They are listed as possible matches and are not treated as the subject’s credentials.',
       ],
-      recordIds: possibleRecords.map((r) => r.id),
-    });
+      recordIds: possibleForDisambiguation.map((r) => r.id),
+    };
+    if (
+      isAmbiguityWorthReporting({
+        label: candidate.label,
+        basis: candidate.basis,
+        records: possibleForDisambiguation,
+        subjectSpecialty: subject.specialty,
+      })
+    ) {
+      candidates.push(candidate);
+    }
   }
   let index = 0;
   for (const group of groups.values()) {
+    if (
+      !isAmbiguityWorthReporting({
+        label: group.label,
+        basis: group.basis,
+        records: group.records,
+        subjectSpecialty: subject.specialty,
+      })
+    ) {
+      continue;
+    }
     index += 1;
     candidates.push({
       id: `cand-other-${index}`,
@@ -201,18 +225,8 @@ export function clusterRecords(
       recordIds: group.records.map((r) => r.id),
     });
   }
-  if (unconfirmed.length > 0) {
-    candidates.push({
-      id: 'cand-unconfirmed',
-      label: `Unconfirmed pages naming ${subjectLabel.split(',')[0]} (nothing ties them to this person or to someone else)`,
-      role: 'other',
-      confidence: 'low',
-      basis: [
-        'The name appears, but the profession, place and NPI given do not appear next to it. These pages are not attributed to the subject.',
-      ],
-      recordIds: unconfirmed.map((r) => r.id),
-    });
-  }
+  // Unconfirmed weak leftovers stay out of the attorney-facing §39 dump;
+  // they remain on the record list for logs / blocked-page handling.
 
   const assignment = new Map<string, string>();
   for (const candidate of candidates) {

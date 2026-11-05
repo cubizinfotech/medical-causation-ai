@@ -14,6 +14,14 @@ import {
   organizationsIn,
   TOPIC_LABEL,
 } from './claim-topics';
+import {
+  claimFingerprint,
+  corporateClaimMatchesSource,
+  gateSubjectClaim,
+  isMultiPersonRegistryDump,
+  matchAllowsSubjectFinding,
+  normalizeFindingUrl,
+} from './evidence-gate';
 import { looksLikeCourtDocument } from './source-kind';
 import { sosDeepLinksFor } from './sos-business-search';
 import { isPaidAdvertisingDirectory } from './web-source-providers';
@@ -103,21 +111,53 @@ function isIrrelevantNoiseRecord(record: WebRecord): boolean {
   return false;
 }
 
-/** Claims about an associate (Glass, etc.) must not fill the subject’s sections. */
+/**
+ * Claims about an associate / different named professional must not fill the
+ * subject’s sections. Ellenberg practice associates remain as regression
+ * fixtures; general pattern drops “Dr. X” bios that do not name the subject.
+ */
 function claimAboutOtherPerson(claim: WebClaim, record: WebRecord): boolean {
   const hay = `${claim.text} ${claim.quote}`.toLowerCase();
-  if (!/\b(dr\.?\s+glass|leila\s+glass|kristen\s+thompson|jesse\s+fischer)\b/.test(hay)) {
-    return false;
+  if (
+    /\b(dr\.?\s+glass|leila\s+glass|kristen\s+thompson|jesse\s+fischer)\b/.test(
+      hay,
+    )
+  ) {
+    if (
+      /\b(dr\.?\s+glass|leila\s+glass)\b/.test(hay) &&
+      !/\bleah\s+ellenberg\b/.test(hay)
+    ) {
+      return true;
+    }
+    const pageHay = `${record.title} ${record.summary}`.toLowerCase();
+    if (
+      /\b(leila\s+glass|dr\.?\s+glass)\b/.test(pageHay) &&
+      !/\bleah\s+ellenberg\b/.test(hay.slice(0, 120))
+    ) {
+      return true;
+    }
   }
-  // If the claim itself centers the associate, drop it even on the practice site.
-  if (/\b(dr\.?\s+glass|leila\s+glass)\b/.test(hay) && !/\bleah\s+ellenberg\b/.test(hay)) {
-    return true;
+  // General: claim centers a different titled professional and never names a
+  // first+last that appears in the page title as the subject path.
+  if (
+    /\b(curriculum vitae|\bcv\b|resume|graduated|nih grants|published research)\b/.test(
+      hay,
+    ) &&
+    /\bdr\.?\s+[a-z][a-z'-]+\b/.test(hay) &&
+    !/\b(i am|my practice|my curriculum)\b/.test(hay)
+  ) {
+    const titleHay = `${record.title} ${record.url}`.toLowerCase();
+    // Associate CV paths (/glass, /thompson, …) already caught by noise filter;
+    // drop claim text that is clearly someone else's bio block.
+    if (
+      /\/(associates?|team|staff)\//i.test(record.url) ||
+      /cv\.pdf$/i.test(record.url)
+    ) {
+      return true;
+    }
+    void titleHay;
   }
-  const pageHay = `${record.title} ${record.summary}`.toLowerCase();
-  return (
-    /\b(leila\s+glass|dr\.?\s+glass)\b/.test(pageHay) &&
-    !/\bleah\s+ellenberg\b/.test(hay.slice(0, 120))
-  );
+  return false;
 }
 
 /** Legal commentary / news about courts is not an Order. */
@@ -368,7 +408,9 @@ function sectionsFor(claim: WebClaim): RoutedSectionId[] {
 function tied(record: WebRecord): record is WebRecord & {
   match: { level: 'strong' | 'possible' };
 } {
-  return record.match.level === 'strong' || record.match.level === 'possible';
+  // Possible pages stay in the dossier for §39 disambiguation; they do not
+  // enter subject report sections (credentials, criminal, corporate, office…).
+  return matchAllowsSubjectFinding(record.match.level);
 }
 
 function short(text: string, max: number): string {
@@ -554,15 +596,22 @@ export function routeWebFindings(
     { label: string; findings: RoutedFinding[]; pages: Set<string> }
   >();
 
+  // Cross-section evidence fingerprint: same URL+claim should not appear as
+  // independent verification in multiple sections.
+  const evidenceSeen = new Set<string>();
+  const ownDomainPages = new Map<string, number>();
+  const MAX_OWN_DOMAIN_PAGES = 4;
+
   for (const record of dossier.records) {
     if (!tied(record)) continue;
     if (isIrrelevantNoiseRecord(record)) continue;
     const matchLevel = record.match.level;
+    if (matchLevel !== 'strong' && matchLevel !== 'possible') continue;
     const courtLike = looksLikeCourtDocument(record);
     const base = {
       url: record.url,
       sourceTitle: record.title,
-      matchLevel,
+      matchLevel: matchLevel as 'strong' | 'possible',
       retrievedAt: record.retrievedAt,
       publishedAt: record.publishedAt,
       rating: record.rating ?? null,
@@ -624,6 +673,13 @@ export function routeWebFindings(
         continue;
       }
       for (const sectionId of sectionsFor(claim)) {
+        const gated = gateSubjectClaim({
+          claim,
+          record,
+          sectionId,
+          pageText: `${record.title}\n${record.summary}\n${claim.text}\n${claim.quote ?? ''}`,
+        });
+        if (!gated.accept) continue;
         if (
           CREDENTIAL_SECTIONS.has(sectionId) &&
           record.match.level !== 'strong'
@@ -638,6 +694,35 @@ export function routeWebFindings(
           )
         ) {
           continue;
+        }
+        // Own-domain volume: keep a few distinct practice-site pages, not every path.
+        if (
+          sectionId === 'websites' ||
+          sectionId === 'background' ||
+          (claim.basis === 'subject_stated' &&
+            (record.kind === 'expert_website' ||
+              record.kind === 'profile' ||
+              record.kind === 'advertising'))
+        ) {
+          const host = hostOf(record.url);
+          const count = ownDomainPages.get(host) ?? 0;
+          const pageKey = normalizeFindingUrl(record.url);
+          const alreadyCounted = [...evidenceSeen].some((k) =>
+            k.startsWith(`${pageKey}|`),
+          );
+          if (!alreadyCounted && count >= MAX_OWN_DOMAIN_PAGES) {
+            continue;
+          }
+          if (!alreadyCounted) ownDomainPages.set(host, count + 1);
+        }
+        // Own-site self-reported claims: one primary presentation, not the same
+        // sentence repeated as independent findings across sections.
+        if (claim.basis === 'subject_stated' || basis === 'subject_stated') {
+          const evidenceKey = `${normalizeFindingUrl(record.url)}|${claimFingerprint(claim.text, claim.quote)}`;
+          if (evidenceSeen.has(evidenceKey) && sectionId !== 'websites') {
+            continue;
+          }
+          evidenceSeen.add(evidenceKey);
         }
         // Forensic/IME marketing belongs under paid directories only. Practice
         // sites (often kind "other") and articles stay under Websites — not
@@ -1003,7 +1088,7 @@ export function routeWebFindings(
     }
   }
 
-  // Businesses named on pages that name the expert.
+  // Businesses named on pages that strongly match the expert.
   const companyNames = new Set<string>();
   for (const tie of dossier.companies ?? []) {
     if (isPublisherNotAffiliation(tie.name)) continue;
@@ -1014,8 +1099,26 @@ export function routeWebFindings(
     ) {
       continue;
     }
-    const key = tie.name.toLowerCase();
     const record = dossier.records.find((r) => r.url === tie.url) ?? null;
+    if (record && !matchAllowsSubjectFinding(record.match.level)) continue;
+    if (
+      !corporateClaimMatchesSource({
+        companyName: tie.name,
+        url: tie.url,
+        pageText: record ? `${record.title} ${record.summary}` : null,
+        quote: tie.quote,
+      })
+    ) {
+      continue;
+    }
+    if (
+      isMultiPersonRegistryDump(
+        `${record?.title ?? ''} ${record?.summary ?? ''} ${tie.quote ?? ''}`,
+      )
+    ) {
+      continue;
+    }
+    const key = tie.name.toLowerCase();
     const first = !companyNames.has(key);
     companyNames.add(key);
     if (!first && tie.scope !== 'own_page') continue;
@@ -1034,16 +1137,16 @@ export function routeWebFindings(
         BASIS_LABEL[
           tie.scope === 'own_page' ? 'subject_stated' : 'third_party'
         ],
-      matchLevel: (record?.match.level as 'strong' | 'possible') ?? 'possible',
-      from: 'page',
+      matchLevel: 'strong',
+      from: record?.read === 'read' ? 'page' : 'snippet',
       retrievedAt: record?.retrievedAt ?? dossier.ranAt,
       publishedAt: record?.publishedAt ?? null,
       verification: null,
     });
   }
 
-  // Official SOS search deep-links for named entities (all states when known).
-  // These are entry points for the attorney; automated SOS login was not done.
+  // Official SOS search deep-links only for entities already supported by a
+  // strong subject-tied page. These are attorney entry points, not filings.
   const states = (options.stateCodes ?? []).filter(Boolean);
   if (states.length > 0 && companyNames.size > 0) {
     for (const link of sosDeepLinksFor([...companyNames], states)) {
@@ -1056,7 +1159,7 @@ export function routeWebFindings(
         sourceTitle: `${link.state} Secretary of State`,
         basis: 'record',
         basisLabel: BASIS_LABEL.record,
-        matchLevel: 'possible',
+        matchLevel: 'strong',
         from: 'snippet',
         retrievedAt: dossier.ranAt,
         publishedAt: null,
