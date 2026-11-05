@@ -52,6 +52,7 @@ import {
 } from './source-kind';
 import { sanitizeAdvertisingKind } from './web-source-providers';
 import { usablePortraitCandidates } from './page-portraits';
+import { toReportFriendlyImage } from './portrait-image';
 import { BraveSearchProvider } from './providers/brave.provider';
 import { GeminiGroundedSearchProvider } from './providers/gemini-grounded.provider';
 import {
@@ -1557,8 +1558,13 @@ export class WebResearchEngine {
           (kindRank[a.kind] ?? 9) - (kindRank[b.kind] ?? 9),
       )
       .slice(0, 12);
+    const byUrl = new Map<string, FetchedPage>();
+    for (const fetched of reads.values()) {
+      byUrl.set(fetched.url, fetched);
+      if (fetched.finalUrl) byUrl.set(fetched.finalUrl, fetched);
+    }
     for (const record of ranked) {
-      const fetched = reads.get(record.id);
+      const fetched = reads.get(record.id) ?? byUrl.get(record.url);
       if (!fetched?.portraits?.length) continue;
       const usable = usablePortraitCandidates(fetched.portraits, {
         kind: record.kind,
@@ -1568,9 +1574,11 @@ export class WebResearchEngine {
       for (const candidate of usable.slice(0, 4)) {
         const image = await this.fetcher.fetchImage(candidate.url);
         if (!image || image.bytes.length < 4_000) continue;
+        const friendly = await toReportFriendlyImage(image);
+        if (!friendly) continue;
         return {
-          dataUrl: `data:${image.mimeType};base64,${image.bytes.toString('base64')}`,
-          mimeType: image.mimeType,
+          dataUrl: `data:${friendly.mimeType};base64,${friendly.bytes.toString('base64')}`,
+          mimeType: friendly.mimeType,
           sourceUrl: record.url,
           imageUrl: image.url,
         };

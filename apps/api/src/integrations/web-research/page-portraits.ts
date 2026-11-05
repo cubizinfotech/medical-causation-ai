@@ -125,7 +125,13 @@ export function usablePortraitCandidates(
       `${candidate.url} ${candidate.label ?? ''}`,
     );
     if (candidate.via === 'img' || candidate.via === 'jsonld') {
-      return named || (looksPortrait && page.matchLevel === 'strong');
+      // Strong practice/profile pages: allow a normal image file even when the
+      // URL does not say "headshot" (common on clinic about pages).
+      return (
+        named ||
+        (page.matchLevel === 'strong' &&
+          (looksPortrait || (own && IMAGE_EXT.test(candidate.url))))
+      );
     }
     if (own) return true;
     return named || looksPortrait;

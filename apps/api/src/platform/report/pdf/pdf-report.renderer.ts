@@ -16,6 +16,7 @@ import {
   type TextStyle,
 } from './pdf-theme';
 import { REPORT_ICONS } from './report-icons';
+import { normalizeCoverImageDataUrl } from '../report-image';
 
 type Pdf = PDFKit.PDFDocument;
 
@@ -107,7 +108,21 @@ export class PdfReportRenderer {
     });
     const output = collect(doc);
     const fonts = this.registerFonts(doc);
-    const layout = layoutReport(model, measurerFor(doc, fonts));
+    const coverImage = model.metadata?.coverImage;
+    let layoutModel = model;
+    if (coverImage?.dataUrl) {
+      const coverDataUrl = await normalizeCoverImageDataUrl(coverImage.dataUrl);
+      layoutModel = {
+        ...model,
+        metadata: {
+          ...model.metadata,
+          coverImage: coverDataUrl
+            ? { ...coverImage, dataUrl: coverDataUrl }
+            : undefined,
+        },
+      };
+    }
+    const layout = layoutReport(layoutModel, measurerFor(doc, fonts));
 
     const footerLabel = [model.headerLabel, model.metadata?.expertName]
       .filter(Boolean)
