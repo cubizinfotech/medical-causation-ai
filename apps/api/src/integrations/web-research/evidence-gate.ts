@@ -51,10 +51,7 @@ export const SUBJECT_FINDING_SECTIONS = new Set([
   'news',
 ]);
 
-const ADVERSE_TOPICS = new Set<WebClaimTopic | string>([
-  'criminal',
-  'discipline',
-]);
+const ADVERSE_TOPICS = new Set<WebClaimTopic>(['criminal', 'discipline']);
 
 const DIFFERENT_PERSON_CLAIM =
   /\b(?:different (?:individual|person|party|parties|nicole)|pertain(?:s)? to a different|involve(?:s)? different|not (?:the|this) (?:same )?(?:expert|subject|person|individual)|unrelated (?:person|individual)|another (?:person|individual) named)\b/i;
@@ -82,7 +79,7 @@ export function isUnreadAdverseClaim(
   claim: WebClaim,
   record: Pick<WebRecord, 'read'>,
 ): boolean {
-  if (!ADVERSE_TOPICS.has(claim.topic ?? '')) return false;
+  if (!claim.topic || !ADVERSE_TOPICS.has(claim.topic)) return false;
   return record.read !== 'read';
 }
 

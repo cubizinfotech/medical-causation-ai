@@ -1515,25 +1515,14 @@ function webSummaryLines(
   for (const sectionId of WEB_SUMMARY_ORDER) {
     const list = routed.get(sectionId);
     if (!list || list.length === 0) continue;
-    const lead = [...list].sort((left, right) => {
-      const match =
-        Number(right.matchLevel === 'strong') -
-        Number(left.matchLevel === 'strong');
-      if (match !== 0) return match;
-      return WEB_BASIS_RANK[left.basis] - WEB_BASIS_RANK[right.basis];
-    })[0];
-    const headline = summaryHeadline(lead);
-    const quote =
-      lead.quote && !headline.includes(lead.quote.slice(0, 48).trim())
-        ? ` “${lead.quote.slice(0, 220).trim()}”`
-        : '';
-    const more =
-      list.length > 1 ? ` (${list.length} items in the section)` : '';
-    const strongList = list.filter(
-      (finding) => finding.matchLevel === 'strong',
-    );
+    const strongList = [...list]
+      .filter((finding) => finding.matchLevel === 'strong')
+      .sort(
+        (left, right) =>
+          WEB_BASIS_RANK[left.basis] - WEB_BASIS_RANK[right.basis],
+      );
     if (strongList.length === 0) continue;
-    const strongLead = strongList[0] ?? lead;
+    const strongLead = strongList[0];
     const strongHeadline = summaryHeadline(strongLead);
     const strongQuote =
       strongLead.quote &&
