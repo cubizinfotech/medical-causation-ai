@@ -837,30 +837,51 @@ export function routeWebFindings(
         ) {
           continue;
         }
-        // Own-site / subject_stated credential topics never fill independent
-        // credential or catalog sections (Cert Orgs, Pubs, boards, licenses).
+        // Credential sections: issuing-body pages stay. Everything else:
+        // - boards/licenses: hard redirect to Websites (Self-Reported / not
+        //   issuing-body), including practice sites typed as kind "other"
+        // - pubs/memberships/cert-orgs: redirect only own-site / subject_stated
+        //   so third-party org naming and catalog hits still file
         if (
           OWN_SITE_CREDENTIAL_SECTIONS.has(sectionId) &&
-          !isIssuingBodyCredentialClaim(record, claim, basis) &&
-          isOwnSiteRecord(record, claim, surname)
+          !isIssuingBodyCredentialClaim(record, claim, basis)
         ) {
-          const pubOnly = sectionId === 'publications';
-          push({
-            ...base,
-            sectionId: 'websites',
-            title: pubOnly
-              ? `Expert’s own publication list: ${short(record.title, 90)}`
-              : `Expert’s own statement: ${short(record.title, 90)}`,
-            statement: pubOnly
-              ? `${claim.text} This is listed on the expert’s own site or profile. It is not a PubMed/OpenAlex catalog confirmation.`
-              : `${claim.text} This is the expert’s own statement (website or profile). It is not independent verification of the credential.`,
-            quote: claim.quote,
-            basis: 'subject_stated',
-            basisLabel: BASIS_LABEL.subject_stated,
-            from: claim.from ?? 'page',
-            verification: verificationFor('websites'),
-          });
-          continue;
+          const own = isOwnSiteRecord(record, claim, surname);
+          const hardCredential =
+            sectionId === 'board-certifications' || sectionId === 'licenses';
+          const redirect =
+            hardCredential ||
+            own ||
+            claim.basis === 'subject_stated';
+          if (redirect) {
+            const pubOnly = sectionId === 'publications';
+            push({
+              ...base,
+              sectionId: 'websites',
+              title: pubOnly
+                ? `Expert’s own publication list: ${short(record.title, 90)}`
+                : `Expert’s own statement: ${short(record.title, 90)}`,
+              statement: pubOnly
+                ? `${claim.text} This is listed on the expert’s own site or profile. It is not a PubMed/OpenAlex catalog confirmation.`
+                : own || claim.basis === 'subject_stated'
+                  ? `${claim.text} This is the expert’s own statement (website or profile). It is not independent verification of the credential.`
+                  : `${claim.text} This is not an issuing-body confirmation of the credential. It is not independent verification.`,
+              quote: claim.quote,
+              basis:
+                own || claim.basis === 'subject_stated'
+                  ? 'subject_stated'
+                  : 'third_party',
+              basisLabel:
+                BASIS_LABEL[
+                  own || claim.basis === 'subject_stated'
+                    ? 'subject_stated'
+                    : 'third_party'
+                ],
+              from: claim.from ?? 'page',
+              verification: verificationFor('websites'),
+            });
+            continue;
+          }
         }
         // University: practicum / training-site brochures → Background.
         // Real university-rules require COI / outside-activity policy language.
@@ -1340,7 +1361,9 @@ export function routeWebFindings(
     }
     list.splice(0, list.length, ...byPage.values());
 
-    // Expert Websites: one practice-site finding per host, with path aliases.
+    // Expert Websites: collapse path listings per host, but keep Self-Reported
+    // credential statements (board/pub/etc.) so they are not overwritten by a
+    // generic “Website: …” marketing line.
     if (sectionId === 'websites') {
       const byHost = new Map<string, RoutedFinding[]>();
       for (const finding of list) {
@@ -1350,20 +1373,28 @@ export function routeWebFindings(
         byHost.set(h, bucket);
       }
       const grouped: RoutedFinding[] = [];
+      const isSelfReportedCredential = (finding: RoutedFinding): boolean =>
+        /own statement|not independent verification|own publication list/i.test(
+          `${finding.title} ${finding.statement}`,
+        );
       for (const [, pages] of byHost) {
-        pages.sort(
+        const credentials = pages.filter(isSelfReportedCredential);
+        const pathListings = pages.filter((p) => !isSelfReportedCredential(p));
+        grouped.push(...credentials);
+        if (pathListings.length === 0) continue;
+        pathListings.sort(
           (a, b) =>
             BASIS_ORDER[a.basis] - BASIS_ORDER[b.basis] ||
             strength(b.quote) - strength(a.quote),
         );
-        const lead = pages[0];
-        if (pages.length === 1) {
+        const lead = pathListings[0];
+        if (pathListings.length === 1) {
           grouped.push(lead);
           continue;
         }
         const paths = [
           ...new Set(
-            pages.map((p) => {
+            pathListings.map((p) => {
               try {
                 const path = new URL(p.url).pathname.replace(/\/$/, '') || '/';
                 return path;

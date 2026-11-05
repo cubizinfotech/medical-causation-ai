@@ -65,8 +65,12 @@ export function verifyClaims(
     for (const claim of record.claims) {
       if (!claim.topic) continue;
       if (!VERIFIED_TOPICS.includes(claim.topic)) continue;
-      // Own-site / subject_stated bibliography never drives catalog confirmation.
-      if (claim.basis === 'subject_stated') continue;
+      // Own-site bibliography never drives publication catalog confirmation.
+      // Board/license/membership claims still enter verification so the report
+      // can say “claimed, not confirmed at the issuing body.”
+      if (claim.basis === 'subject_stated' && claim.topic === 'publication') {
+        continue;
+      }
       const list = byTopic.get(claim.topic) ?? [];
       list.push({ record, claim });
       byTopic.set(claim.topic, list);

@@ -194,17 +194,11 @@ export function clusterRecords(
   }
   let possibleIndex = 0;
   for (const [, bucket] of possibleBuckets) {
-    // Drop single-hit cross-genre noise unless it carries a coherent alternate
-    // identity signal (written name + credential or state distinct from subject).
+    // Drop single-hit noise with no written-name fingerprint. Genre/fingerprint
+    // keys already prevent militarytimes + NPI + ResearchGate mega-buckets.
     if (bucket.length === 1) {
-      const only = bucket[0];
-      const fp = fingerprints.get(only.id);
-      const subjectState = parseCityState(subject.city || '').state;
-      const coherent =
-        Boolean(fp?.written) &&
-        (Boolean(fp?.credential) ||
-          Boolean(fp?.state && subjectState && fp.state !== subjectState));
-      if (!coherent) continue;
+      const fp = fingerprints.get(bucket[0].id);
+      if (!fp?.written) continue;
     }
     possibleIndex += 1;
     const candidate = {
