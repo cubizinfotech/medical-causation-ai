@@ -9,6 +9,7 @@ import {
   type IdentitySubject,
 } from './identity-assess';
 import { isOwnPage } from './claim-topics';
+import { canonicalUrl } from './web-research-engine';
 import type {
   MatchLevel,
   WebClaim,
@@ -377,19 +378,9 @@ export function claimFingerprint(statement: string, quote: string | null): strin
     .slice(0, 160);
 }
 
+/** Finding-level URL key — same rules as pool `canonicalUrl`. */
 export function normalizeFindingUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.hash = '';
-    for (const key of [...parsed.searchParams.keys()]) {
-      if (/^(utm_|fbclid|gclid|mc_|ref$)/i.test(key)) {
-        parsed.searchParams.delete(key);
-      }
-    }
-    return parsed.toString().replace(/\/$/, '').toLowerCase();
-  } catch {
-    return url.toLowerCase();
-  }
+  return canonicalUrl(url);
 }
 
 /** Prefer expert_website / profile kinds for own-domain page caps. */

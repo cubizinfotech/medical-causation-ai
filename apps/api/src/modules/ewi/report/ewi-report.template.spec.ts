@@ -46,7 +46,7 @@ describe('EWI report template', () => {
     expect(document.sections.map((section) => section.title)).toEqual(
       EWI_REPORT_SECTIONS.map((section) => section.title),
     );
-    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.18');
+    expect(EWI_REPORT_TEMPLATE_VERSION).toBe('3.10.27');
     expect(document.templateVersion).toBe(EWI_REPORT_TEMPLATE_VERSION);
     expect(document.includeTableOfContents).toBe(true);
     expect(document.metadata?.expertName).toBe('Jane Doe');
@@ -129,6 +129,68 @@ describe('EWI report template', () => {
       /not a finding that the expert has no CV discrepancies/,
     );
     expect(summary).not.toMatch(/Unchecked CV claims/);
+  });
+
+  it('distinguishes a located-but-unparsed public CV from discovery failure', () => {
+    const document = buildEwiReportDocument({
+      expertName: 'Jane Expert',
+      city: 'Miami',
+      specialty: 'Neuropsychology',
+      evidence: [],
+      discrepancies: [],
+      questions: [],
+      generatedAt: '2026-11-06T00:00:00.000Z',
+      cvComparisonState: 'found_unparsed',
+      webResearch: {
+        ranAt: '2026-11-06T00:00:00.000Z',
+        durationMs: 1,
+        partial: false,
+        partialNote: null,
+        queriesPlanned: 1,
+        queriesRun: 1,
+        providers: [],
+        pagesRead: 1,
+        pagesBlocked: [],
+        candidates: [],
+        registries: [],
+        limitations: [],
+        records: [
+          {
+            id: 'drive',
+            url: 'https://drive.google.com/file/d/1PublicCvFixtureIdABCDE/view',
+            title: 'Curriculum Vitae Jane Expert',
+            kind: 'expert_website',
+            snippet: null,
+            summary: 'Curriculum vitae Jane Expert',
+            publishedAt: null,
+            retrievedAt: '2026-11-06T00:00:00.000Z',
+            searchProviders: [],
+            queries: [],
+            read: 'read',
+            readNote: null,
+            match: {
+              level: 'strong',
+              confidence: 'high',
+              basis: [],
+              conflicts: [],
+              quote: 'Jane Expert',
+              quoteVerified: true,
+              classifiedBy: 'rules',
+            },
+            candidateId: null,
+            claims: [],
+          },
+        ],
+      },
+    });
+    const cv =
+      document.sections
+        .find((section) => section.id === 'cv-comparison')
+        ?.blocks.map((block) => block.text)
+        .join('\n') ?? '';
+    expect(cv).toMatch(/public CV was located/i);
+    expect(cv).toMatch(/could not be extracted/i);
+    expect(cv).not.toMatch(/No CV was uploaded and no readable public CV/);
   });
 
   it('does not list a "could not verify" line for each source that returned nothing', () => {

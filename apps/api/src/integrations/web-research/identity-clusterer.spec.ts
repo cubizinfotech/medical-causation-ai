@@ -155,4 +155,70 @@ describe('clusterRecords', () => {
     expect(candidates).toHaveLength(0);
     expect(records[0].candidateId).toBeNull();
   });
+
+  it('keeps the confirmed subject NPI out of §39 other-people buckets', () => {
+    const withNpi: IdentitySubject = { ...subject, npi: '1568742435' };
+    const npiPage: WebRecord = {
+      ...record('npi-subject', 'possible' as MatchLevel),
+      url: 'https://npiregistry.cms.hhs.gov/provider-view/1568742435',
+      title: 'NPI Registry',
+      summary: 'NPI 1568742435',
+    };
+    const { candidates } = clusterRecords(
+      [npiPage],
+      new Map([
+        [
+          'npi-subject',
+          { written: 'Jason A. Demery', credential: 'PhD', state: 'FL' },
+        ],
+      ]),
+      withNpi,
+      'Jason A. Demery',
+    );
+    expect(
+      candidates.find((candidate) => candidate.role === 'subject')?.recordIds,
+    ).toEqual(['npi-subject']);
+    expect(
+      candidates.filter((candidate) => candidate.role === 'other'),
+    ).toHaveLength(0);
+  });
+
+  it('learns subject NPI from strong matches when intake npi is absent', () => {
+    const strongNpi: WebRecord = {
+      ...record('npi-strong', 'strong' as MatchLevel),
+      url: 'https://npiregistry.cms.hhs.gov/provider-view/1568742435',
+      title: 'NPI Registry',
+      summary: 'NPI 1568742435 Clinical Neuropsychologist',
+    };
+    const mirror: WebRecord = {
+      ...record('npi-mirror', 'possible' as MatchLevel),
+      url: 'https://npidb.org/doctors/behavioral_health/clinical-neuropsychologist_103g00000x/1568742435.aspx',
+      title: 'NPI DB mirror',
+      summary: 'Listing for 1568742435',
+    };
+    const { candidates } = clusterRecords(
+      [strongNpi, mirror],
+      new Map([
+        [
+          'npi-strong',
+          { written: 'Jason A. Demery', credential: 'PhD', state: 'FL' },
+        ],
+        [
+          'npi-mirror',
+          { written: 'Jason A. Demery', credential: 'PhD', state: 'FL' },
+        ],
+      ]),
+      subject,
+      'Jason A. Demery',
+    );
+    const subjectIds =
+      candidates.find((candidate) => candidate.role === 'subject')?.recordIds ??
+      [];
+    expect(subjectIds).toEqual(
+      expect.arrayContaining(['npi-strong', 'npi-mirror']),
+    );
+    expect(
+      candidates.filter((candidate) => candidate.role === 'other'),
+    ).toHaveLength(0);
+  });
 });

@@ -4,6 +4,8 @@ import type { SafeFetcher, FetchedPage } from './safe-fetcher';
 import {
   WebResearchEngine,
   canonicalUrl,
+  harvestCvDocumentLinks,
+  isSearchEngineHitHost,
   suppliedUrls,
 } from './web-research-engine';
 import { createWebSourceProviders } from './web-source-providers';
@@ -142,6 +144,102 @@ describe('canonicalUrl', () => {
     expect(canonicalUrl('https://www.example.com/a/')).toBe(
       'https://example.com/a',
     );
+  });
+
+  it('unifies http/https and www variants', () => {
+    expect(canonicalUrl('http://www.example.com/about/')).toBe(
+      'https://example.com/about',
+    );
+    expect(canonicalUrl('https://example.com/about')).toBe(
+      'https://example.com/about',
+    );
+  });
+});
+
+describe('isSearchEngineHitHost', () => {
+  it('rejects google search hosts but keeps Drive and Docs file hosts', () => {
+    expect(
+      isSearchEngineHitHost(
+        'www.google.com',
+        'https://www.google.com/search?q=cv',
+      ),
+    ).toBe(true);
+    expect(
+      isSearchEngineHitHost(
+        'drive.google.com',
+        'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUv/view',
+      ),
+    ).toBe(false);
+    expect(
+      isSearchEngineHitHost(
+        'docs.google.com',
+        'https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUv/edit',
+      ),
+    ).toBe(false);
+    expect(
+      isSearchEngineHitHost(
+        'news.google.com',
+        'https://news.google.com/articles/abc',
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('harvestCvDocumentLinks', () => {
+  it('keeps Drive and CV PDF links from an about page and drops duplicates', () => {
+    const pageId = 'about-1';
+    const drive =
+      'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUv/view';
+    const reads = new Map([
+      [
+        pageId,
+        {
+          url: 'https://janeexpert.com/about',
+          finalUrl: 'https://janeexpert.com/about',
+          status: 'read' as const,
+          note: null,
+          text: 'Jane Expert, Ph.D. biography',
+          title: 'About Jane Expert',
+          cvLinkCandidates: [
+            {
+              url: drive,
+              text: 'Download CV',
+              score: 90,
+              reason: 'link-text,google-drive',
+            },
+            {
+              url: drive,
+              text: 'CV',
+              score: 80,
+              reason: 'link-text,google-drive',
+            },
+            {
+              url: 'https://janeexpert.com/Jane-Expert-CV.pdf',
+              text: 'Resume PDF',
+              score: 70,
+              reason: 'path,pdf',
+            },
+          ],
+        },
+      ],
+    ]);
+    const found = harvestCvDocumentLinks({
+      pages: [
+        {
+          id: pageId,
+          url: 'https://janeexpert.com/about',
+          title: 'About Jane Expert',
+        },
+      ],
+      reads,
+      surname: 'Expert',
+      already: new Set(),
+    });
+    expect(found.some((c) => c.url === drive)).toBe(true);
+    expect(found.filter((c) => c.url === drive)).toHaveLength(1);
+    expect(
+      found.some((c) => c.url.includes('Jane-Expert-CV.pdf')),
+    ).toBe(true);
   });
 });
 

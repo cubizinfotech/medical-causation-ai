@@ -434,6 +434,12 @@ export class ExpertInvestigationRepository {
               identity: result.identity ?? null,
               cvCheck: result.cvCheck ?? null,
               webResearch: result.webResearch ?? null,
+              accreditation: result.accreditation ?? null,
+              membershipAssessments: result.membershipAssessments ?? null,
+              directoryAssessments: result.directoryAssessments ?? null,
+              boardCertificationAssessments:
+                result.boardCertificationAssessments ?? null,
+              affiliationAssessments: result.affiliationAssessments ?? null,
               // Questions keep their label and sources here; the table keeps the text.
               questions: result.questions,
             } as unknown as Prisma.InputJsonValue,
@@ -738,6 +744,26 @@ export class ExpertInvestigationRepository {
           webResearch: readStoredWebResearch(row.analysis?.payload),
           identity: readStoredIdentity(row.analysis?.payload),
           cvCheck: readStoredCvCheck(row.analysis?.payload),
+          accreditation: readStoredPayloadField(
+            row.analysis?.payload,
+            'accreditation',
+          ),
+          membershipAssessments: readStoredPayloadField(
+            row.analysis?.payload,
+            'membershipAssessments',
+          ),
+          directoryAssessments: readStoredPayloadField(
+            row.analysis?.payload,
+            'directoryAssessments',
+          ),
+          boardCertificationAssessments: readStoredPayloadField(
+            row.analysis?.payload,
+            'boardCertificationAssessments',
+          ),
+          affiliationAssessments: readStoredPayloadField(
+            row.analysis?.payload,
+            'affiliationAssessments',
+          ),
           evidence,
           discrepancies: row.discrepancies.map((item) => ({
             id: item.id,
@@ -934,6 +960,18 @@ function readStoredCvCheck(
   return Array.isArray(record.comparisons) && Array.isArray(record.claims)
     ? (check as NonNullable<EwiInvestigationResult['cvCheck']>)
     : null;
+}
+
+function readStoredPayloadField<T>(
+  payload: unknown,
+  key: string,
+): T | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+  const value = (payload as Record<string, unknown>)[key];
+  if (value == null || typeof value !== 'object') return null;
+  return value as T;
 }
 
 function readSourceStatuses(

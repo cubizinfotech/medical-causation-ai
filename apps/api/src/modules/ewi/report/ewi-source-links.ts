@@ -2,12 +2,20 @@ import type {
   ExpertEvidenceItem,
   ExpertIdentityResolution,
 } from '@integrations/expert-research';
-import type { WebResearchDossier } from '@integrations/web-research';
+import {
+  canonicalUrl,
+  type WebResearchDossier,
+} from '@integrations/web-research';
 import type {
   ReportBlock,
   ReportDocumentModel,
 } from '@platform/report/report-document';
 import type { CvCheck } from '../cv/cv.types';
+import type { DirectoryAdvertisingDossier } from '../research/directories';
+import type { BoardCertificationDossier } from '../research/board-certifications';
+import type { AffiliationDossier } from '../research/affiliations';
+import type { MembershipDossier } from '../research/memberships';
+import type { AccreditationDossier } from '../research/accreditation';
 import { sourceAccessLabel } from './report-wording';
 import {
   EWI_REPORT_DISCLAIMER,
@@ -23,6 +31,11 @@ export interface SourceLinksInput {
   identity?: ExpertIdentityResolution | null;
   cvCheck?: CvCheck | null;
   webResearch?: WebResearchDossier | null;
+  directoryAssessments?: DirectoryAdvertisingDossier | null;
+  boardCertificationAssessments?: BoardCertificationDossier | null;
+  affiliationAssessments?: AffiliationDossier | null;
+  membershipAssessments?: MembershipDossier | null;
+  accreditation?: AccreditationDossier | null;
 }
 
 export const EWI_SOURCE_LINKS_TEMPLATE_ID = 'ewi/source-links';
@@ -43,18 +56,7 @@ function sourceUrlKey(url: string): string | null {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return null;
     }
-    parsed.hash = '';
-    parsed.hostname = parsed.hostname.toLowerCase();
-    for (const key of [...parsed.searchParams.keys()]) {
-      if (key.toLowerCase().startsWith('utm_')) {
-        parsed.searchParams.delete(key);
-      }
-    }
-    let href = parsed.toString();
-    if (parsed.pathname !== '/' && href.endsWith('/')) {
-      href = href.slice(0, -1);
-    }
-    return href;
+    return canonicalUrl(parsed.toString());
   } catch {
     return null;
   }
@@ -116,7 +118,15 @@ function webAttribution(
 export function uniqueSourceLinks(
   input: Pick<
     SourceLinksInput,
-    'evidence' | 'identity' | 'cvCheck' | 'webResearch'
+    | 'evidence'
+    | 'identity'
+    | 'cvCheck'
+    | 'webResearch'
+    | 'directoryAssessments'
+    | 'boardCertificationAssessments'
+    | 'affiliationAssessments'
+    | 'membershipAssessments'
+    | 'accreditation'
   >,
 ): ReportSourceLink[] {
   const byKey = new Map<string, ReportSourceLink>();
@@ -129,6 +139,134 @@ export function uniqueSourceLinks(
       item.identityMatch === 'uncertain' ? 'possible' : 'subject',
       sourceAccessLabel(item),
     );
+  }
+  for (const assessment of input.directoryAssessments?.assessments ?? []) {
+    if (!assessment.profileUrl) continue;
+    addLink(
+      byKey,
+      assessment.profileUrl,
+      assessment.evidence?.title ||
+        `${assessment.directoryName}${
+          assessment.evidence?.searchResultOnly
+            ? ' (search result)'
+            : ' profile'
+        }`,
+      assessment.evidence?.searchResultOnly
+        ? 'Expert Directory Search Result'
+        : 'Expert Directory',
+      assessment.status === 'profile_found'
+        ? 'subject'
+        : assessment.status === 'potential_match_unconfirmed'
+          ? 'possible'
+          : 'subject',
+      assessment.evidence?.searchResultOnly
+        ? 'search result only'
+        : 'page content read',
+    );
+  }
+  for (const assessment of input.boardCertificationAssessments?.assessments ??
+    []) {
+    const url = assessment.evidence?.url ?? assessment.verificationUrl;
+    if (!url) continue;
+    addLink(
+      byKey,
+      url,
+      assessment.evidence?.title ||
+        `${assessment.boardCanonical ?? 'Board certification'}${
+          assessment.evidence?.searchResultOnly
+            ? ' (search result)'
+            : ' verification'
+        }`,
+      assessment.evidence?.searchResultOnly
+        ? 'Board Certification Search Result'
+        : 'Board Certification',
+      assessment.status === 'verified' ||
+        assessment.status === 'partially_verified'
+        ? 'subject'
+        : assessment.status === 'potential_match_unconfirmed'
+          ? 'possible'
+          : 'subject',
+      assessment.evidence?.searchResultOnly
+        ? 'search result only'
+        : 'page content read',
+    );
+  }
+  for (const assessment of input.affiliationAssessments?.assessments ?? []) {
+    const url = assessment.evidence?.url;
+    if (!url) continue;
+    const training = Boolean(assessment.evidence?.trainingDocument);
+    addLink(
+      byKey,
+      url,
+      assessment.evidence?.title ||
+        `${assessment.institutionCanonical ?? 'Institution'}${
+          training
+            ? ' (training / practicum)'
+            : assessment.evidence?.searchResultOnly
+              ? ' (search result)'
+              : ' affiliation'
+        }`,
+      training
+        ? 'Training Or Practicum Source'
+        : assessment.evidence?.searchResultOnly
+          ? 'Affiliation Search Result'
+          : 'Institutional Affiliation',
+      assessment.status === 'independently_verified' ||
+        assessment.status === 'historical_appointment_verified' ||
+        assessment.status === 'training_or_practicum_confirmed' ||
+        assessment.status === 'partially_verified'
+        ? 'subject'
+        : assessment.status === 'potential_match_unconfirmed'
+          ? 'possible'
+          : 'subject',
+      assessment.evidence?.searchResultOnly
+        ? 'search result only'
+        : 'page content read',
+    );
+  }
+  for (const assessment of input.membershipAssessments?.assessments ?? []) {
+    const url =
+      assessment.evidence?.url ??
+      assessment.directoryUrl ??
+      assessment.officialWebsite;
+    if (!url) continue;
+    addLink(
+      byKey,
+      url,
+      assessment.evidence?.title ||
+        `${assessment.organizationCanonical ?? assessment.entry.organization ?? 'Membership'}${
+          assessment.evidence ? ' membership' : ' directory'
+        }`,
+      assessment.evidence
+        ? 'Professional Membership'
+        : 'Professional Membership Directory',
+      assessment.status === 'verified' ||
+        assessment.status === 'partially_verified'
+        ? 'subject'
+        : 'subject',
+      assessment.evidence ? 'page content read' : undefined,
+    );
+  }
+  for (const assessment of input.accreditation?.assessments ?? []) {
+    for (const hit of [
+      assessment.apaEvidence,
+      assessment.institutionalEvidence,
+    ]) {
+      if (!hit?.url) continue;
+      addLink(
+        byKey,
+        hit.url,
+        hit.title ||
+          `${assessment.entry.institution ?? 'Institution'} (${
+            hit.kind === 'apa_program' ? 'APA CoA' : 'institutional'
+          })`,
+        hit.kind === 'apa_program'
+          ? 'Apa Program Accreditation'
+          : 'Institutional Accreditation',
+        'subject',
+        'page content read',
+      );
+    }
   }
   const identity = input.identity;
   if (identity?.identity) {
@@ -219,6 +357,88 @@ export function uniqueSourceLinks(
   });
 }
 
+function isOwnedWebsiteCategory(category: string): boolean {
+  return /expert\s*website|professional\s*website|ime\s*website/i.test(
+    category,
+  );
+}
+
+function hostOfLink(url: string): string | null {
+  try {
+    return new URL(canonicalUrl(url)).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+function pathOfLink(url: string): string {
+  try {
+    return new URL(url).pathname.replace(/\/$/, '') || '/';
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Presentational grouping: owned-website paths on one host become one primary
+ * row with “Also:” paths. Unique URL counts are unchanged.
+ */
+function groupOwnedWebsiteLinksForDisplay(
+  links: ReportSourceLink[],
+): Array<
+  | { kind: 'single'; link: ReportSourceLink }
+  | { kind: 'host'; host: string; primary: ReportSourceLink; pages: ReportSourceLink[] }
+> {
+  const ownedByHost = new Map<string, ReportSourceLink[]>();
+  const rest: ReportSourceLink[] = [];
+  for (const link of links) {
+    if (!isOwnedWebsiteCategory(link.category)) {
+      rest.push(link);
+      continue;
+    }
+    const host = hostOfLink(link.url);
+    if (!host) {
+      rest.push(link);
+      continue;
+    }
+    const bucket = ownedByHost.get(host) ?? [];
+    bucket.push(link);
+    ownedByHost.set(host, bucket);
+  }
+  const out: Array<
+    | { kind: 'single'; link: ReportSourceLink }
+    | {
+        kind: 'host';
+        host: string;
+        primary: ReportSourceLink;
+        pages: ReportSourceLink[];
+      }
+  > = [];
+  for (const [host, pages] of [...ownedByHost.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    if (pages.length === 1) {
+      out.push({ kind: 'single', link: pages[0] });
+    } else {
+      const homeIdx = pages.findIndex((p) => pathOfLink(p.url) === '/');
+      const ordered =
+        homeIdx > 0
+          ? [pages[homeIdx], ...pages.filter((_, i) => i !== homeIdx)]
+          : pages;
+      out.push({
+        kind: 'host',
+        host,
+        primary: ordered[0],
+        pages: ordered,
+      });
+    }
+  }
+  for (const link of rest) {
+    out.push({ kind: 'single', link });
+  }
+  return out;
+}
+
 export function buildEwiSourceLinksDocument(
   input: SourceLinksInput,
 ): ReportDocumentModel {
@@ -228,7 +448,7 @@ export function buildEwiSourceLinksDocument(
   const other = links.filter((link) => link.attribution === 'other');
   const blocks: ReportBlock[] = [
     {
-      text: `Unique source URLs collected for ${input.expertName}. Each address appears once. This list is generated from the investigation record; it is not a new search. A URL here is not proof that the page was read or independently verified.`,
+      text: `Unique source URLs collected for ${input.expertName}. Each address appears once. Expert-owned website pages on the same domain are listed under one host with page paths underneath. This list is generated from the investigation record; it is not a new search. A URL here is not proof that the page was read or independently verified.`,
       style: 'note',
     },
     {
@@ -245,22 +465,59 @@ export function buildEwiSourceLinksDocument(
     if (group.length === 0) return start;
     blocks.push({ text: heading, style: 'subheading' });
     blocks.push({ text: note, style: 'note' });
-    group.forEach((link, index) => {
-      blocks.push({
-        text: `${start + index}. ${link.title}`,
-        style: 'item',
-      });
-      blocks.push({
-        text: `Category: ${link.category}.${link.access ? ` Access: ${link.access}.` : ''}`,
-        style: 'citation',
-      });
-      blocks.push({
-        text: link.url,
-        link: link.url,
-        style: 'citation',
-      });
-    });
-    return start + group.length;
+    const display = groupOwnedWebsiteLinksForDisplay(group);
+    let index = start;
+    for (const entry of display) {
+      if (entry.kind === 'host') {
+        blocks.push({
+          text: `${index}. [Expert Website] ${entry.host}`,
+          style: 'item',
+        });
+        blocks.push({
+          text: `Category: Expert Website.${entry.primary.access ? ` Access: ${entry.primary.access}.` : ''}`,
+          style: 'citation',
+        });
+        blocks.push({
+          text: entry.primary.url,
+          link: entry.primary.url,
+          style: 'citation',
+        });
+        const paths = entry.pages
+          .slice(1)
+          .map((p) => pathOfLink(p.url))
+          .filter((p) => p && p !== '/');
+        if (paths.length > 0) {
+          blocks.push({
+            text: `Also: ${[...new Set(paths)].slice(0, 8).join(', ')}`,
+            style: 'note',
+          });
+          for (const page of entry.pages.slice(1).slice(0, 8)) {
+            blocks.push({
+              text: page.url,
+              link: page.url,
+              style: 'citation',
+            });
+          }
+        }
+        index += 1;
+      } else {
+        blocks.push({
+          text: `${index}. ${entry.link.title}`,
+          style: 'item',
+        });
+        blocks.push({
+          text: `Category: ${entry.link.category}.${entry.link.access ? ` Access: ${entry.link.access}.` : ''}`,
+          style: 'citation',
+        });
+        blocks.push({
+          text: entry.link.url,
+          link: entry.link.url,
+          style: 'citation',
+        });
+        index += 1;
+      }
+    }
+    return index;
   };
   if (links.length === 0) {
     blocks.push({

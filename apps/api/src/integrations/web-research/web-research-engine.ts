@@ -43,6 +43,11 @@ import {
   discoverSunbizCompanies,
   summarizeSunbizDetail,
 } from './registries/sunbiz';
+import {
+  selectTopCvCandidates,
+  type CvLinkCandidate,
+} from './cv-link-candidates';
+import { isGoogleDriveFileUrl } from './google-drive';
 import { SafeFetcher, type FetchedPage } from './safe-fetcher';
 import {
   blockedPageDisplayTitle,
@@ -135,17 +140,26 @@ export function suppliedUrls(context: string | undefined): string[] {
   return [...new Set(cleaned)].slice(0, 5);
 }
 
+/**
+ * Stable URL key for pool / routing dedupe. Strips www, hash, tracking params,
+ * trailing slash (non-root), lowercases host, and prefers https when only the
+ * scheme differs. Original record.url is still preserved for display.
+ */
 export function canonicalUrl(raw: string): string {
   try {
     const url = new URL(raw);
     url.hash = '';
+    if (url.protocol === 'http:') url.protocol = 'https:';
     url.hostname = url.hostname.toLowerCase().replace(/^www\./, '');
     for (const key of [...url.searchParams.keys()]) {
       if (TRACKING.test(key)) url.searchParams.delete(key);
     }
-    let value = url.toString();
-    if (value.endsWith('/') && url.pathname !== '/') value = value.slice(0, -1);
-    return value;
+    // Path case-fold so /About and /about share a key.
+    url.pathname = url.pathname.replace(/\/+/g, '/');
+    if (url.pathname.length > 1) {
+      url.pathname = url.pathname.replace(/\/$/, '');
+    }
+    return url.toString();
   } catch {
     return raw;
   }
@@ -157,6 +171,18 @@ function recordId(url: string): string {
 
 const SEARCH_ENGINE_HOSTS =
   /(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|search\.yahoo\.com|brave\.com|baidu\.com)$/i;
+
+/** Google Drive / Docs file links are documents, not search result pages. */
+export function isSearchEngineHitHost(host: string, url: string): boolean {
+  if (/news\.google\.com$/i.test(host) || /\/maps\b/i.test(url)) return false;
+  if (
+    /^(?:drive|docs|drive\.usercontent)\.google\.com$/i.test(host) ||
+    /\.googleusercontent\.com$/i.test(host)
+  ) {
+    return false;
+  }
+  return SEARCH_ENGINE_HOSTS.test(host);
+}
 
 interface Page {
   id: string;
@@ -292,6 +318,63 @@ function fetchHostBoost(url: string): number {
   } catch {
     return 0;
   }
+}
+
+/**
+ * Collect high-scoring CV/resume document links from pages that already look
+ * like the subject's own site, about/profile page, or practice biography.
+ */
+export function harvestCvDocumentLinks(input: {
+  pages: Array<{ id: string; url: string; title: string }>;
+  reads: Map<string, FetchedPage>;
+  surname: string;
+  already: Set<string>;
+}): CvLinkCandidate[] {
+  const found: CvLinkCandidate[] = [];
+  const surnameLetters = input.surname.toLowerCase().replace(/[^a-z]/g, '');
+  for (const page of input.pages) {
+    const fetched = input.reads.get(page.id);
+    if (fetched?.status !== 'read' || !fetched.cvLinkCandidates?.length) {
+      continue;
+    }
+    const kind = classifyUrl(page.url, 'web').kind;
+    let hostLetters = '';
+    try {
+      hostLetters = new URL(page.url).hostname
+        .toLowerCase()
+        .replace(/^www\./, '')
+        .replace(/[^a-z]/g, '');
+    } catch {
+      /* ignore */
+    }
+    const ownHost = Boolean(
+      surnameLetters && hostLetters.includes(surnameLetters),
+    );
+    const ownKind =
+      kind === 'expert_website' ||
+      kind === 'advertising' ||
+      kind === 'ime' ||
+      kind === 'profile' ||
+      kind === 'other';
+    const aboutPage =
+      /\b(about|biography|bio|profile|curriculum|credentials|cv|resume)\b/i.test(
+        `${page.url} ${page.title}`,
+      );
+    if (!ownHost && !ownKind && !aboutPage) continue;
+    if (
+      !ownHost &&
+      !aboutPage &&
+      kind === 'other' &&
+      !(fetched.text ?? '').toLowerCase().includes(input.surname.toLowerCase())
+    ) {
+      continue;
+    }
+    for (const candidate of fetched.cvLinkCandidates) {
+      if (input.already.has(canonicalUrl(candidate.url))) continue;
+      found.push(candidate);
+    }
+  }
+  return selectTopCvCandidates(found, 5);
 }
 
 export class WebResearchEngine {
@@ -507,9 +590,7 @@ export class WebResearchEngine {
       } catch {
         return;
       }
-      if (SEARCH_ENGINE_HOSTS.test(host) && !/\/maps\b/.test(hit.url)) {
-        if (!/news\.google\.com$/.test(host)) return;
-      }
+      if (isSearchEngineHitHost(host, hit.url)) return;
       if (hit.answer) answers.push(hit.answer);
       const key = canonicalUrl(hit.url);
       const page =
@@ -704,6 +785,15 @@ export class WebResearchEngine {
       if (suppliedKeys.has(canonicalUrl(page.url))) priority += 20;
       priority += fetchHostBoost(page.url);
       if (
+        /\b(curriculum vitae|\bcv\b|resume)\b/i.test(
+          `${page.title} ${page.snippet} ${page.url}`,
+        ) ||
+        /\.pdf($|\?)/i.test(page.url) ||
+        isGoogleDriveFileUrl(page.url)
+      ) {
+        priority += 5;
+      }
+      if (
         [...page.queries].some((q) =>
           /site:dri\.org|independent medical|site:patents\.google|site:expertinstitute|site:theaacn|site:valor\.defense/.test(
             q,
@@ -736,6 +826,52 @@ export class WebResearchEngine {
         });
       }
     });
+
+    // 2a. CV / resume links found on the subject's own or about pages.
+    const cvHarvest = harvestCvDocumentLinks({
+      pages,
+      reads,
+      surname,
+      already: new Set([...pool.keys()]),
+    });
+    if (cvHarvest.length > 0 && this.now() < fetchBy) {
+      const cvPages: Page[] = [];
+      for (const candidate of cvHarvest) {
+        const key = canonicalUrl(candidate.url);
+        if (pool.has(key)) continue;
+        addHit({
+          url: candidate.url,
+          title: candidate.text || 'Curriculum vitae',
+          snippet: `Linked from the expert website (${candidate.reason}).`,
+          providerId: 'website_cv_link',
+          query: 'CV linked from expert website',
+          kind: 'web',
+        });
+        const added = pool.get(key);
+        if (added) {
+          added.priority = 30 + candidate.score;
+          cvPages.push(added);
+          pages.push(added);
+        }
+      }
+      await mapWithLimit(cvPages.slice(0, 5), 3, async (page) => {
+        if (this.now() > fetchBy) {
+          deadlineHit = true;
+          return;
+        }
+        if (reads.has(page.id)) return;
+        try {
+          reads.set(page.id, await this.fetcher.fetchPage(page.url));
+        } catch {
+          reads.set(page.id, {
+            url: page.url,
+            finalUrl: page.url,
+            status: 'failed',
+            note: 'The linked CV could not be read.',
+          });
+        }
+      });
+    }
 
     // 2b. Businesses named on the subject's own pages: check them on Sunbiz.
     const registries = [sunbiz.report];

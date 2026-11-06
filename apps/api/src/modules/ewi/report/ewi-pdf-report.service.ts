@@ -14,6 +14,11 @@ import type { ProfessionalBackgroundDossier } from '../research/professional-bac
 import { buildEwiReportDocument } from './ewi-report.template';
 import { buildEwiSourceLinksDocument } from './ewi-source-links';
 import type { CvCheck } from '../cv/cv.types';
+import type { AccreditationDossier } from '../research/accreditation';
+import type { MembershipDossier } from '../research/memberships';
+import type { DirectoryAdvertisingDossier } from '../research/directories';
+import type { BoardCertificationDossier } from '../research/board-certifications';
+import type { AffiliationDossier } from '../research/affiliations';
 import type { WebResearchDossier } from '@integrations/web-research';
 import type { ReportSourceStatus } from './ewi-report.template';
 
@@ -32,12 +37,23 @@ export interface EwiReportInput {
   professionalBackground?: ProfessionalBackgroundDossier;
   identity?: ExpertIdentityResolution | null;
   cvCheck?: CvCheck | null;
+  /** Per-degree university / APA accreditation assessments. */
+  accreditation?: AccreditationDossier | null;
+  /** Per-claim professional membership assessments. */
+  membershipAssessments?: MembershipDossier | null;
+  /** Per-directory expert-witness / IME advertising assessments. */
+  directoryAssessments?: DirectoryAdvertisingDossier | null;
+  /** Per-claim board certification assessments against issuing boards. */
+  boardCertificationAssessments?: BoardCertificationDossier | null;
+  /** Per-claim institutional affiliation / training assessments. */
+  affiliationAssessments?: AffiliationDossier | null;
   /** Why CV comparison is present or omitted. */
   cvComparisonState?:
     | 'compared'
     | 'not_uploaded'
     | 'not_read'
-    | 'found_unreadable';
+    | 'found_unreadable'
+    | 'found_unparsed';
   /** Free text the attorney added to the intake form. */
   additionalContext?: string | null;
   /** Global web research: candidates, pages, coverage and limits. */

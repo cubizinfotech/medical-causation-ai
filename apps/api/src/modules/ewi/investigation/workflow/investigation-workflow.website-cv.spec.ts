@@ -1,5 +1,10 @@
 import type { WebRecord, WebResearchDossier } from '@integrations/web-research';
-import { extractionFromWebsiteCv } from './investigation-workflow';
+import {
+  extractionFromWebsiteCv,
+  publicCvCandidateUrls,
+  publicCvFoundUnparsed,
+  recordLooksLikeCvDocument,
+} from './investigation-workflow';
 
 function record(
   over: Partial<WebRecord> & Pick<WebRecord, 'id' | 'url' | 'title'>,
@@ -151,5 +156,144 @@ describe('extractionFromWebsiteCv', () => {
     expect(
       extraction!.claims.some((c) => /Dr\. Glass/i.test(c.statement)),
     ).toBe(false);
+  });
+
+  it('recognizes a Google Drive CV with CV content and extracts degrees', () => {
+    const driveUrl =
+      'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWx/view';
+    const summary = [
+      'CURRICULUM VITAE Jane Expert, Ph.D.',
+      'EDUCATION',
+      'Ph.D. Clinical Psychology, University of Example, 2008',
+      'B.A. Psychology, State College, 2002',
+      'Clinical Internship, Regional Medical Center',
+      'LICENSURE Licensed Psychologist, Florida',
+      'MEMBERSHIPS Member of the American Psychological Association',
+      'PUBLICATIONS',
+      '1. Expert J. Cognitive outcomes after injury. J Neuropsychol. 2015.',
+    ].join('\n');
+    expect(
+      recordLooksLikeCvDocument({
+        url: driveUrl,
+        title: 'Jane Expert CV',
+        summary,
+      }),
+    ).toBe(true);
+    const extraction = extractionFromWebsiteCv(
+      dossier([
+        record({
+          id: 'drive-cv',
+          url: driveUrl,
+          title: 'Jane Expert CV',
+          summary,
+          claims: [
+            {
+              type: 'credential',
+              text: 'Ph.D. Clinical Psychology, University of Example, 2008',
+              quote: 'Ph.D. Clinical Psychology, University of Example, 2008',
+              topic: 'education',
+              basis: 'subject_stated',
+              from: 'page',
+            },
+          ],
+        }),
+      ]),
+      'Jane Expert',
+    );
+    expect(extraction).not.toBeNull();
+    expect(extraction!.document.id).toBe(driveUrl);
+    expect(
+      extraction!.claims.some(
+        (c) =>
+          c.category === 'education' && /University of Example/i.test(c.statement),
+      ),
+    ).toBe(true);
+    expect(
+      extraction!.claims.some((c) => c.category === 'education'),
+    ).toBe(true);
+    // Missing internship year stays unknown (no invented date required).
+    const internship = extraction!.claims.find((c) =>
+      /Internship/i.test(c.statement),
+    );
+    if (internship) {
+      expect(internship.details.year).toBeUndefined();
+    }
+  });
+
+  it('lists unread Drive CV URLs as candidates and read-but-thin as unparsed', () => {
+    const driveUrl =
+      'https://drive.google.com/file/d/1ThinCvFileIdABCDEFGHIJ/view';
+    const unread = dossier([
+      record({
+        id: 'unread',
+        url: driveUrl,
+        title: 'Curriculum Vitae Jane Expert',
+        summary: 'Curriculum vitae Jane Expert linked from practice site.',
+        read: 'restricted',
+        claims: [],
+      }),
+    ]);
+    expect(publicCvCandidateUrls(unread, 'Jane Expert')).toContain(driveUrl);
+
+    const thin = dossier([
+      record({
+        id: 'thin',
+        url: driveUrl,
+        title: 'Curriculum Vitae Jane Expert',
+        summary:
+          'Curriculum vitae Jane Expert. This page has enough text to count as retrieved but no structured education or license statements that extract cleanly for comparison after junk filters remove headers.',
+        claims: [],
+      }),
+    ]);
+    // Found for discovery; extraction may still be null after finalize.
+    expect(publicCvFoundUnparsed(thin, 'Jane Expert').length).toBeGreaterThan(0);
+  });
+
+  it('dedupes duplicate CV links when ranking website CVs', () => {
+    const url = 'https://janeexpert.com/Jane-Expert-CV.pdf';
+    const extraction = extractionFromWebsiteCv(
+      dossier([
+        record({
+          id: 'a',
+          url,
+          title: 'Curriculum Vitae Jane Expert',
+          summary:
+            'CURRICULUM VITAE Jane Expert Ph.D. Education Ph.D. University of Example 2008',
+        }),
+        record({
+          id: 'b',
+          url,
+          title: 'Curriculum Vitae Jane Expert',
+          summary:
+            'CURRICULUM VITAE Jane Expert Ph.D. Education Ph.D. University of Example 2008',
+        }),
+      ]),
+      'Jane Expert',
+    );
+    expect(extraction?.document.id).toBe(url);
+  });
+
+  it('accepts a generic PDF filename when content is clearly a CV', () => {
+    const extraction = extractionFromWebsiteCv(
+      dossier([
+        record({
+          id: 'generic',
+          url: 'https://janeexpert.com/uploads/document.pdf',
+          title: 'Professional documents',
+          summary: [
+            'CURRICULUM VITAE',
+            'Jane Expert, Ph.D.',
+            'EDUCATION Ph.D. Clinical Psychology University of Example 2008',
+            'LICENSURE Licensed Psychologist Florida',
+            'PUBLICATIONS 1. Expert J. Title here. Journal. 2019.',
+            'MEMBERSHIPS Member of APA',
+            'PROFESSIONAL EXPERIENCE Clinical Director Example Clinic',
+          ].join('\n'),
+        }),
+      ]),
+      'Jane Expert',
+    );
+    expect(extraction).not.toBeNull();
+    expect(extraction!.claims.length).toBeGreaterThan(0);
   });
 });

@@ -29,7 +29,12 @@
     "seed:demo-users": "ts-node -r tsconfig-paths/register scripts/seed-demo-users.ts",
     "user:create": "ts-node -r tsconfig-paths/register scripts/create-user.ts",
     "clear:histories": "ts-node -r tsconfig-paths/register scripts/clear-histories.ts",
-    "research:web": "ts-node -r tsconfig-paths/register scripts/live-web-research.ts"
+    "research:web": "ts-node -r tsconfig-paths/register scripts/live-web-research.ts",
+    "research:accreditation": "ts-node -r tsconfig-paths/register scripts/live-accreditation-check.ts",
+    "research:memberships": "ts-node -r tsconfig-paths/register scripts/live-membership-check.ts",
+    "research:directories": "ts-node -r tsconfig-paths/register scripts/live-directory-check.ts",
+    "research:board-certs": "ts-node -r tsconfig-paths/register scripts/live-board-cert-check.ts",
+    "research:affiliations": "ts-node -r tsconfig-paths/register scripts/live-affiliation-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

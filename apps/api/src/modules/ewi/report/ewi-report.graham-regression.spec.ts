@@ -373,8 +373,9 @@ describe('Graham-class report regression (3.10.18)', () => {
       expertName: 'Alex Rivera',
     });
     const websites = routed.get('websites') ?? [];
-    expect(websites.length).toBeLessThanOrEqual(2);
+    expect(websites.length).toBe(1);
     expect(websites.some((f) => /also listed/i.test(f.statement))).toBe(true);
+    expect(websites[0].url).toMatch(/dralexrivera\.example/i);
   });
 
   it('excludes multi-person registry dumps from Directories without a subject row', () => {

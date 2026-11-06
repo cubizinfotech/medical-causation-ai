@@ -65,6 +65,17 @@ describe('cvComparisonState', () => {
         ],
       }),
     ).toBe('found_unreadable');
+    expect(
+      cvComparisonState({
+        sourceStatuses: [
+          {
+            sourceId: 'cv_profile',
+            message:
+              'A public CV was located (https://drive.google.com/file/d/abc/view) and the document was retrieved, but usable claims could not be extracted for comparison.',
+          },
+        ],
+      }),
+    ).toBe('found_unparsed');
   });
 });
 

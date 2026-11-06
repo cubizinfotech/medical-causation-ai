@@ -208,17 +208,23 @@ function ComparisonRow({
 }
 
 /**
- * What the uploaded CV claims, set against the public sources. Each claim
- * quotes the CV and links to its page; nothing is labeled a conflict unless
- * a source shows something different.
+ * What the CV claims, set against the public sources. Each claim quotes the
+ * CV; nothing is labeled a conflict unless a source shows something different.
  */
-export function CvCheckPanel({ check }: { check?: EwiCvCheck | null }) {
+export function CvCheckPanel({
+  check,
+  statusMessage,
+}: {
+  check?: EwiCvCheck | null;
+  /** cv_profile source status when comparison did not run. */
+  statusMessage?: string | null;
+}) {
   if (!check) {
     return (
       <p className="text-sm text-muted-foreground">
-        No CV was uploaded for this investigation. Add the expert&apos;s CV
-        when you start an investigation to check what it claims against the
-        public sources.
+        {statusMessage?.trim()
+          ? statusMessage
+          : "No CV was uploaded and no readable public CV was compared for this investigation. Add the expert's CV when you start an investigation, or ensure a public CV can be retrieved, to check what it claims against the public sources."}
       </p>
     );
   }
@@ -249,9 +255,21 @@ export function CvCheckPanel({ check }: { check?: EwiCvCheck | null }) {
               : ""}
           </p>
         </div>
-        <CvPageLink documentId={document.id} page={1}>
-          Open CV
-        </CvPageLink>
+        {/^https?:\/\//i.test(document.id) ? (
+          <a
+            href={document.id}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+          >
+            Open source CV
+            <ExternalLink className="h-3 w-3" aria-hidden />
+          </a>
+        ) : (
+          <CvPageLink documentId={document.id} page={1}>
+            Open CV
+          </CvPageLink>
+        )}
       </div>
 
       {check.status !== "completed" || check.warnings.length > 0 ? (

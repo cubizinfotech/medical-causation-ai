@@ -334,6 +334,53 @@ describe('uniqueSourceLinks', () => {
   });
 });
 
+describe('source-links owned-host presentation', () => {
+  it('groups multiple owned-website paths under one host with Also: paths', () => {
+    const document = buildEwiSourceLinksDocument({
+      expertName: 'Jane Expert',
+      city: 'Tampa, FL',
+      specialty: 'Psychology',
+      generatedAt: '2026-11-06T12:00:00.000Z',
+      evidence: [
+        {
+          sourceId: 'web_search',
+          category: 'expert_website',
+          title: 'Home',
+          summary: '',
+          url: 'https://practice.example/',
+        },
+        {
+          sourceId: 'web_search',
+          category: 'expert_website',
+          title: 'About',
+          summary: '',
+          url: 'https://www.practice.example/about',
+        },
+        {
+          sourceId: 'web_search',
+          category: 'expert_website',
+          title: 'Forensic',
+          summary: '',
+          url: 'https://practice.example/forensic/',
+        },
+        {
+          sourceId: 'npi_registry',
+          category: 'license',
+          title: 'NPI',
+          summary: '',
+          url: 'https://npiregistry.cms.hhs.gov/1',
+        },
+      ],
+    });
+    const text = document.sections[0].blocks.map((b) => b.text).join('\n');
+    expect(text).toMatch(/\[Expert Website\] practice\.example/);
+    expect(text).toMatch(/Also:/);
+    expect(text).toMatch(/\/about|\/forensic/);
+    expect(text).toMatch(/4 subject source\(s\)/);
+    expect(text).toMatch(/NPI|License/i);
+  });
+});
+
 describe('source-links PDF', () => {
   it('builds a clickable unique-links PDF without a contents page', async () => {
     const input = {

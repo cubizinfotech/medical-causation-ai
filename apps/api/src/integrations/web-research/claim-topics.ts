@@ -85,6 +85,28 @@ export const OFFICIAL_SOURCES: readonly OfficialSource[] = [
     acronyms: ['AACN'],
   },
   {
+    id: 'nan',
+    name: 'National Academy of Neuropsychology (NAN) member directory',
+    hosts: ['nanonline.org'],
+    topics: ['membership'],
+    acronyms: ['NAN'],
+  },
+  {
+    id: 'apa_membership',
+    name: 'American Psychological Association (APA) membership',
+    // Membership hosts only — accreditation.apa.org is CoA, not membership.
+    hosts: ['apa.org'],
+    topics: ['membership'],
+    acronyms: ['APA'],
+  },
+  {
+    id: 'ins',
+    name: 'International Neuropsychological Society (INS)',
+    hosts: ['the-ins.org', 'ins-organization.org'],
+    topics: ['membership'],
+    acronyms: ['INS'],
+  },
+  {
     id: 'abms',
     name: 'American Board of Medical Specialties (Certification Matters)',
     hosts: ['certificationmatters.org', 'abms.org'],
@@ -236,12 +258,15 @@ export function officialSourceForAcronym(
 
 /** Certifying and professional bodies named in a text. */
 const ORG_PATTERN =
-  /\b(American Board of [A-Z][A-Za-z&]+(?: (?:and |of |in )?[A-Z][A-Za-z&]+){0,5}|American Academy of [A-Z][A-Za-z]+(?: (?:and |of )?[A-Z][A-Za-z]+){0,4}|National Board (?:for|of) [A-Z][A-Za-z]+(?: [A-Z][A-Za-z]+){0,4}|ABPP|ABCN|AACN|ABMS|ABIM|ABPN|NBCC)\b/g;
+  /\b(American Board of [A-Z][A-Za-z&]+(?: (?:and |of |in )?[A-Z][A-Za-z&]+){0,5}|American Academy of [A-Z][A-Za-z]+(?: (?:and |of )?[A-Z][A-Za-z]+){0,4}|National Academy of Neuropsychology|American Psychological Association|International Neuropsychological Society|National Board (?:for|of) [A-Z][A-Za-z]+(?: [A-Z][A-Za-z]+){0,4}|ABPP|ABCN|AACN|NAN|APA|INS|ABMS|ABIM|ABPN|NBCC)\b/g;
 
 const ORG_EXPANSIONS: Record<string, string> = {
   ABPP: 'American Board of Professional Psychology',
   ABCN: 'American Board of Clinical Neuropsychology',
   AACN: 'American Academy of Clinical Neuropsychology',
+  NAN: 'National Academy of Neuropsychology',
+  APA: 'American Psychological Association',
+  INS: 'International Neuropsychological Society',
   ABMS: 'American Board of Medical Specialties',
   ABIM: 'American Board of Internal Medicine',
   ABPN: 'American Board of Psychiatry and Neurology',

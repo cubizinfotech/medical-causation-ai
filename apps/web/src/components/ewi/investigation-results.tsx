@@ -44,7 +44,7 @@ const PUBLICATION_CATEGORIES = new Set([
 ]);
 
 const SOURCE_LABELS: Record<string, string> = {
-  cv_profile: "Uploaded CV",
+  cv_profile: "CV",
   npi_registry: "NPI Registry",
   open_payments: "CMS Open Payments",
   openalex: "OpenAlex",
@@ -439,7 +439,13 @@ function InvestigationResultTabs({
 
       <TabsContent value="cv">
         <ResultPanel title="CV check">
-          <CvCheckPanel check={result?.cvCheck} />
+          <CvCheckPanel
+            check={result?.cvCheck}
+            statusMessage={
+              result?.sourceStatuses?.find((s) => s.sourceId === "cv_profile")
+                ?.message ?? null
+            }
+          />
         </ResultPanel>
       </TabsContent>
 

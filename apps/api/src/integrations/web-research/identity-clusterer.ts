@@ -122,8 +122,32 @@ export function clusterRecords(
     string,
     { label: string; basis: string[]; records: WebRecord[] }
   >();
+  const subjectNpis = new Set<string>();
+  const intakeNpi = subject.npi?.replace(/\D/g, '') ?? '';
+  if (intakeNpi.length >= 10) subjectNpis.add(intakeNpi);
+  for (const record of records) {
+    if (record.match.level !== 'strong') continue;
+    for (const hit of `${record.url} ${record.title} ${record.summary}`.matchAll(
+      /\b(\d{10})\b/g,
+    )) {
+      subjectNpis.add(hit[1]);
+    }
+  }
+  const mentionsSubjectNpi = (record: WebRecord): boolean => {
+    if (subjectNpis.size === 0) return false;
+    const hay = `${record.url} ${record.title} ${record.summary}`;
+    for (const npi of subjectNpis) {
+      if (hay.includes(npi)) return true;
+    }
+    return false;
+  };
   for (const record of records) {
     if (record.match.level === 'none') continue;
+    // Confirmed subject NPI pages are never §39 "other people".
+    if (mentionsSubjectNpi(record)) {
+      subjectRecords.push(record);
+      continue;
+    }
     if (record.match.level === 'strong') {
       subjectRecords.push(record);
       continue;

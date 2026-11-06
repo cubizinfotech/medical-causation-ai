@@ -735,7 +735,7 @@ describe('coverageLine', () => {
     expect(routed.get('videos')?.[0].url).toContain('youtube.com');
   });
 
-  it('files an expert-directory listing under directories', () => {
+  it('files a paid expert-directory listing under ime advertising, not §22 directories', () => {
     const routed = routeWebFindings(
       dossier([
         record(
@@ -748,8 +748,9 @@ describe('coverageLine', () => {
         ),
       ]),
     );
-    expect(routed.get('directories')?.[0].url).toContain('expertinstitute.com');
-    expect(routed.get('directories')?.[0].matchLevel).toBe('strong');
+    expect(routed.get('directories')).toBeUndefined();
+    expect(routed.get('ime')?.[0].url).toContain('expertinstitute.com');
+    expect(routed.get('ime')?.[0].matchLevel).toBe('strong');
   });
 
   it('keeps possible-match court pages out of subject sections (including IME)', () => {
@@ -1126,6 +1127,33 @@ describe('coverageLine', () => {
     ).not.toMatch(/not implemented/i);
   });
 
+  it('includes official accreditor Result URLs when the queried institution appears', () => {
+    const chea = record(
+      'chea',
+      'https://www.chea.org/university-of-florida',
+      'other',
+      [],
+      'none',
+      'University of Florida — CHEA directory',
+    );
+    chea.snippet =
+      'University of Florida is listed by a CHEA-recognized institutional accreditor.';
+    chea.summary = chea.snippet;
+    const ran = dossier([chea], {
+      topics: [{ topic: 'university_accreditation', queries: 1, hits: 1 }],
+      executedQueries: [
+        {
+          topic: 'university_accreditation',
+          query: 'site:chea.org "University of Florida"',
+        },
+      ],
+    });
+    const line = coverageLine(ran, 'university-accreditation');
+    expect(line).toMatch(/Queries run:/i);
+    expect(line).toMatch(/chea\.org\/university-of-florida/i);
+    expect(line).not.toMatch(/No official accreditation result URL/i);
+  });
+
   it('distinguishes lawsuit coverage from a comprehensive search claim', () => {
     const litigationRan = dossier([], {
       topics: [{ topic: 'litigation', queries: 1, hits: 0 }],
@@ -1169,5 +1197,31 @@ describe('coverageLine', () => {
         'education',
       ),
     ).toBeNull();
+  });
+
+  it('does not file own-site billing Motion-for-Costs templates under pleadings', () => {
+    const routed = routeWebFindings(
+      dossier([
+        record(
+          'billing',
+          'https://practice.example/billing',
+          'expert_website',
+          [
+            claim(
+              'pleading',
+              'Contact for templated Motion for Costs for Psychological evaluation.',
+              'subject_stated',
+            ),
+          ],
+          'strong',
+          'Forensic Neuropsychology Billing',
+        ),
+      ]),
+      { expertName: 'Jason Demery' },
+    );
+    expect(routed.get('pleadings') ?? []).toHaveLength(0);
+    expect(routed.get('websites')?.some((f) => /billing/i.test(f.url))).toBe(
+      true,
+    );
   });
 });

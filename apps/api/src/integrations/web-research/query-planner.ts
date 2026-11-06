@@ -237,19 +237,34 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${clause} ${profession} (headshot OR portrait OR "staff photo" OR "faculty photo" OR "profile photo" OR "physician photo" OR biography)${where}`,
     prompt: `Find a public staff, faculty, practice or directory page that shows a photograph of ${subjectLine}. Prefer the person's own practice or university biography. Give the page URL that hosts the photo, not a search-engine thumbnail. A missing photo is not proof that none exists.`,
   });
+  const claimedBoardAcronyms = (subject.knownBoardCertificationAcronyms ?? [])
+    .map((a) => a.toUpperCase())
+    .filter(Boolean);
+  const claimedBoardHosts = (subject.knownBoardCertificationHosts ?? [])
+    .map((h) => h.replace(/^www\./, '').toLowerCase())
+    .filter(Boolean);
+  const claimedBoardClause =
+    claimedBoardAcronyms.length > 0
+      ? claimedBoardAcronyms.slice(0, 4).join(' OR ')
+      : 'diplomate OR "board certified" OR "board certification"';
   add('certification', {
-    query: `${clause} ("board certified" OR "board certification" OR ABPP OR diplomate OR "American Board of") ${profession}`,
-    prompt: `Find which board certifications ${subjectLine} holds and which certifying organization issued each one (an American Board, ABPP, an ABMS member board or a specialty academy). Prefer the certifying body's own directory entry, then the person's own website, then court documents and directories. Give the page URL for each.`,
+    query: `${clause} (${claimedBoardClause}) ${profession}`,
+    prompt: `Find which board certifications ${subjectLine} holds and which certifying organization issued each one. Prefer the certifying body's own directory entry, then the person's own website, then court documents and directories. Give the page URL for each. Do not invent certifications.`,
   });
   add('certification_org', {
-    query: `${clause} ("find a board certified" OR "verify certification" OR "member directory" OR "certified specialist" OR "American Board of") ${profession}`,
-    prompt: `Find the official certification directory or verification entry that lists ${subjectLine}: for example the ABPP "Find a Board Certified Specialist" search, ABMS Certification Matters, or a specialty academy's member directory such as AACN. Give the directory page for this person.`,
+    query: `${clause} ("find a board certified" OR "verify certification" OR "certified specialist") ${profession}`,
+    prompt: `Find the official certification directory or verification entry that lists ${subjectLine}. Prefer the issuing board's own site. Give the directory page for this person when one exists.`,
   });
-  add('certification_org', {
-    query: `${clause} site:abpp.org`,
-    prompt: `Find the American Board of Professional Psychology (ABPP) directory page for ${subjectLine}, if one exists. A missing listing is not proof the person is not certified. Prefer the official ABPP page over a mention on another site.`,
-  });
-  add('certification_org', {
+  // Seed site: queries only for boards claimed on the CV — never every board.
+  for (const host of claimedBoardHosts.slice(0, 4)) {
+    add('certification_org', {
+      query: `${clause} site:${host}`,
+      prompt: `Find the official certifying-board directory page for ${subjectLine} on ${host}, if one exists. A missing listing is not proof the person is not certified. Prefer the board's own page over a mention elsewhere.`,
+    });
+  }
+  // AACN is a membership directory (also listed under certification_org topics);
+  // seed under memberships so §15 receives official hits.
+  add('memberships', {
     query: `${clause} site:theaacn.org`,
     prompt: `Find the American Academy of Clinical Neuropsychology (AACN) member directory or profile for ${subjectLine}, if one exists. A missing listing is not proof the person is not a member. Prefer theaacn.org over a mention on another site.`,
   });
@@ -273,6 +288,16 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
     query: `${clause} ${profession} (member OR fellow OR "member directory" OR association OR society OR academy)`,
     prompt: `Find the professional memberships and fellowships of ${subjectLine}: association or academy member directories, society pages and biographies. Give the page URL for each.`,
   });
+  // Seed dedicated membership directory queries from CV-known org hosts.
+  for (const host of (subject.knownMembershipHosts ?? []).slice(0, 4)) {
+    const clean = host.replace(/^www\./, '').toLowerCase();
+    if (!clean || clean === 'theaacn.org') continue; // already seeded above
+    if (/accreditation\.apa\.org/i.test(clean)) continue;
+    add('memberships', {
+      query: `${clause} site:${clean}`,
+      prompt: `Find the official member directory or membership profile for ${subjectLine} on ${clean}, if one exists. A missing listing is not proof the person is not a member. Prefer the organization’s own site over a mention elsewhere.`,
+    });
+  }
   add('identity', {
     query: `${clause} (faculty OR "clinical faculty" OR "volunteer faculty" OR professor OR "staff directory" OR "people directory") (UCLA OR university OR "medical center" OR "school of medicine")`,
     prompt: `Find an official university or medical-center faculty/staff directory page for ${subjectLine} (for example UCLA). Prefer the institution’s own site. Do not treat the person’s private practice website as a university appointment.`,
@@ -478,10 +503,15 @@ export function planQueries(subject: IdentitySubject): PlannedQuery[] {
   }
 
   // Seed CHEA / USDE / APA queries from institutions named in the attorney note
-  // so accreditation is not deferred until a later follow-up pass.
-  for (const institution of institutionsFromText(
-    subject.context ?? '',
-  ).slice(0, 3)) {
+  // (and any knownInstitutions, e.g. CV education) so accreditation is not
+  // deferred until a later follow-up pass.
+  const seededInstitutions = [
+    ...new Set([
+      ...institutionsFromText(subject.context ?? ''),
+      ...(subject.knownInstitutions ?? []),
+    ]),
+  ].slice(0, 4);
+  for (const institution of seededInstitutions) {
     addAccreditationQueries(add, institution);
   }
 
@@ -540,12 +570,24 @@ export function planFollowUps(
       ...(official ? { official } : {}),
     });
   };
+  const claimedBoardAcronyms = new Set(
+    (subject.knownBoardCertificationAcronyms ?? []).map((a) =>
+      a.toUpperCase(),
+    ),
+  );
   for (const acronym of signals.acronyms) {
     const source = officialSourceForAcronym(acronym);
     const host = source?.hosts[0];
     if (!source || !host || seen.has(host)) continue;
+    const isBoardTopic = source.topics.includes('board_certification');
+    // Board follow-ups only for CV-claimed acronyms. When none are claimed,
+    // skip harvested board hosts so unrelated boards are not searched.
+    if (isBoardTopic) {
+      if (claimedBoardAcronyms.size === 0) continue;
+      if (!claimedBoardAcronyms.has(acronym.toUpperCase())) continue;
+    }
     seen.add(host);
-    const topic: QueryTopic = source.topics.includes('board_certification')
+    const topic: QueryTopic = isBoardTopic
       ? 'certification_org'
       : 'memberships';
     push(
@@ -574,14 +616,19 @@ export function planFollowUps(
     });
   }
   for (const institution of (signals.institutions ?? []).slice(0, 3)) {
-    push('university_rules', {
-      query: `${clause} ${quote(institution)} (faculty OR "conflict of interest" OR "outside activity" OR "consulting policy" OR "outside consulting")`,
-      prompt: `Find the faculty or staff page for ${label} at ${institution}, and any public conflict-of-interest, outside-activity or consulting policy that would apply to that role. Do not report a generic course syllabus unless it names this person as the instructor.`,
+    // Faculty/staff directory → identity / education (Background), not COI.
+    push('identity', {
+      query: `${clause} ${quote(institution)} (faculty OR "staff directory" OR professor OR appointment OR biography OR profile)`,
+      prompt: `Find the official faculty or staff directory or profile page for ${label} at ${institution}. Prefer the institution’s own site. Do not treat a practicum brochure, publication affiliation, or conflict-of-interest policy as an appointment listing.`,
     });
-    // Institution policy pages rarely name the expert; search the policy itself.
+    push('education', {
+      query: `${clause} ${quote(institution)} (faculty OR directory OR "clinical faculty" OR instructor)`,
+      prompt: `Find whether ${label} appears on an official ${institution} faculty, clinical faculty, or staff page. A practicum/internship listing is training, not a faculty appointment.`,
+    });
+    // Pure COI / outside-activity policy → university_rules only.
     push('university_rules', {
       query: `${quote(institution)} ("conflict of interest" OR "outside activity" OR "outside consulting" OR "compensated outside" OR "supplemental compensation") (policy OR handbook OR "faculty code")`,
-      prompt: `Find the public conflict-of-interest, outside-activity, outside-consulting, or supplemental-compensation policy for faculty or clinical faculty at ${institution}. Quote the rule text that governs taking forensic or consulting cases and keeping fees. The expert’s own CV is not a university policy.`,
+      prompt: `Find the public conflict-of-interest, outside-activity, outside-consulting, or supplemental-compensation policy for faculty or clinical faculty at ${institution}. Quote the rule text that governs taking forensic or consulting cases and keeping fees. The expert’s own CV is not a university policy. Do not return faculty bios or practicum brochures here.`,
     });
     push(
       'university_accreditation',

@@ -28,6 +28,8 @@ import type {
   CvComparisonTopic,
   CvExtraction,
 } from './cv.types';
+import type { BoardCertificationAssessment } from '../research/board-certifications';
+import type { AffiliationAssessment } from '../research/affiliations';
 
 /** Open Payments totals at or above this, missing from the CV, are flagged. */
 const UNDISCLOSED_PAYMENT_USD = 1000;
@@ -39,6 +41,10 @@ export interface CvComparisonInput {
   identity: ExpertIdentityResolution | null;
   publications: PublicationLookupResult[];
   expertName?: string;
+  /** Optional board-certification assessments; section 13 remains source of truth. */
+  boardCertificationAssessments?: BoardCertificationAssessment[] | null;
+  /** Optional affiliation assessments; §6/§9 remain source of truth. */
+  affiliationAssessments?: AffiliationAssessment[] | null;
 }
 
 type Row = Omit<CvComparison, 'id'>;
@@ -54,14 +60,14 @@ export function compareCv(input: CvComparisonInput): CvCheck {
   const rows: Row[] = [
     ...specialtyRows(claims, input),
     ...licenseRows(claims, input),
-    ...boardRows(claims),
+    ...boardRows(claims, input.boardCertificationAssessments ?? null),
     ...publicationCountRows(claims, input.evidence),
     ...publicationTitleRows(claims, input),
     ...unreadPageRows(extraction),
     ...industryRows(claims, input),
-    ...appointmentRows(claims, input.evidence),
+    ...appointmentRows(claims, input.affiliationAssessments ?? null),
     ...expertWitnessRows(claims, input.evidence),
-    ...educationRows(claims),
+    ...educationRows(claims, input.affiliationAssessments ?? null),
     ...membershipRows(claims),
     ...awardRows(claims),
   ];
@@ -400,16 +406,55 @@ function licenseRows(claims: CvClaim[], input: CvComparisonInput): Row[] {
   return rows;
 }
 
-function boardRows(claims: CvClaim[]): Row[] {
-  return byCategory(claims, 'board_certification').map((claim) => ({
-    topic: 'board_certification' as const,
-    label: 'not_verified' as const,
-    severity: 'medium' as const,
-    title: `Board certification: ${[claim.details.board, claim.details.specialty].filter(Boolean).join(', ') || claim.statement}`,
-    cv: cvSide(claim),
-    source: null,
-    note: 'Self-reported on the CV. No issuing-board lookup was connected for this claim. Confirm on the certifying board’s directory (for example ABPP) — the expert’s website is not independent proof.',
-  }));
+function boardRows(
+  claims: CvClaim[],
+  assessments: BoardCertificationAssessment[] | null,
+): Row[] {
+  const byClaim = new Map(
+    (assessments ?? [])
+      .filter((a) => a.entry.claimId)
+      .map((a) => [a.entry.claimId!, a]),
+  );
+  return byCategory(claims, 'board_certification').map((claim) => {
+    const assessment = byClaim.get(claim.id);
+    if (!assessment) {
+      return {
+        topic: 'board_certification' as const,
+        label: 'not_verified' as const,
+        severity: 'medium' as const,
+        title: `Board certification: ${[claim.details.board, claim.details.specialty].filter(Boolean).join(', ') || claim.statement}`,
+        cv: cvSide(claim),
+        source: null,
+        note: 'Self-reported on the CV. No issuing-board lookup was connected for this claim. Confirm on the certifying board’s directory — the expert’s website is not independent proof.',
+      };
+    }
+    const label: InconsistencyLabel =
+      assessment.status === 'verified'
+        ? 'verified'
+        : assessment.status === 'partially_verified'
+          ? 'partially_verified'
+          : 'not_verified';
+    return {
+      topic: 'board_certification' as const,
+      label,
+      severity:
+        label === 'verified' ? ('low' as const) : ('medium' as const),
+      title: `Board certification: ${[claim.details.board, claim.details.specialty].filter(Boolean).join(', ') || claim.statement}`,
+      cv: cvSide(claim),
+      source: assessment.evidence?.url
+        ? {
+            name: assessment.boardCanonical ?? 'Issuing board',
+            statement: assessment.explanation,
+            url: assessment.evidence.url,
+          }
+        : null,
+      note: `${assessment.explanation}${
+        assessment.limitations.length
+          ? ` ${assessment.limitations[0]}`
+          : ''
+      } Own-site statements alone are not independent proof.`,
+    };
+  });
 }
 
 function publicationCountRows(
@@ -957,43 +1002,52 @@ function industryRows(claims: CvClaim[], input: CvComparisonInput): Row[] {
 
 function appointmentRows(
   claims: CvClaim[],
-  evidence: ExpertEvidenceItem[],
+  assessments: AffiliationAssessment[] | null,
 ): Row[] {
-  const profile = findItem(evidence, 'openalex', 'profile');
-  const institutions = Array.isArray(profile?.raw?.institutions)
-    ? (profile.raw.institutions as unknown[]).filter(
-        (value): value is string => typeof value === 'string',
-      )
-    : [];
+  const byClaim = new Map(
+    (assessments ?? [])
+      .filter((a) => a.entry.claimId && a.entry.class === 'appointment')
+      .map((a) => [a.entry.claimId!, a]),
+  );
   return byCategory(claims, 'appointment').map((claim) => {
-    const institution = claim.details.institution;
-    const match = institution
-      ? institutions.find((entry) => sameCompany(entry, institution))
-      : undefined;
-    if (match) {
+    const assessment = byClaim.get(claim.id);
+    if (!assessment) {
       return {
         topic: 'appointment' as const,
-        label: 'partially_verified' as const,
+        label: 'not_verified' as const,
         severity: 'low' as const,
-        title: `Affiliation with ${institution} appears in OpenAlex`,
+        title: `Appointment: ${claim.statement}`,
         cv: cvSide(claim),
-        source: {
-          name: 'OpenAlex',
-          statement: `Last known institution: ${match}.`,
-          url: profile?.url,
-        },
-        note: 'OpenAlex shows the institution on publications, not the title or dates of the position.',
+        source: null,
+        note:
+          'Self-reported on the CV. OpenAlex lists publication affiliations only and is not used as the default checker for employment or faculty appointments. Confirm with the institution’s faculty/staff directory or official profile.',
       };
     }
+    const label: InconsistencyLabel =
+      assessment.status === 'independently_verified' ||
+      assessment.status === 'historical_appointment_verified'
+        ? 'verified'
+        : assessment.status === 'partially_verified'
+          ? 'partially_verified'
+          : 'not_verified';
     return {
       topic: 'appointment' as const,
-      label: 'not_verified' as const,
+      label,
       severity: 'low' as const,
       title: `Appointment: ${claim.statement}`,
       cv: cvSide(claim),
-      source: null,
-      note:
-        'Self-reported on the CV. OpenAlex lists publication affiliations only and is not used as the default checker for employment or faculty appointments. Confirm with the institution’s faculty/staff directory or official profile. Absence from OpenAlex is not evidence the appointment is false.',
+      source: assessment.evidence?.url
+        ? {
+            name: assessment.institutionCanonical ?? 'Institution',
+            statement: assessment.explanation,
+            url: assessment.evidence.url,
+          }
+        : null,
+      note: `${assessment.explanation}${
+        assessment.limitations.length
+          ? ` ${assessment.limitations[0]}`
+          : ''
+      } OpenAlex / publisher hosts are not appointment proof.`,
     };
   });
 }
@@ -1023,21 +1077,57 @@ function expertWitnessRows(
   }));
 }
 
-function educationRows(claims: CvClaim[]): Row[] {
+function educationRows(
+  claims: CvClaim[],
+  assessments: AffiliationAssessment[] | null,
+): Row[] {
+  const trainingByClaim = new Map(
+    (assessments ?? [])
+      .filter((a) => a.entry.claimId && a.entry.class === 'training')
+      .map((a) => [a.entry.claimId!, a]),
+  );
   return [
     ...byCategory(claims, 'education'),
     ...byCategory(claims, 'training'),
   ]
     .filter((claim) => isUsableEducationClaim(claim))
-    .map((claim) => ({
-      topic: 'education' as const,
-      label: 'not_verified' as const,
-      severity: 'low' as const,
-      title: claim.statement,
-      cv: cvSide(claim),
-      source: null,
-      note: 'Self-reported on the CV. Confirm with the school registrar, the residency program, or an official alumni/faculty listing. OpenAlex is not used as the education verifier.',
-    }));
+    .map((claim) => {
+      const assessment = trainingByClaim.get(claim.id);
+      if (assessment) {
+        const label: InconsistencyLabel =
+          assessment.status === 'training_or_practicum_confirmed'
+            ? 'partially_verified'
+            : 'not_verified';
+        return {
+          topic: 'education' as const,
+          label,
+          severity: 'low' as const,
+          title: claim.statement,
+          cv: cvSide(claim),
+          source: assessment.evidence?.url
+            ? {
+                name: assessment.institutionCanonical ?? 'Training site',
+                statement: assessment.explanation,
+                url: assessment.evidence.url,
+              }
+            : null,
+          note: `${assessment.explanation}${
+            assessment.limitations.length
+              ? ` ${assessment.limitations[0]}`
+              : ''
+          } Training/practicum is not a faculty appointment.`,
+        };
+      }
+      return {
+        topic: 'education' as const,
+        label: 'not_verified' as const,
+        severity: 'low' as const,
+        title: claim.statement,
+        cv: cvSide(claim),
+        source: null,
+        note: 'Self-reported on the CV. Confirm with the school registrar, the residency program, or an official alumni/faculty listing. OpenAlex is not used as the education verifier.',
+      };
+    });
 }
 
 function isCredentialDumpClaim(claim: CvClaim): boolean {
@@ -1061,7 +1151,7 @@ function membershipRows(claims: CvClaim[]): Row[] {
       title: `Membership: ${claim.statement}`,
       cv: cvSide(claim),
       source: null,
-      note: 'Self-reported on the CV. No membership directory was connected for this claim. A missing comparison is not proof the membership is false.',
+      note: 'Self-reported on the CV. Membership directory assessment runs separately against official organization sources when available. A missing comparison here is not proof the membership is false.',
     }));
 }
 

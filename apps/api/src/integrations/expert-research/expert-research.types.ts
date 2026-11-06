@@ -135,6 +135,10 @@ export interface ExpertResearchQuery {
   npi?: string;
   /** Free-text note from the attorney: aliases, employers, case names. */
   context?: string;
+  /** Certifying-board acronyms from CV claims — scopes board verification searches. */
+  knownBoardCertificationAcronyms?: string[];
+  /** Certifying-board hosts from CV claims for site: queries. */
+  knownBoardCertificationHosts?: string[];
 }
 
 /**

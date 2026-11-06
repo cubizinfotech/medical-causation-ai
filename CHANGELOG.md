@@ -6,6 +6,86 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (2026-11-06): EWI report 3.10.27 — Live Nicole Graham QA defect fixes
+
+- Expert Witness Advertising rejects directory-hosted article/PDF dumps (for example JurisPro `/files/articles/`) as profiles; homepage reachability remains non-search.
+- Google Drive / document-host URLs are excluded from Expert Websites grouping (CV download is not a practice site).
+- Own practice pages that mention “Motion for Costs” templates are routed to Expert Websites, not Pleadings/Orders/Depositions.
+- Confirmed subject NPI registry pages are kept with the subject candidate and are not listed under Other People (§39).
+- Accreditation, membership, directory, board-certification, and affiliation dossiers are persisted in the investigation analysis payload so Word/PDF rebuilds retain Task 2–7 assessments.
+- No expert-specific hardcoding.
+
+### Changed (2026-11-06): EWI report 3.10.26 — Final report consistency / Tasks 1–7 QA
+
+- Production Nest path wires claim-scoped SERP + SafeFetcher into accreditation, membership, directory, board-certification, and affiliation assessments when live search keys are configured; otherwise statuses stay Not Checked / Self-Reported honestly.
+- CV Comparison is re-run after board/affiliation assessments so §8 labels match §6/§9/§13.
+- Executive Summary cautions for board, membership, directory, accreditation, and affiliations; collected evidence items distinguished from Source Index rows and Source Links.
+- Source Index / Source Links include membership and accreditation evidence URLs (parity with directory/board/affiliation).
+- Word and PDF continue to share `buildEwiReportDocument`; parity regression added.
+- No expert-specific hardcoding; homepage reachability is not treated as a directory search.
+
+### Changed (2026-11-06): EWI report 3.10.25 — University / practicum / professional affiliation verification
+
+- CV appointment and training claims seed structured institutional affiliation assessments (faculty, clinical, hospital, adjunct, practicum, internship, residency/fellowship).
+- Appointments are checked only against the named institution’s official faculty/staff directory; training/practicum is confirmed separately and is not treated as a faculty appointment.
+- Statuses: Independently Verified, Partially Verified, Self-Reported, Not Independently Verified, Historical Appointment Verified, Training or Practicum Confirmed, Potential Match – Identity Unconfirmed, Unable to Access, No Matching Record, Not Checked.
+- OpenAlex / publisher hosts / own-site restatements are not appointment proof; degrees, memberships, and publishers are rejected as affiliations.
+- PRACTICUM_LISTING routing widened; query planner splits faculty/staff directory queries from pure COI/policy queries.
+- §6 lists appointment-class assessments; §9 lists training/practicum assessments; Source Index / Source Links include official affiliation URLs once (training brochures labeled separately).
+- Executive Summary does not overstate current faculty appointments from self-reported or training-only evidence.
+- No expert-specific hardcoding; CAPTCHA/login not bypassed; failed search never becomes “no affiliation.”
+
+### Changed (2026-11-06): EWI report 3.10.24 — Board certification verification
+
+- CV board certification claims are assessed only against the mapped issuing organization (ABPP, ABMS Certification Matters, ABPN, ABIM, ABP, ABOS).
+- §13 lists each claim with status, official URL, evidence, identity note, queries, and limitations; §14 lists only orgs mapped from those claims.
+- Statuses: Verified, Partially Verified, Self-Reported, Not Independently Verified, No Matching Record, Unable to Access, Potential Match – Identity Unconfirmed, Insufficient Information, Not Checked.
+- Blind universal `site:abpp.org` seeds and unclaimed board follow-ups removed; unrelated boards are not searched.
+- Memberships, licenses, degrees, and training fellowships are not treated as board certifications.
+- No expert-specific hardcoding; CAPTCHA/login not bypassed; failed search never becomes “not certified.”
+
+### Changed (2026-11-06): EWI report 3.10.23 — Expert Witness Advertising directory assessments
+
+- JurisPro, SEAK, ExpertPages, and related registered paid directories are assessed for every investigation with explicit statuses (Profile Found, No Matching Public Profile Found, Unable to Access, Search Not Supported, Potential Match – Identity Unconfirmed, Not Checked).
+- §21 lists each directory with home URL, status, search method, profile URL when found, identity note, queries, and access limitations.
+- Practice websites remain under Expert Websites; paid advertising hosts are not duplicated under §22 Expert Directories.
+- Source Index / Source Links include assessed directory profile URLs once (search-result-only labeled when the page was not fully read).
+- No expert-specific hardcoding; CAPTCHA/login not bypassed; failed search never becomes “no listing.”
+
+### Changed (2026-11-06): EWI report 3.10.22 — Expert Websites host grouping
+
+- Same-domain pages collapse to one Expert Website entry with relevant subpages listed underneath (original URLs preserved).
+- Self-Reported credential statements from an owned site fold under that host card instead of repeating the domain.
+- URL keys unify http/https, www, trailing slash, and tracking params (`canonicalUrl` / `normalizeFindingUrl`).
+- Source Index groups expert-owned website paths under one host with “Also:” page links; collected-item totals still count retrieved records.
+- No expert-specific domain hardcoding; unrelated categories unchanged.
+
+### Changed (2026-11-06): EWI report 3.10.21 — per-claim Professional Memberships
+
+- CV membership claims seed structured per-organization assessments against official directories (AACN, NAN, APA membership, INS registry).
+- §15 lists each claim with status, official site/directory URL, evidence, identity note, queries run, and limitations.
+- Statuses: Verified, Partially Verified, Self-Reported, Not Independently Verified, Unable to Access, No Matching Record Found, Insufficient Information.
+- Missing/blocked directory results never become “not a member”; AACN site queries file under memberships; APA CoA paths stay accreditation-only.
+- No expert-specific hardcoding; CAPTCHA/login not bypassed.
+
+### Changed (2026-11-06): EWI report 3.10.20 — per-degree University / APA accreditation
+
+- CV education claims seed structured per-degree accreditation assessments (APA CoA program vs CHEA/USDE institutional).
+- §10 lists each degree independently with status, evidence URL, retrieval date, explanation, and limitations.
+- Statuses: accredited during period, currently accredited, not accredited during period (affirmative historical evidence only), no matching program, unable to verify, insufficient details, not applicable.
+- Failed search/fetch never becomes “unaccredited”; missing listing is not proof of non-accreditation.
+- Institution extraction prefers longest / parent university names over college fragments; official accreditor Result URLs accepted when the queried institution appears on the page (expert-name match not required).
+- No expert-specific hardcoding; CAPTCHA/login not bypassed; no private APA database crawl.
+
+### Changed (2026-11-06): EWI report 3.10.19 — public CV discovery (Drive + own-site links)
+
+- Public Google Drive file links resolve via export download; HTML login/preview/virus-scan pages are rejected (never saved as PDF).
+- Drive/Docs file hosts are no longer dropped as if they were Google Search result pages; public file exports skip Drive UI robots rules while still refusing private IPs and login-gated hosts.
+- Own-site / about / biography pages harvest high-scoring CV/resume hrefs into the web-research fetch pool.
+- Website CV recognition covers Drive URLs and CV-like document content; structured claim heuristics strengthen public-CV extraction.
+- Report CV states distinguish compared / found-unreadable / found-unparsed / not uploaded; Executive Summary and CV Comparison wording updated.
+- No expert-specific URL hardcoding; CAPTCHA/login not bypassed.
+
 ### Changed (2026-11-05): EWI report 3.10.18 — own-site routing, directories/court/university gates, §39 genre split
 
 - Own-site / `subject_stated` credential claims (boards, cert orgs, licenses, memberships, publications) route to Expert Websites (Self-Reported), not independent credential/catalog sections; Exec Summary omits that noise.

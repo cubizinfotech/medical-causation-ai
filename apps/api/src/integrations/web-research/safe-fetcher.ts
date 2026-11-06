@@ -1,5 +1,10 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import {
+  fetchGoogleDrivePdf,
+  isGoogleDriveFileUrl,
+  looksLikePdf,
+} from './google-drive';
 import { classifyUrl } from './source-kind';
 import { extractPageText, type PageText } from './page-text';
 import {
@@ -8,6 +13,10 @@ import {
 } from './page-portraits';
 import { extractPdfText } from './pdf-text';
 import type { PageReadStatus } from './web-research.types';
+import {
+  extractCvLinkCandidates,
+  type CvLinkCandidate,
+} from './cv-link-candidates';
 
 export interface FetchedPage extends Partial<PageText> {
   url: string;
@@ -25,6 +34,8 @@ export interface FetchedPage extends Partial<PageText> {
   archiveUrl?: string;
   /** Portrait URLs found in the markup. Candidates only. */
   portraits?: PortraitCandidate[];
+  /** Likely CV / resume document links found in the page markup. */
+  cvLinkCandidates?: CvLinkCandidate[];
 }
 
 export interface FetchedImage {
@@ -312,6 +323,10 @@ export class SafeFetcher {
       };
     }
 
+    if (isGoogleDriveFileUrl(rawUrl)) {
+      return this.fetchDriveDocument(rawUrl);
+    }
+
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const refusal = await this.refuse(current);
       if (refusal) {
@@ -368,7 +383,118 @@ export class SafeFetcher {
     };
   }
 
+  /** Public Drive file → PDF text, or a clear restricted/failed note. */
+  private async fetchDriveDocument(rawUrl: string): Promise<FetchedPage> {
+    const outcome = await fetchGoogleDrivePdf({
+      url: rawUrl,
+      fetchImpl: this.fetchImpl,
+      timeoutMs: this.options.timeoutMs,
+      maxBytes: 8_000_000,
+      userAgent: this.userAgent,
+      // Drive's site-wide robots.txt blocks UI paths; the public file export
+      // endpoint is fetched only for sharing links already resolved to a file
+      // id. Login, private IPs, and non-public shares still refuse.
+      refuse: async (url) => {
+        const refusal = await this.refuseDriveExport(url);
+        if (!refusal) return null;
+        if (refusal.status === 'restricted' || refusal.status === 'failed') {
+          return { status: refusal.status, note: refusal.note ?? '' };
+        }
+        return { status: 'failed', note: refusal.note ?? 'Refused.' };
+      },
+    });
+    if (outcome.kind !== 'pdf') {
+      return {
+        url: rawUrl,
+        finalUrl: outcome.finalUrl,
+        status: outcome.kind,
+        note: outcome.note,
+        httpStatus: outcome.httpStatus,
+        contentType: outcome.contentType,
+      };
+    }
+    return this.pdfFromBytes(rawUrl, outcome.finalUrl, outcome.bytes, {
+      httpStatus: outcome.httpStatus,
+      contentType: outcome.contentType,
+    });
+  }
+
+  private async pdfFromBytes(
+    requested: string,
+    finalUrl: string,
+    bytes: Buffer,
+    meta: { httpStatus?: number; contentType?: string },
+  ): Promise<FetchedPage> {
+    const common = {
+      url: requested,
+      finalUrl,
+      httpStatus: meta.httpStatus,
+      contentType: meta.contentType ?? 'application/pdf',
+    };
+    if (!looksLikePdf(bytes)) {
+      return {
+        ...common,
+        status: 'failed',
+        note: 'The response was not a PDF document (HTML or other content was returned).',
+      };
+    }
+    try {
+      const pdf = await extractPdfText(bytes);
+      if (pdf.text.length < 120) {
+        return {
+          ...common,
+          title: pdf.title,
+          status: 'failed',
+          note: 'The PDF has no readable text (it is probably a scanned image). It was not run through OCR.',
+        };
+      }
+      return {
+        ...common,
+        title: pdf.title ?? pdf.text.split('\n')[0].slice(0, 160),
+        description: null,
+        publishedAt: null,
+        text: pdf.text,
+        status: 'read',
+        note:
+          pdf.pages > 25
+            ? `PDF read from its first 25 of ${pdf.pages} pages.`
+            : null,
+      };
+    } catch {
+      return {
+        ...common,
+        status: 'failed',
+        note: 'The PDF could not be read.',
+      };
+    }
+  }
+
   private async refuse(
+    url: URL,
+  ): Promise<Pick<FetchedPage, 'status' | 'note'> | null> {
+    const base = await this.refuseNetwork(url);
+    if (base) return base;
+    const rules = await this.robotsFor(url);
+    if (rules && !robotsAllows(rules, url.pathname + url.search)) {
+      return {
+        status: 'restricted',
+        note: 'The site’s robots.txt asks automated tools not to read this page. It was not fetched.',
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Safety checks for Drive file exports without applying Drive's UI robots
+   * rules (which would block every public shared-file download).
+   */
+  private async refuseDriveExport(
+    url: URL,
+  ): Promise<Pick<FetchedPage, 'status' | 'note'> | null> {
+    return this.refuseNetwork(url);
+  }
+
+  private async refuseNetwork(
     url: URL,
   ): Promise<Pick<FetchedPage, 'status' | 'note'> | null> {
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
@@ -404,13 +530,6 @@ export class SafeFetcher {
       }
     } catch {
       return { status: 'failed', note: 'The site name could not be resolved.' };
-    }
-    const rules = await this.robotsFor(url);
-    if (rules && !robotsAllows(rules, url.pathname + url.search)) {
-      return {
-        status: 'restricted',
-        note: 'The site’s robots.txt asks automated tools not to read this page. It was not fetched.',
-      };
     }
     return null;
   }
@@ -462,41 +581,32 @@ export class SafeFetcher {
       };
     }
     let body = '';
-    const isPdf =
+    const claimsPdf =
       /application\/pdf/i.test(contentType) ||
       (/octet-stream/i.test(contentType) &&
-        /\.pdf($|\?)/i.test(url.pathname + url.search));
-    if (isPdf && response.status < 400) {
+        /\.pdf($|\?)/i.test(url.pathname + url.search)) ||
+      /\.pdf($|\?)/i.test(url.pathname + url.search);
+    if (claimsPdf && response.status < 400) {
       const bytes = await this.readBytes(response, 8_000_000);
-      try {
-        const pdf = await extractPdfText(bytes);
-        if (pdf.text.length < 120) {
+      if (!looksLikePdf(bytes)) {
+        const asText = bytes.toString('utf8');
+        if (/html|<!doctype|<html/i.test(`${contentType} ${asText.slice(0, 500)}`)) {
           return {
             ...common,
-            title: pdf.title,
             status: 'failed',
-            note: 'The PDF has no readable text (it is probably a scanned image). It was not run through OCR.',
+            note: 'The URL looked like a PDF but the server returned an HTML page instead of a document.',
           };
         }
         return {
           ...common,
-          title: pdf.title ?? pdf.text.split('\n')[0].slice(0, 160),
-          description: null,
-          publishedAt: null,
-          text: pdf.text,
-          status: 'read',
-          note:
-            pdf.pages > 25
-              ? `PDF read from its first 25 of ${pdf.pages} pages.`
-              : null,
-        };
-      } catch {
-        return {
-          ...common,
           status: 'failed',
-          note: 'The PDF could not be read.',
+          note: 'The response was not a PDF document.',
         };
       }
+      return this.pdfFromBytes(requested, finalUrl, bytes, {
+        httpStatus: response.status,
+        contentType,
+      });
     }
     if (/text\/|html|xml|json/i.test(contentType) || contentType === '') {
       body = await this.readBody(response);
@@ -559,14 +669,19 @@ export class SafeFetcher {
     }
     const paywalled =
       PAYWALL_MARKERS.some((m) => m.test(page.text)) && page.text.length < 2500;
-    const portraits = /html/i.test(contentType)
+    const isHtml = /html/i.test(contentType) || /<html/i.test(body.slice(0, 500));
+    const portraits = isHtml
       ? extractPortraitCandidates(body, finalUrl)
+      : [];
+    const cvLinkCandidates = isHtml
+      ? extractCvLinkCandidates(body, finalUrl, { pageTitle: page.title })
       : [];
     return {
       ...common,
       ...page,
       ...(keepHtml ? { html: body } : {}),
       ...(portraits.length > 0 ? { portraits } : {}),
+      ...(cvLinkCandidates.length > 0 ? { cvLinkCandidates } : {}),
       status: 'read',
       note: paywalled
         ? 'The page appears to be partly behind a paywall or sign-in; only the visible part was read.'

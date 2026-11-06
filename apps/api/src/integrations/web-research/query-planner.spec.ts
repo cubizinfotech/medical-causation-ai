@@ -81,8 +81,14 @@ describe('planQueries', () => {
           /speaker|conference/.test(plan.request.query),
       ),
     ).toBe(true);
+    // Blind ABPP site seeds are removed unless the CV claims ABPP.
     expect(
       plans.some((plan) => plan.request.query.includes('site:abpp.org')),
+    ).toBe(false);
+    expect(
+      planQueries(
+        subject({ knownBoardCertificationHosts: ['abpp.org'] }),
+      ).some((plan) => plan.request.query.includes('site:abpp.org')),
     ).toBe(true);
     expect(
       plans.some((plan) => plan.request.query.includes('site:theaacn.org')),
@@ -241,11 +247,28 @@ describe('planQueries', () => {
 });
 
 describe('planFollowUps', () => {
-  it('searches the official site of each body a page named, then the license lookup', () => {
-    const plans = planFollowUps(subject(), {
+  it('searches claimed board sites and membership hosts, then the license lookup', () => {
+    const withoutClaim = planFollowUps(subject(), {
       acronyms: ['ABPP', 'AACN', 'ABPP', 'ZZZZ'],
       state: 'FL',
     });
+    // Unclaimed board acronyms must not trigger ABPP follow-ups.
+    expect(
+      withoutClaim.some((plan) => plan.request.query.includes('site:abpp.org')),
+    ).toBe(false);
+    expect(
+      withoutClaim.some((plan) =>
+        plan.request.query.startsWith('site:theaacn.org'),
+      ),
+    ).toBe(true);
+
+    const plans = planFollowUps(
+      subject({ knownBoardCertificationAcronyms: ['ABPP'] }),
+      {
+        acronyms: ['ABPP', 'AACN', 'ABPP', 'ZZZZ'],
+        state: 'FL',
+      },
+    );
     const queries = plans.map((plan) => plan.request.query);
     expect(queries.some((q) => q.startsWith('site:abpp.org'))).toBe(true);
     expect(queries.some((q) => q.startsWith('site:theaacn.org'))).toBe(true);

@@ -7,10 +7,12 @@ import type { LoadedExpertDocument } from '../documents/expert-documents.types';
 import {
   buildCvBatches,
   extractBibliographyClaims,
+  extractStructuredClaimsFromCvText,
   finalizeCvClaims,
   formatCvBatch,
   parseCvReply,
   splitPageText,
+  textLooksLikeCurriculumVitae,
   validateCvClaims,
 } from './cv-claims';
 import {
@@ -295,8 +297,9 @@ describe('CV comparison', () => {
 
   it('marks what no source can check as not checked', () => {
     expect(byTitle('Board certification')?.label).toBe('not_verified');
-    expect(byTitle('Affiliation with Barrow')?.label).toBe(
-      'partially_verified',
+    // OpenAlex publication affiliations are not appointment verification.
+    expect(byTitle('Appointment: Neurosurgeon at Barrow')?.label).toBe(
+      'not_verified',
     );
     expect(byTitle('Expert witness experience')?.source?.statement).toContain(
       '1 published opinion(s)',
@@ -840,6 +843,66 @@ describe('extractBibliographyClaims', () => {
       batches
         .flatMap((batch) => batch.pages)
         .every((item) => item.pageNumber === 6),
+    ).toBe(true);
+  });
+});
+
+describe('extractStructuredClaimsFromCvText', () => {
+  const cvBody = [
+    'CURRICULUM VITAE Jane Expert, Ph.D.',
+    'EDUCATION',
+    'Ph.D. Clinical Psychology, University of Example, 2008',
+    'B.A. Psychology, State College',
+    'Clinical Internship, Regional Medical Center',
+    'LICENSURE Licensed Psychologist Florida #PY1234',
+    'Board Certified American Board of Professional Psychology',
+    'Member of the American Psychological Association',
+    'Clinical Director Example Neuropsychology Clinic',
+    'PUBLICATIONS',
+    '1. Expert J. Cognitive outcomes after injury. J Neuropsychol. 2015.',
+  ].join('\n');
+
+  it('extracts multiple degrees and leaves missing dates unknown', () => {
+    expect(textLooksLikeCurriculumVitae(cvBody)).toBe(true);
+    const claims = extractStructuredClaimsFromCvText(cvBody);
+    const education = claims.filter((c) => c.category === 'education');
+    expect(education.length).toBeGreaterThanOrEqual(2);
+    const ba = education.find((c) => /B\.?A\.?/i.test(c.statement));
+    expect(ba?.details.year).toBeUndefined();
+    expect(
+      education.some((c) => /University of Example/i.test(c.statement)),
+    ).toBe(true);
+  });
+
+  it('marks education as Self-Reported when no independent source confirms it', () => {
+    const claims = finalizeCvClaims(extractStructuredClaimsFromCvText(cvBody));
+    const check = compareCv({
+      extraction: {
+        document: {
+          id: 'https://drive.google.com/file/d/1PublicCvExampleIdABC/view',
+          name: 'Public CV',
+          pageCount: 1,
+          unreadablePages: [],
+          ocrPages: [],
+        },
+        status: 'completed',
+        claims,
+        warnings: ['Public CV compared'],
+      },
+      evidence: [],
+      sourceResults: [],
+      identity: null,
+      publications: [],
+      expertName: 'Jane Expert',
+    });
+    expect(check.claims.length).toBeGreaterThan(0);
+    expect(
+      check.comparisons.some(
+        (row) =>
+          row.topic === 'education' &&
+          (row.label === 'not_verified' ||
+            CV_LABEL_TEXT[row.label] === 'Self-Reported'),
+      ),
     ).toBe(true);
   });
 });

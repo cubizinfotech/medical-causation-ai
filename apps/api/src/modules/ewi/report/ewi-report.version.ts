@@ -131,8 +131,38 @@ export const EWI_REPORT_TEMPLATE_ID = 'ewi/investigation-report';
  * practicum≠university-rules; §39 possible split by fingerprint/genre;
  * Verified tightened for directory/university/court; summary omits
  * subject_stated credential noise.
+ * 3.10.19: public CV discovery from own-site links and public Google Drive
+ * files; distinguish discovered/unreadable/unparsed/compared CV states in
+ * Executive Summary and CV Comparison.
+ * 3.10.20: University / APA accreditation assessed per CV degree against
+ * official CoA and CHEA/USDE sources with historical-period statuses;
+ * institution extraction prefers full university names; accreditor Result
+ * URLs no longer require expert-name identity match.
+ * 3.10.21: Professional memberships assessed per CV claim against official
+ * organization directories (AACN/NAN/APA membership/INS registry); §15 shows
+ * per-claim status, evidence URL, queries, and access limitations.
+ * 3.10.22: Expert Websites groups pages by host (one primary site + relevant
+ * subpages); URL canonicalization unifies www/http/slash/tracking; Source
+ * Index groups owned-website paths under one host entry.
+ * 3.10.23: Expert Witness Advertising assesses JurisPro/SEAK/ExpertPages and
+ * related paid directories per investigation with transparent research statuses;
+ * practice sites stay under Expert Websites; §22 omits duplicate paid listings.
+ * 3.10.24: Board certifications assessed per CV claim against the mapped
+ * issuing board only (ABPP/ABMS/ABPN/…); blind ABPP seeds removed; §13 shows
+ * per-claim status; memberships/licenses/degrees stay out of board cert.
+ * 3.10.25: Institutional affiliations assessed per CV claim (appointment vs
+ * training/practicum); institution-scoped directory verification; OpenAlex
+ * not appointment proof; practicum routing widened; faculty vs COI queries
+ * split; §6/§9 present assessments; Source Index labels training vs appointment.
+ * 3.10.26: Production claim-scoped SERP/SafeFetcher wiring for Tasks 2–7;
+ * CV re-compare after board/affiliation assessments; Exec Summary cautions;
+ * membership/accreditation Source Index/Links; collected-item vs Index glossary;
+ * Word/PDF parity coverage.
+ * 3.10.27: Live QA — reject directory article/PDF non-profiles; exclude Drive
+ * hosts from Expert Websites; own-site court-topic → Websites; confirmed subject
+ * NPI out of §39; persist Task 2–7 assessment dossiers for Word/PDF rebuild.
  */
-export const EWI_REPORT_TEMPLATE_VERSION = '3.10.18';
+export const EWI_REPORT_TEMPLATE_VERSION = '3.10.27';
 
 export const EWI_REPORT_DISCLAIMER =
   'This document is an investigative research compilation prepared for attorney review. It repeats collected source statements and source-derived analysis only. It is not a certification of any credential, not a legal opinion, and not a substitute for independent attorney review of primary sources. Restricted or unavailable sources are identified as such; their content was not inferred. LexisNexis, TrialSmith, and other licensed databases are searched only when authorized for the investigation; licensed PDFs are not stored unless legally permitted.';

@@ -10,6 +10,11 @@ import type { OnlinePresenceDossier } from '../../research/online-presence';
 import type { ProfessionalBackgroundDossier } from '../../research/professional-background';
 import type { WebResearchDossier } from '@integrations/web-research';
 import type { CvCheck } from '../../cv/cv.types';
+import type { AccreditationDossier } from '../../research/accreditation';
+import type { MembershipDossier } from '../../research/memberships';
+import type { DirectoryAdvertisingDossier } from '../../research/directories';
+import type { BoardCertificationDossier } from '../../research/board-certifications';
+import type { AffiliationDossier } from '../../research/affiliations';
 import type {
   EwiJobStatus,
   EwiJobStep,
@@ -68,6 +73,16 @@ export interface EwiInvestigationResult {
   identity?: ExpertIdentityResolution | null;
   /** Claims in the uploaded CV compared with the sources. Null without a CV. */
   cvCheck?: CvCheck | null;
+  /** Per-degree APA / institutional accreditation assessments from the CV. */
+  accreditation?: AccreditationDossier | null;
+  /** Per-claim professional membership assessments from the CV. */
+  membershipAssessments?: MembershipDossier | null;
+  /** Per-directory expert-witness / IME advertising assessments. */
+  directoryAssessments?: DirectoryAdvertisingDossier | null;
+  /** Per-claim board certification assessments against issuing boards. */
+  boardCertificationAssessments?: BoardCertificationDossier | null;
+  /** Per-claim institutional affiliation / training assessments. */
+  affiliationAssessments?: AffiliationDossier | null;
   evidence: ExpertEvidenceItem[];
   discrepancies: ExpertDiscrepancy[];
   questions: CrossExamQuestion[];

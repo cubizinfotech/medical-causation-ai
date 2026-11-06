@@ -379,3 +379,135 @@ export function isJunkCvClaim(claim: Omit<CvClaim, 'id'>): boolean {
   }
   return false;
 }
+
+const DEGREE_LINE =
+  /\b((?:Ph\.?\s*D\.?|Psy\.?\s*D\.?|M\.?\s*D\.?|M\.?\s*A\.?|M\.?\s*S\.?|B\.?\s*A\.?|B\.?\s*S\.?|Ed\.?\s*D\.?|D\.?\s*O\.?)[^.\n]{0,120}?(?:University|College|Institute|School)[^.\n]{0,80})/gi;
+
+const LICENSE_LINE =
+  /\b((?:Licensed|License)\s+[A-Za-z ]{3,40}(?:Psychologist|Physician|Nurse|Counselor)?[^.\n]{0,80}(?:#\s*\d{3,}|\b[A-Z]{2}\b)?[^.\n]{0,40})/gi;
+
+const BOARD_LINE =
+  /\b((?:Board[- ]Certified|Diplomate|Diplomate of|Certified by)\s[^.\n]{8,120})/gi;
+
+const MEMBERSHIP_LINE =
+  /\b((?:Member|Fellow|Member of|Membership)\s+(?:of\s+)?(?:the\s+)?[A-Z][^.\n]{8,100})/gi;
+
+const APPOINTMENT_LINE =
+  /\b((?:Clinical|Assistant|Associate|Adjunct|Full|Visiting)?\s*(?:Professor|Faculty|Instructor|Attending|Director|Chief)\b\s*[,:\-]?\s*[^.\n]{4,140})/gi;
+
+/** Practicum / internship / residency / fellowship training sites. */
+const TRAINING_LINE =
+  /\b((?:Predoctoral|Postdoctoral|Clinical)?\s*(?:Practicum|Internship|Intern(?:ship)?|Externship|Residency|Fellowship|Clinical training)\s*[,:\-]?\s*[^.\n]{4,140})/gi;
+
+const TRAINING_DOMINANT =
+  /\b(practicum|internship|intern\b|externship|residency|fellowship|clinical training|training site|site supervisor)\b/i;
+
+/**
+ * Heuristic claims from CV body text when AI extraction is unavailable
+ * (public website / Drive PDFs). Does not invent missing dates or fields.
+ */
+export function extractStructuredClaimsFromCvText(
+  text: string,
+  page = 1,
+): Array<Omit<CvClaim, 'id'>> {
+  const claims: Array<Omit<CvClaim, 'id'>> = [];
+  const seen = new Set<string>();
+  const push = (
+    category: CvClaimCategory,
+    statement: string,
+    details: CvClaimDetails = {},
+  ) => {
+    const cleaned = statement.replace(/\s+/g, ' ').trim();
+    if (cleaned.length < 12 || cleaned.length > 400) return;
+    const key = `${category}|${normalizeForMatch(cleaned)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    claims.push({
+      category,
+      statement: cleaned.slice(0, 300),
+      details,
+      page,
+      quote: cleaned.slice(0, 180),
+    });
+  };
+
+  for (const match of text.matchAll(DEGREE_LINE)) {
+    const statement = match[1];
+    const year = parseYear(statement);
+    const degree = statement.match(
+      /\b(Ph\.?\s*D\.?|Psy\.?\s*D\.?|M\.?\s*D\.?|M\.?\s*A\.?|M\.?\s*S\.?|B\.?\s*A\.?|B\.?\s*S\.?|Ed\.?\s*D\.?|D\.?\s*O\.?)/i,
+    )?.[1];
+    const institution = statement.match(
+      /\b([A-Z][^,]{2,80}?(?:University|College|Institute|School)[^,]{0,40})/,
+    )?.[1];
+    push('education', statement, {
+      ...(degree ? { degree: degree.replace(/\s+/g, '') } : {}),
+      ...(institution ? { institution: institution.trim() } : {}),
+      ...(year ? { year: String(year) } : {}),
+    });
+  }
+  for (const match of text.matchAll(LICENSE_LINE)) {
+    const statement = match[1];
+    const state = stateCode(statement);
+    const licenseNumber = statement.match(/#\s*([A-Z0-9-]{3,})/i)?.[1];
+    push('license', statement, {
+      ...(state ? { state } : {}),
+      ...(licenseNumber ? { licenseNumber } : {}),
+    });
+  }
+  for (const match of text.matchAll(BOARD_LINE)) {
+    push('board_certification', match[1], { board: match[1].slice(0, 120) });
+  }
+  for (const match of text.matchAll(MEMBERSHIP_LINE)) {
+    push('membership', match[1], { name: match[1].slice(0, 120) });
+  }
+  // Prefer training over appointment when training cues dominate.
+  for (const match of text.matchAll(TRAINING_LINE)) {
+    const statement = match[1];
+    const institution = statement.match(
+      /\b([A-Z][^,]{2,80}?(?:University|College|Institute|School|Hospital|Medical Center|Clinic)[^,]{0,40})/,
+    )?.[1];
+    push('training', statement, {
+      title: statement.slice(0, 120),
+      ...(institution ? { institution: institution.trim() } : {}),
+    });
+  }
+  for (const match of text.matchAll(APPOINTMENT_LINE)) {
+    const statement = match[1];
+    if (TRAINING_DOMINANT.test(statement)) {
+      // Already captured (or should be) as training — do not double-file as appointment.
+      continue;
+    }
+    const institution = statement.match(
+      /\b([A-Z][^,]{2,80}?(?:University|College|Institute|School|Hospital|Medical Center)[^,]{0,40})/,
+    )?.[1];
+    push('appointment', statement, {
+      title: statement.slice(0, 120),
+      ...(institution ? { institution: institution.trim() } : {}),
+    });
+  }
+
+  const bib = extractBibliographyClaims([{ pageNumber: page, text }]);
+  for (const claim of bib) {
+    const key = `${claim.category}|${normalizeForMatch(claim.details.title ?? claim.statement)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    claims.push(claim);
+  }
+  return claims.slice(0, MAX_CLAIMS);
+}
+
+/** True when page text looks like a curriculum vitae / resume body. */
+export function textLooksLikeCurriculumVitae(text: string): boolean {
+  const head = text.slice(0, 3500).toLowerCase();
+  if (/\b(curriculum vitae|\bcv\b|resume|résumé)\b/.test(head)) return true;
+  const cues = [
+    /\beducation\b/,
+    /\blicensure\b|\blicense\b/,
+    /\bboard certification\b/,
+    /\bpublications\b/,
+    /\bprofessional experience\b|\bemployment\b/,
+    /\bmemberships?\b/,
+  ];
+  return cues.filter((pattern) => pattern.test(head)).length >= 3;
+}

@@ -12,7 +12,11 @@ import {
   type PublicationQuery,
 } from '@integrations/expert-research';
 import type { WebRecord, WebResearchDossier } from '@integrations/web-research';
-import { finalizeCvClaims } from '../../cv/cv-claims';
+import {
+  extractStructuredClaimsFromCvText,
+  finalizeCvClaims,
+  textLooksLikeCurriculumVitae,
+} from '../../cv/cv-claims';
 import { compareCv, cvDiscrepancies } from '../../cv/cv-comparison';
 import type {
   CvCheck,
@@ -42,6 +46,41 @@ import {
   buildProfessionalBackgroundDossier,
   type ProfessionalBackgroundDossier,
 } from '../../research/professional-background';
+import {
+  assessProgramAccreditation,
+  educationEntriesFromCvCheck,
+  type AccreditationDossier,
+  type AccreditationFetchResult,
+  type AccreditationSearchHit,
+} from '../../research/accreditation';
+import {
+  assessMemberships,
+  membershipEntriesFromCvCheck,
+  type MembershipDossier,
+  type MembershipFetchResult,
+  type MembershipSearchHit,
+} from '../../research/memberships';
+import {
+  assessDirectoryListings,
+  type DirectoryAdvertisingDossier,
+  type DirectoryFetchResult,
+  type DirectorySearchHit,
+} from '../../research/directories';
+import {
+  assessBoardCertifications,
+  boardCertificationEntriesFromCvCheck,
+  claimedBoardSignals,
+  type BoardCertificationDossier,
+  type BoardCertificationFetchResult,
+  type BoardCertificationSearchHit,
+} from '../../research/board-certifications';
+import {
+  assessInstitutionalAffiliations,
+  affiliationEntriesFromCvCheck,
+  type AffiliationDossier,
+  type AffiliationFetchResult,
+  type AffiliationSearchHit,
+} from '../../research/affiliations';
 import type { EwiPdfReportService } from '../../report/ewi-pdf-report.service';
 import {
   buildQuestionDrafts,
@@ -92,9 +131,27 @@ export class InvestigationCancelledError extends Error {
 /** The research query for a request: the attorney's extra context travels as context. */
 export function toResearchQuery(
   request: EwiInvestigationRequest,
+  options: {
+    knownBoardCertificationAcronyms?: string[];
+    knownBoardCertificationHosts?: string[];
+  } = {},
 ): ExpertResearchQuery {
   const { additionalContext, ...rest } = request;
-  return additionalContext ? { ...rest, context: additionalContext } : rest;
+  return {
+    ...rest,
+    ...(additionalContext ? { context: additionalContext } : {}),
+    ...(options.knownBoardCertificationAcronyms?.length
+      ? {
+          knownBoardCertificationAcronyms:
+            options.knownBoardCertificationAcronyms,
+        }
+      : {}),
+    ...(options.knownBoardCertificationHosts?.length
+      ? {
+          knownBoardCertificationHosts: options.knownBoardCertificationHosts,
+        }
+      : {}),
+  };
 }
 
 export interface InvestigationResearchPort {
@@ -149,6 +206,40 @@ export interface InvestigationWorkflowDependencies {
   /** Resume from a prior checkpoint when practical. */
   checkpoint?: InvestigationWorkflowCheckpoint;
   researchCache?: PublicResearchCache;
+  /** Optional SERP for accreditation look-ups after CV education is known. */
+  searchAccreditation?: (
+    query: string,
+  ) => Promise<AccreditationSearchHit[]>;
+  /** Optional page fetch for official accreditor URLs. */
+  fetchAccreditationPage?: (
+    url: string,
+  ) => Promise<AccreditationFetchResult | null>;
+  /** Optional SERP for membership directory look-ups after CV memberships are known. */
+  searchMembership?: (query: string) => Promise<MembershipSearchHit[]>;
+  /** Optional page fetch for official membership directory URLs. */
+  fetchMembershipPage?: (
+    url: string,
+  ) => Promise<MembershipFetchResult | null>;
+  /** Optional SERP for expert-witness / IME advertising directory look-ups. */
+  searchDirectory?: (query: string) => Promise<DirectorySearchHit[]>;
+  /** Optional page fetch for advertising directory profile URLs. */
+  fetchDirectoryPage?: (
+    url: string,
+  ) => Promise<DirectoryFetchResult | null>;
+  /** Optional SERP for issuing-board certification look-ups. */
+  searchBoardCertification?: (
+    query: string,
+  ) => Promise<BoardCertificationSearchHit[]>;
+  /** Optional page fetch for official board verification URLs. */
+  fetchBoardCertificationPage?: (
+    url: string,
+  ) => Promise<BoardCertificationFetchResult | null>;
+  /** Optional SERP for institution-scoped affiliation / faculty look-ups. */
+  searchAffiliation?: (query: string) => Promise<AffiliationSearchHit[]>;
+  /** Optional page fetch for institutional directory / training URLs. */
+  fetchAffiliationPage?: (
+    url: string,
+  ) => Promise<AffiliationFetchResult | null>;
 }
 
 export interface InvestigationWorkflowOutcome {
@@ -655,8 +746,19 @@ export async function executeInvestigationWorkflow(
   let webResearch: WebResearchDossier | null = null;
   if (dependencies.research.webDossier) {
     try {
+      const boardEntries = cvCheck
+        ? boardCertificationEntriesFromCvCheck(cvCheck)
+        : [];
+      const boardSignals = claimedBoardSignals(
+        boardEntries
+          .map((e) => e.boardId)
+          .filter((id): id is string => Boolean(id)),
+      );
       webResearch = await dependencies.research.webDossier(
-        toResearchQuery(request),
+        toResearchQuery(request, {
+          knownBoardCertificationAcronyms: boardSignals.acronyms,
+          knownBoardCertificationHosts: boardSignals.hosts,
+        }),
       );
     } catch (error) {
       dependencies.logger?.warn(
@@ -711,7 +813,7 @@ export async function executeInvestigationWorkflow(
         const cvStatusIndex = sourceStatuses.findIndex(
           (status) => status.sourceId === 'cv_profile',
         );
-        const comparedMessage = `Public CV compared from ${websiteExtraction.document.name || websiteExtraction.document.id}. Credentials stated only on the CV remain self-reported.`;
+        const comparedMessage = `Public CV located at ${websiteExtraction.document.id}. Parsed successfully; ${websiteExtraction.claims.length} claim(s) extracted and compared. Credentials stated only on the CV remain self-reported.`;
         if (cvStatusIndex >= 0) {
           sourceStatuses[cvStatusIndex] = {
             ...sourceStatuses[cvStatusIndex],
@@ -728,20 +830,193 @@ export async function executeInvestigationWorkflow(
       }
     } else {
       const foundUrls = publicCvCandidateUrls(webResearch, request.expertName);
-      if (foundUrls.length > 0) {
-        const unreadMessage = `A public CV or resume URL was found (${foundUrls.slice(0, 3).join('; ')}) but could not be read or parsed for comparison (login, CAPTCHA, empty PDF text, or thin page). Upload the CV to compare. That is not a finding that the expert has no CV discrepancies.`;
-        const cvStatusIndex = sourceStatuses.findIndex(
-          (status) => status.sourceId === 'cv_profile',
-        );
-        if (cvStatusIndex >= 0) {
-          sourceStatuses[cvStatusIndex] = {
-            ...sourceStatuses[cvStatusIndex],
-            message: unreadMessage,
-          };
-        }
+      const unparsedUrls = publicCvFoundUnparsed(
+        webResearch,
+        request.expertName,
+      );
+      const cvStatusIndex = sourceStatuses.findIndex(
+        (status) => status.sourceId === 'cv_profile',
+      );
+      if (cvStatusIndex >= 0 && unparsedUrls.length > 0) {
+        sourceStatuses[cvStatusIndex] = {
+          ...sourceStatuses[cvStatusIndex],
+          message: `A public CV was located (${unparsedUrls.slice(0, 3).join('; ')}) and the document was retrieved, but usable claims could not be extracted for comparison. Upload a readable CV to compare. That is not a finding that the expert has no CV discrepancies.`,
+        };
+      } else if (cvStatusIndex >= 0 && foundUrls.length > 0) {
+        sourceStatuses[cvStatusIndex] = {
+          ...sourceStatuses[cvStatusIndex],
+          message: `A public CV or resume URL was found (${foundUrls.slice(0, 3).join('; ')}) but could not be read or parsed for comparison (login, CAPTCHA, empty PDF text, or thin page). Upload the CV to compare. That is not a finding that the expert has no CV discrepancies.`,
+        };
       }
     }
   }
+  let accreditation: AccreditationDossier | null = null;
+  if (cvCheck) {
+    try {
+      const entries = educationEntriesFromCvCheck(cvCheck);
+      if (entries.length > 0) {
+        accreditation = await assessProgramAccreditation({
+          entries,
+          specialty: request.specialty,
+          dossier: webResearch,
+          search: dependencies.searchAccreditation,
+          fetchPage: dependencies.fetchAccreditationPage,
+        });
+      }
+    } catch (error) {
+      dependencies.logger?.warn(
+        `Accreditation assessment unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    }
+  }
+
+  let membershipAssessments: MembershipDossier | null = null;
+  if (cvCheck) {
+    try {
+      const membershipEntries = membershipEntriesFromCvCheck(cvCheck);
+      if (membershipEntries.length > 0) {
+        membershipAssessments = await assessMemberships({
+          entries: membershipEntries,
+          expertName: request.expertName,
+          specialty: request.specialty,
+          city: request.city,
+          dossier: webResearch,
+          search: dependencies.searchMembership,
+          fetchPage: dependencies.fetchMembershipPage,
+        });
+      }
+    } catch (error) {
+      dependencies.logger?.warn(
+        `Membership assessment unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    }
+  }
+
+  let directoryAssessments: DirectoryAdvertisingDossier | null = null;
+  try {
+    directoryAssessments = await assessDirectoryListings({
+      expertName: request.expertName,
+      specialty: request.specialty,
+      city: request.city,
+      dossier: webResearch,
+      search: dependencies.searchDirectory,
+      fetchPage: dependencies.fetchDirectoryPage,
+    });
+  } catch (error) {
+    dependencies.logger?.warn(
+      `Directory advertising assessment unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
+    );
+  }
+
+  let boardCertificationAssessments: BoardCertificationDossier | null = null;
+  if (cvCheck) {
+    try {
+      const boardEntries = boardCertificationEntriesFromCvCheck(cvCheck);
+      if (boardEntries.length > 0) {
+        boardCertificationAssessments = await assessBoardCertifications({
+          entries: boardEntries,
+          expertName: request.expertName,
+          specialty: request.specialty,
+          city: request.city,
+          dossier: webResearch,
+          search: dependencies.searchBoardCertification,
+          fetchPage: dependencies.fetchBoardCertificationPage,
+        });
+      }
+    } catch (error) {
+      dependencies.logger?.warn(
+        `Board certification assessment unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    }
+  }
+
+  let affiliationAssessments: AffiliationDossier | null = null;
+  if (cvCheck) {
+    try {
+      const affiliationEntries = affiliationEntriesFromCvCheck(cvCheck);
+      if (affiliationEntries.length > 0) {
+        affiliationAssessments = await assessInstitutionalAffiliations({
+          entries: affiliationEntries,
+          expertName: request.expertName,
+          specialty: request.specialty,
+          city: request.city,
+          dossier: webResearch,
+          search: dependencies.searchAffiliation,
+          fetchPage: dependencies.fetchAffiliationPage,
+        });
+      }
+    } catch (error) {
+      dependencies.logger?.warn(
+        `Affiliation assessment unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    }
+  }
+
+  // Re-compare CV so §8 labels reflect board/affiliation assessments.
+  if (
+    cvCheck &&
+    ((boardCertificationAssessments?.assessments.length ?? 0) > 0 ||
+      (affiliationAssessments?.assessments.length ?? 0) > 0)
+  ) {
+    try {
+      const citations: PublicationQuery[] = cvCheck.claims
+        .filter(
+          (claim) => claim.category === 'publication' && claim.details.title,
+        )
+        .map((claim) => ({
+          title: claim.details.title!,
+          citation: claim.statement,
+          journal: claim.details.journal,
+          year: parseYear(claim.details.year) ?? parseYear(claim.statement),
+          doi: claim.details.doi,
+          pmid: claim.details.pmid,
+          type: claim.details.publicationType as PublicationQuery['type'],
+        }));
+      let publications: PublicationLookupResult[] = [];
+      if (citations.length > 0 && dependencies.research.lookupPublications) {
+        try {
+          publications = await dependencies.research.lookupPublications(
+            request.expertName,
+            citations,
+          );
+        } catch (error) {
+          dependencies.logger?.warn(
+            `CV publication re-lookup failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+          );
+        }
+      }
+      cvCheck = compareCv({
+        extraction: {
+          document: cvCheck.document,
+          status: cvCheck.status,
+          claims: cvCheck.claims,
+          warnings: cvCheck.warnings,
+          ...(cvCheck.incompletePages?.length
+            ? { incompletePages: cvCheck.incompletePages }
+            : {}),
+        },
+        evidence,
+        sourceResults,
+        identity,
+        publications,
+        expertName: request.expertName,
+        boardCertificationAssessments:
+          boardCertificationAssessments?.assessments ?? null,
+        affiliationAssessments: affiliationAssessments?.assessments ?? null,
+      });
+      // Refresh CV-driven discrepancies only; keep analyzer discrepancies.
+      const nonCv = discrepancies.filter(
+        (item) => !String(item.id ?? '').startsWith('cv-check-'),
+      );
+      discrepancies.length = 0;
+      discrepancies.push(...nonCv, ...cvDiscrepancies(cvCheck));
+    } catch (error) {
+      dependencies.logger?.warn(
+        `CV re-compare with assessments failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    }
+  }
+
   const reportArtifact = await dependencies.report.build({
     expertName: request.expertName,
     city: request.city,
@@ -759,6 +1034,11 @@ export async function executeInvestigationWorkflow(
     professionalBackground,
     identity,
     cvCheck,
+    accreditation,
+    membershipAssessments,
+    directoryAssessments,
+    boardCertificationAssessments,
+    affiliationAssessments,
     sourceStatuses,
   });
 
@@ -771,6 +1051,11 @@ export async function executeInvestigationWorkflow(
     webResearch,
     identity,
     cvCheck: cvCheck ?? null,
+    accreditation,
+    membershipAssessments,
+    directoryAssessments,
+    boardCertificationAssessments,
+    affiliationAssessments,
     evidence,
     discrepancies,
     questions,
@@ -1090,6 +1375,25 @@ async function readCvSource(
   }
 }
 
+/** True when URL/title/summary/content indicate a CV or resume document. */
+export function recordLooksLikeCvDocument(record: {
+  url: string;
+  title: string;
+  summary: string;
+}): boolean {
+  const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
+  if (/\.pdf($|\?)/i.test(record.url)) return true;
+  if (/\b(curriculum vitae|\bcv\b|resume|résumé)\b/.test(hay)) return true;
+  if (/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?)/i.test(record.url)) {
+    return (
+      /\b(curriculum vitae|\bcv\b|resume|résumé|education|licensure|publications)\b/.test(
+        hay,
+      ) || textLooksLikeCurriculumVitae(record.summary)
+    );
+  }
+  return textLooksLikeCurriculumVitae(record.summary);
+}
+
 /** Public CV/resume URLs found for this expert (read or unread). */
 export function publicCvCandidateUrls(
   dossier: WebResearchDossier,
@@ -1100,13 +1404,28 @@ export function publicCvCandidateUrls(
     if (record.match.level !== 'strong') continue;
     if (isOtherPersonCvRecord(record, expertName)) continue;
     if (!cvRecordNamesSubject(record, expertName)) continue;
-    const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
-    if (
-      !/\.pdf($|\?)/i.test(record.url) &&
-      !/\b(curriculum vitae|\bcv\b|resume)\b/.test(hay)
-    ) {
-      continue;
-    }
+    if (!recordLooksLikeCvDocument(record)) continue;
+    urls.push(record.url);
+  }
+  return [...new Set(urls)].slice(0, 5);
+}
+
+/**
+ * A public CV URL was found and the page was read, but no usable claims
+ * could be extracted (distinct from discovery failure).
+ */
+export function publicCvFoundUnparsed(
+  dossier: WebResearchDossier,
+  expertName?: string,
+): string[] {
+  const urls: string[] = [];
+  for (const record of dossier.records) {
+    if (record.match.level !== 'strong') continue;
+    if (record.read !== 'read') continue;
+    if (isOtherPersonCvRecord(record, expertName)) continue;
+    if (!cvRecordNamesSubject(record, expertName)) continue;
+    if (!recordLooksLikeCvDocument(record)) continue;
+    if ((record.summary ?? '').trim().length < 80) continue;
     urls.push(record.url);
   }
   return [...new Set(urls)].slice(0, 5);
@@ -1127,8 +1446,8 @@ export function extractionFromWebsiteCv(
     .sort((left, right) => right.score - left.score);
   const record = ranked[0]?.entry;
   if (!record) return null;
-  const claims: CvClaim[] = [];
-  for (const [index, claim] of (record.claims ?? []).entries()) {
+  const drafts: Array<Omit<CvClaim, 'id'>> = [];
+  for (const claim of record.claims ?? []) {
     const category = cvCategoryForWebTopic(claim.topic);
     if (!category) continue;
     const details =
@@ -1137,8 +1456,7 @@ export function extractionFromWebsiteCv(
         : category === 'education'
           ? { institution: claim.text.slice(0, 120) }
           : {};
-    claims.push({
-      id: `website-cv-${index + 1}`,
+    drafts.push({
       category,
       statement: claim.text,
       details,
@@ -1146,18 +1464,22 @@ export function extractionFromWebsiteCv(
       quote: claim.quote || claim.text,
     });
   }
-  // Pull bibliography-style lines from the summary when claim extraction was thin.
-  const pubCount = claims.filter((c) => c.category === 'publication').length;
+  // Structured heuristics + bibliography when web claim extraction was thin.
+  const body = `${record.title}\n${record.summary}`;
+  if (drafts.length < 8 || textLooksLikeCurriculumVitae(body)) {
+    for (const claim of extractStructuredClaimsFromCvText(body, 1)) {
+      drafts.push(claim);
+    }
+  }
+  const pubCount = drafts.filter((c) => c.category === 'publication').length;
   if (pubCount < 5) {
-    for (const line of bibliographyLinesFromText(
-      `${record.title}\n${record.summary}`,
-    )) {
-      if (claims.filter((c) => c.category === 'publication').length >= 40)
+    for (const line of bibliographyLinesFromText(body)) {
+      if (drafts.filter((c) => c.category === 'publication').length >= 40)
         break;
       const title = publicationTitleFromText(line);
       if (!title || title.length < 12) continue;
       if (
-        claims.some(
+        drafts.some(
           (c) =>
             c.category === 'publication' &&
             (c.details.title ?? '').toLowerCase() === title.toLowerCase(),
@@ -1165,8 +1487,7 @@ export function extractionFromWebsiteCv(
       ) {
         continue;
       }
-      claims.push({
-        id: `website-cv-bib-${claims.length + 1}`,
+      drafts.push({
         category: 'publication',
         statement: line.slice(0, 400),
         details: { title },
@@ -1175,30 +1496,13 @@ export function extractionFromWebsiteCv(
       });
     }
   }
-  if (claims.length === 0 && record.summary.trim().length > 40) {
-    claims.push({
-      id: 'website-cv-summary',
-      category: 'appointment',
-      statement: record.summary.slice(0, 400),
-      details: { title: record.title },
-      page: 1,
-      quote: record.summary.slice(0, 280),
-    });
-  }
-  const finalized = finalizeCvClaims(
-    claims.map(({ category, statement, details, page, quote }) => ({
-      category,
-      statement,
-      details,
-      page,
-      quote,
-    })),
-  );
+  const finalized = finalizeCvClaims(drafts);
   if (finalized.length === 0) return null;
+  const retrievedAt = record.retrievedAt ?? new Date().toISOString();
   return {
     document: {
       id: record.url,
-      name: record.title || 'Website CV',
+      name: record.title || 'Public CV',
       pageCount: 1,
       unreadablePages: [],
       ocrPages: [],
@@ -1206,7 +1510,8 @@ export function extractionFromWebsiteCv(
     status: 'completed',
     claims: finalized,
     warnings: [
-      `CV was read from the expert’s public website (${record.url}), not from an uploaded file.`,
+      `CV was publicly located and read from ${record.url} (retrieved ${retrievedAt}), not from an uploaded file.`,
+      `Extracted ${finalized.length} claim(s) for comparison.`,
     ],
   };
 }
@@ -1250,13 +1555,7 @@ function isWebsiteCvRecord(record: WebRecord, expertName?: string): boolean {
   ) {
     return false;
   }
-  const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
-  if (
-    !/\.pdf($|\?)/i.test(record.url) &&
-    !/\b(curriculum vitae|\bcv\b|resume)\b/.test(hay)
-  ) {
-    return false;
-  }
+  if (!recordLooksLikeCvDocument(record)) return false;
   if (isOtherPersonCvRecord(record, expertName)) return false;
   return cvRecordNamesSubject(record, expertName);
 }
@@ -1281,6 +1580,9 @@ function scoreWebsiteCvRecord(record: WebRecord, expertName?: string): number {
   if (first && file.replace(/[^a-z]/g, '').includes(first)) score += 15;
   if (/\bcurriculum vitae\b/.test(hay)) score += 20;
   if (/\.pdf($|\?)/i.test(record.url)) score += 10;
+  if (/drive\.google\.com/i.test(record.url)) score += 15;
+  if (textLooksLikeCurriculumVitae(record.summary)) score += 25;
+  if ((record.claims?.length ?? 0) >= 5) score += 10;
   if (record.kind === 'expert_website') score += 10;
   return score;
 }

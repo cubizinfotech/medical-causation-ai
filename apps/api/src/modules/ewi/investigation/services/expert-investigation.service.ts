@@ -17,6 +17,7 @@ import {
 } from '../workflow/investigation-workflow';
 import { PublicResearchCache } from '../workflow/research-cache';
 import { ExpertInvestigationRepository } from '../repositories/expert-investigation.repository';
+import { createClaimScopedWebLookup } from '../../research/claim-scoped-web-lookup';
 
 export interface InvestigateOptions {
   jobId?: string;
@@ -55,6 +56,14 @@ export class ExpertInvestigationService {
   ): Promise<InvestigationWorkflowOutcome> {
     const researchSettings =
       this.config.get<ResearchProviderSettings>('research');
+    const claimLookup =
+      researchSettings?.mode === 'live'
+        ? createClaimScopedWebLookup(researchSettings.web, {
+            timeoutMs: researchSettings.timeoutMs,
+          })
+        : null;
+    const search = claimLookup?.search;
+    const fetchPage = claimLookup?.fetchPage;
     return executeInvestigationWorkflow(request, {
       research: this.research,
       report: this.reportService,
@@ -76,6 +85,20 @@ export class ExpertInvestigationService {
       logger: this.logger,
       maxAttempts: researchSettings?.retryMaxAttempts ?? 3,
       retryDelayMs: researchSettings?.retryDelayMs ?? 1000,
+      ...(search && fetchPage
+        ? {
+            searchAccreditation: search,
+            fetchAccreditationPage: fetchPage,
+            searchMembership: search,
+            fetchMembershipPage: fetchPage,
+            searchDirectory: search,
+            fetchDirectoryPage: fetchPage,
+            searchBoardCertification: search,
+            fetchBoardCertificationPage: fetchPage,
+            searchAffiliation: search,
+            fetchAffiliationPage: fetchPage,
+          }
+        : {}),
     });
   }
 

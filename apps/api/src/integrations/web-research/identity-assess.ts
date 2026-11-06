@@ -25,6 +25,14 @@ export interface IdentitySubject {
   specialty: string;
   npi?: string;
   context?: string;
+  /** Institutions already known (e.g. from CV education) for accreditation queries. */
+  knownInstitutions?: string[];
+  /** Organization hosts already known (e.g. from CV memberships) for site: queries. */
+  knownMembershipHosts?: string[];
+  /** Certifying-board acronyms claimed on the CV (e.g. ABPP) — scopes certification searches. */
+  knownBoardCertificationAcronyms?: string[];
+  /** Certifying-board hosts claimed on the CV for site: verification queries. */
+  knownBoardCertificationHosts?: string[];
 }
 
 export type NameMatch = 'full' | 'initial' | 'surname_only' | 'none';
@@ -565,6 +573,10 @@ export function subjectFromQuery(query: {
   specialty: string;
   npi?: string;
   context?: string;
+  knownInstitutions?: string[];
+  knownMembershipHosts?: string[];
+  knownBoardCertificationAcronyms?: string[];
+  knownBoardCertificationHosts?: string[];
 }): IdentitySubject | null {
   const name = parsePersonName(query.expertName);
   if (!name) return null;
@@ -574,5 +586,9 @@ export function subjectFromQuery(query: {
     specialty: query.specialty,
     npi: query.npi,
     context: query.context,
+    knownInstitutions: query.knownInstitutions,
+    knownMembershipHosts: query.knownMembershipHosts,
+    knownBoardCertificationAcronyms: query.knownBoardCertificationAcronyms,
+    knownBoardCertificationHosts: query.knownBoardCertificationHosts,
   };
 }

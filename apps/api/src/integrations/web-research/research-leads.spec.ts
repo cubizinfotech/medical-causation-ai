@@ -21,6 +21,28 @@ describe('institutionsFromText', () => {
       institutionsFromText('University of Florida. He later moved.'),
     ).toEqual(['University of Florida']);
   });
+
+  it('9. prefers full university over college fragment', () => {
+    const names = institutionsFromText(
+      'She trained at John Jay College of Criminal Justice at the City University of New York.',
+    );
+    expect(names.some((n) => /City University of New York/i.test(n))).toBe(
+      true,
+    );
+    expect(names).not.toContain('College of Criminal Justice');
+  });
+
+  it('keeps distinct South vs base university names', () => {
+    const names = institutionsFromText(
+      'Degrees from the University of Florida and the University of South Florida.',
+    );
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'University of Florida',
+        'University of South Florida',
+      ]),
+    );
+  });
 });
 
 describe('licenseStatesFromText', () => {

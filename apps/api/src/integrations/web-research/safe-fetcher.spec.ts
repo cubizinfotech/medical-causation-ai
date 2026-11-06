@@ -1,6 +1,14 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-base-to-string -- test doubles */
 import { SafeFetcher, isPrivateAddress } from './safe-fetcher';
 
+jest.mock('./pdf-text', () => ({
+  extractPdfText: jest.fn(async () => ({
+    title: 'CURRICULUM VITAE Jane Expert, Ph.D.',
+    text: 'CURRICULUM VITAE Jane Expert, Ph.D. EDUCATION Ph.D. Clinical Psychology, University of Example, 2008. LICENSURE Licensed Psychologist, Florida. PROFESSIONAL EXPERIENCE Clinical neuropsychologist.',
+    pages: 1,
+  })),
+}));
+
 const PUBLIC = async () => [{ address: '93.184.216.34' }];
 
 const ARTICLE = `<html><head><title>Court report</title></head><body><article>
@@ -304,5 +312,109 @@ describe('SafeFetcher', () => {
     }).fetchPage('https://down.example/');
     expect(page.status).toBe('failed');
     expect(page.note).toMatch(/could not be reached/i);
+  });
+
+  it('reads a public Google Drive PDF via the export URL', async () => {
+    const id = '1PublicSafeFetcherDriveFileABCDE';
+    const pdf = Buffer.from(
+      `%PDF-1.4\n${'CURRICULUM VITAE Jane Expert Ph.D. education license publications experience '.repeat(4)}\n%%EOF`,
+    );
+    const fake = fakeFetch((url) => {
+      if (url.endsWith('/robots.txt')) return new Response('', { status: 404 });
+      if (url.includes('uc?export=download') && url.includes(id)) {
+        return new Response(pdf, {
+          status: 200,
+          headers: { 'content-type': 'application/pdf' },
+        });
+      }
+      return undefined;
+    });
+    const page = await new SafeFetcher({
+      timeoutMs: 5000,
+      fetchImpl: fake.impl,
+      lookup: PUBLIC,
+    }).fetchPage(`https://drive.google.com/file/d/${id}/view`);
+    expect(page.status).toBe('read');
+    expect(page.text).toMatch(/CURRICULUM VITAE|Jane Expert/i);
+    expect(
+      fake.calls.some((c) => c.includes('export=download') && c.includes(id)),
+    ).toBe(true);
+  });
+
+  it('does not treat a Drive login HTML page as a PDF', async () => {
+    const id = '1LoginRequiredDriveFileABCDEF';
+    const fake = fakeFetch((url) => {
+      if (url.endsWith('/robots.txt')) return new Response('', { status: 404 });
+      if (url.includes('uc?export=download')) {
+        return html(
+          '<html><title>Google Drive</title><body>You need access. Sign in to continue</body></html>',
+        );
+      }
+      return undefined;
+    });
+    const page = await new SafeFetcher({
+      timeoutMs: 2000,
+      fetchImpl: fake.impl,
+      lookup: PUBLIC,
+    }).fetchPage(`https://drive.google.com/file/d/${id}/view`);
+    expect(page.status).toBe('restricted');
+    expect(page.note).toMatch(/not publicly readable|login|permission/i);
+  });
+
+  it('rejects HTML returned for a .pdf URL', async () => {
+    const fake = fakeFetch((url) => {
+      if (url.endsWith('/robots.txt')) return new Response('', { status: 404 });
+      return html('<html><body>Not a PDF</body></html>', 200, {
+        'content-type': 'application/pdf',
+      });
+    });
+    const page = await new SafeFetcher({
+      timeoutMs: 2000,
+      fetchImpl: fake.impl,
+      lookup: PUBLIC,
+    }).fetchPage('https://docs.example/cv.pdf');
+    expect(page.status).toBe('failed');
+    expect(page.note).toMatch(/HTML|not a PDF/i);
+  });
+
+  it('rejects corrupted PDF bytes', async () => {
+    const { extractPdfText } = jest.requireMock('./pdf-text') as {
+      extractPdfText: jest.Mock;
+    };
+    extractPdfText.mockRejectedValueOnce(new Error('bad pdf'));
+    const fake = fakeFetch((url) => {
+      if (url.endsWith('/robots.txt')) return new Response('', { status: 404 });
+      return new Response(Buffer.from('%PDF-1.4 corrupted-not-a-real-file'), {
+        status: 200,
+        headers: { 'content-type': 'application/pdf' },
+      });
+    });
+    const page = await new SafeFetcher({
+      timeoutMs: 2000,
+      fetchImpl: fake.impl,
+      lookup: PUBLIC,
+    }).fetchPage('https://docs.example/broken.pdf');
+    expect(page.status).toBe('failed');
+    expect(page.note).toMatch(/could not be read|no readable text/i);
+  });
+
+  it('extracts CV link candidates from an About page', async () => {
+    const fake = fakeFetch((url) => {
+      if (url.endsWith('/robots.txt')) return new Response('', { status: 404 });
+      return html(`<html><head><title>About Jane Expert</title></head><body>
+        <p>Jane Expert, Ph.D. is a clinical neuropsychologist in private practice who evaluates traumatic brain injury and provides expert testimony for attorneys in civil and criminal cases throughout Florida.</p>
+        <a href="https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUv/view">Download CV</a>
+        <a href="/brochure.pdf">Office brochure</a>
+      </body></html>`);
+    });
+    const page = await new SafeFetcher({
+      timeoutMs: 2000,
+      fetchImpl: fake.impl,
+      lookup: PUBLIC,
+    }).fetchPage('https://janeexpert.com/about');
+    expect(page.status).toBe('read');
+    expect(
+      page.cvLinkCandidates?.some((c) => c.url.includes('drive.google.com')),
+    ).toBe(true);
   });
 });

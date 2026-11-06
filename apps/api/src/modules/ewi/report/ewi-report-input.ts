@@ -50,6 +50,12 @@ export function prepareEwiReportInput(
     professionalBackground: result.professionalBackground,
     identity: result.identity ?? null,
     cvCheck,
+    accreditation: result.accreditation ?? null,
+    membershipAssessments: result.membershipAssessments ?? null,
+    directoryAssessments: result.directoryAssessments ?? null,
+    boardCertificationAssessments:
+      result.boardCertificationAssessments ?? null,
+    affiliationAssessments: result.affiliationAssessments ?? null,
     cvComparisonState: cvComparisonState(result),
     additionalContext: result.additionalContext ?? null,
     webResearch: result.webResearch ?? null,
@@ -63,7 +69,8 @@ export type CvComparisonState =
   | 'compared'
   | 'not_uploaded'
   | 'not_read'
-  | 'found_unreadable';
+  | 'found_unreadable'
+  | 'found_unparsed';
 
 export function cvComparisonState(result: {
   cvCheck?: EwiInvestigationResult['cvCheck'] | null;
@@ -74,12 +81,20 @@ export function cvComparisonState(result: {
     (status) => status.sourceId === 'cv_profile',
   );
   const message = cv?.message ?? '';
+  if (/could not be extracted for comparison/i.test(message)) {
+    return 'found_unparsed';
+  }
   if (/could not be read or parsed for comparison/i.test(message)) {
     return 'found_unreadable';
   }
-  if (/uploaded CV/i.test(message)) return 'not_read';
+  if (/uploaded CV/i.test(message) && /could not be read/i.test(message)) {
+    return 'not_read';
+  }
   if (/public CV or resume URL was found/i.test(message)) {
     return 'found_unreadable';
+  }
+  if (/public CV was located/i.test(message) && /could not be extracted/i.test(message)) {
+    return 'found_unparsed';
   }
   return 'not_uploaded';
 }

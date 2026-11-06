@@ -28,6 +28,7 @@ import {
 import { quoteNamesSubject } from './identity-assess';
 import { looksLikeCourtDocument } from './source-kind';
 import { sosDeepLinksFor } from './sos-business-search';
+import { institutionsFromText } from './research-leads';
 import { isPaidAdvertisingDirectory } from './web-source-providers';
 import type {
   WebClaim,
@@ -58,7 +59,7 @@ const COURT_SUBJECT_SECTIONS: ReadonlySet<RoutedSectionId> = new Set([
 ]);
 
 const PRACTICUM_LISTING =
-  /\b(practicum|clinical training site|training site brochure|placement site|externship site|internship site brochure)\b/i;
+  /\b(practicum|clinical training (?:site|location)|training site(?: brochure)?|placement site|externship(?: site)?|internship site(?: brochure)?|site supervisor|supervised clinical (?:experience|training)|clinical training location)\b/i;
 
 const REAL_UNIVERSITY_POLICY =
   /\b(conflict of interest|outside (?:activity|consulting|employment)|consulting policy|supplemental compensation|disclosure of outside)\b/i;
@@ -501,27 +502,86 @@ function hostOf(url: string): string {
   }
 }
 
-const INSTITUTION_OF =
-  /\b(?:University|College|Institute|School) of [A-Z][A-Za-z&-]+(?: (?:at |of )?[A-Z][A-Za-z&-]+){0,3}\b/g;
-const INSTITUTION_NAMED =
-  /\b(?:[A-Z][A-Za-z&-]+ ){1,3}(?:University|College)\b/g;
-const NOT_PART_OF_NAME =
-  /^(?:He|She|They|Dr|Mr|Ms|The|Her|His|In|At|And|From|With|After|Before)\s+/;
+function pathOf(url: string): string {
+  try {
+    return new URL(url).pathname.replace(/\/$/, '') || '/';
+  } catch {
+    return url;
+  }
+}
 
+function isSelfReportedCredentialFinding(finding: RoutedFinding): boolean {
+  return /own statement|not independent verification|own publication list/i.test(
+    `${finding.title} ${finding.statement}`,
+  );
+}
+
+/**
+ * One RoutedFinding per host for Expert Websites: lead page + also-listed
+ * paths, with Self-Reported credential notes folded under the same card.
+ */
+export function collapseWebsiteFindingsByHost(
+  findings: RoutedFinding[],
+): RoutedFinding[] {
+  const byHost = new Map<string, RoutedFinding[]>();
+  for (const finding of findings) {
+    const h = hostOf(finding.url);
+    const bucket = byHost.get(h) ?? [];
+    bucket.push(finding);
+    byHost.set(h, bucket);
+  }
+  const grouped: RoutedFinding[] = [];
+  for (const [host, pages] of byHost) {
+    const credentials = pages.filter(isSelfReportedCredentialFinding);
+    const pathListings = pages.filter((p) => !isSelfReportedCredentialFinding(p));
+    pathListings.sort(
+      (a, b) =>
+        BASIS_ORDER[a.basis] - BASIS_ORDER[b.basis] ||
+        strength(b.quote) - strength(a.quote),
+    );
+    // Prefer homepage / shortest path as lead when basis is equal.
+    const lead =
+      pathListings.find((p) => pathOf(p.url) === '/') ??
+      pathListings[0] ??
+      credentials[0];
+    if (!lead) continue;
+
+    const paths = [
+      ...new Set(
+        [...pathListings, ...credentials].map((p) => pathOf(p.url)),
+      ),
+    ].filter((p) => p !== '/' && p !== pathOf(lead.url));
+
+    const credNotes = [
+      ...new Set(
+        credentials.map((c) => short(c.statement.replace(/\s+/g, ' ').trim(), 120)),
+      ),
+    ].slice(0, 4);
+
+    const also =
+      paths.length > 0
+        ? ` Also listed: ${paths.slice(0, 8).join(', ')}.`
+        : '';
+    const selfReported =
+      credNotes.length > 0
+        ? ` Self-reported on this site: ${credNotes.join('; ')}.`
+        : '';
+
+    grouped.push({
+      ...lead,
+      title: short(
+        lead.title.replace(/^Website:\s*/i, '') || host,
+        100,
+      ),
+      statement: `${lead.statement}${also}${selfReported}`.trim(),
+    });
+  }
+  return grouped;
+}
+
+/** Institution names extracted from page text (longest-match / parent preferred). */
 export function institutionsIn(text: string): string[] {
-  const found = new Map<string, string>();
-  const take = (raw: string) => {
-    let name = raw.replace(/\s+/g, ' ').trim();
-    while (NOT_PART_OF_NAME.test(name))
-      name = name.replace(NOT_PART_OF_NAME, '');
-    if (!/(University|College|Institute|School)/.test(name)) return;
-    const key = name.toLowerCase();
-    if (!found.has(key)) found.set(key, name);
-  };
-  for (const match of text.matchAll(INSTITUTION_OF)) take(match[0]);
-  for (const match of text.matchAll(INSTITUTION_NAMED)) take(match[0]);
-  // "University of West Florida" also contains no second "X University".
-  return [...found.values()];
+  return institutionsFromText(text);
 }
 
 const LEGAL_SECTIONS: ReadonlySet<RoutedSectionId> = new Set([
@@ -667,7 +727,8 @@ export function routeWebFindings(
   };
   const seen = new Set<string>();
   const push = (finding: RoutedFinding) => {
-    const key = `${finding.sectionId}|${finding.url}|${(finding.quote ?? finding.statement).toLowerCase().slice(0, 120)}`;
+    const urlKey = normalizeFindingUrl(finding.url);
+    const key = `${finding.sectionId}|${urlKey}|${(finding.quote ?? finding.statement).toLowerCase().slice(0, 120)}`;
     if (seen.has(key)) return;
     seen.add(key);
     const list = routed.get(finding.sectionId) ?? [];
@@ -925,6 +986,21 @@ export function routeWebFindings(
         if (['order', 'pleading', 'deposition'].includes(claim.topic ?? '')) {
           claimedDocumentType = true;
         }
+        // Own practice sites mentioning “Motion for Costs” templates are not
+        // court pleadings/orders/depositions.
+        if (
+          COURT_SUBJECT_SECTIONS.has(sectionId) &&
+          isOwnSiteRecord(record, claim, surname)
+        ) {
+          pushOwnSiteStatement(
+            push,
+            base,
+            claim,
+            verificationFor('websites'),
+            `Expert’s own statement: ${short(record.title, 90)}`,
+          );
+          continue;
+        }
         // Unread court filings do not fill subject Pleadings/Orders/Depositions.
         if (COURT_SUBJECT_SECTIONS.has(sectionId) && record.read !== 'read') {
           continue;
@@ -1016,7 +1092,25 @@ export function routeWebFindings(
     // sentence on it matched a rule.
     const official = officialSourceFor(record.url);
     if (official && record.read === 'read' && record.match.level === 'strong') {
+      // APA CoA accreditation paths are not membership evidence.
+      const apaAccreditationPath = /apa\.org\/ed\/accreditation/i.test(
+        record.url,
+      );
       for (const topic of official.topics) {
+        if (topic === 'membership' && !apaAccreditationPath) {
+          push({
+            ...base,
+            sectionId: 'memberships',
+            title: official.name,
+            statement: `${official.name} membership directory page that names the expert.`,
+            quote: record.match.quote,
+            basis: 'primary_source',
+            basisLabel: BASIS_LABEL.primary_source,
+            from: 'page',
+            verification: verificationFor('memberships'),
+          });
+          continue;
+        }
         if (topic !== 'certification_org' && topic !== 'board_certification')
           continue;
         const entry = orgs.get(official.id.toUpperCase()) ?? {
@@ -1136,11 +1230,15 @@ export function routeWebFindings(
       verification: verificationFor(sectionId),
     });
     // Professional boards (ABPP/AACN) are directories/memberships — never IME ads.
+    // Paid advertising directories (SEAK/JurisPro/…) file under ime, not §22.
     const host = hostOf(record.url);
     const boardDirectory =
       host.includes('abpp.org') || host.includes('theaacn.org');
+    const paidAdvertisingListing =
+      !boardDirectory && isPaidDirectoryRecord(record);
     if (
       (record.kind === 'directory' || boardDirectory) &&
+      !paidAdvertisingListing &&
       !alreadyFiled('directories')
     ) {
       const dumpHay = `${record.title}\n${record.summary}\n${record.snippet ?? ''}`;
@@ -1351,9 +1449,10 @@ export function routeWebFindings(
     const byPage = new Map<string, RoutedFinding>();
     const perPage = ONE_PER_PAGE.has(sectionId);
     for (const finding of list) {
+      const urlKey = normalizeFindingUrl(finding.url);
       const key = perPage
-        ? finding.url
-        : `${finding.url}|${finding.title}|${finding.quote}`;
+        ? urlKey
+        : `${urlKey}|${finding.title}|${finding.quote}`;
       const kept = byPage.get(key);
       if (!kept || strength(finding.quote) > strength(kept.quote)) {
         byPage.set(key, finding);
@@ -1361,63 +1460,10 @@ export function routeWebFindings(
     }
     list.splice(0, list.length, ...byPage.values());
 
-    // Expert Websites: collapse path listings per host, but keep Self-Reported
-    // credential statements (board/pub/etc.) so they are not overwritten by a
-    // generic “Website: …” marketing line.
+    // Expert Websites: one host card — paths + Self-Reported credentials fold
+    // under the lead so the same domain is not repeated as many websites.
     if (sectionId === 'websites') {
-      const byHost = new Map<string, RoutedFinding[]>();
-      for (const finding of list) {
-        const h = hostOf(finding.url);
-        const bucket = byHost.get(h) ?? [];
-        bucket.push(finding);
-        byHost.set(h, bucket);
-      }
-      const grouped: RoutedFinding[] = [];
-      const isSelfReportedCredential = (finding: RoutedFinding): boolean =>
-        /own statement|not independent verification|own publication list/i.test(
-          `${finding.title} ${finding.statement}`,
-        );
-      for (const [, pages] of byHost) {
-        const credentials = pages.filter(isSelfReportedCredential);
-        const pathListings = pages.filter((p) => !isSelfReportedCredential(p));
-        grouped.push(...credentials);
-        if (pathListings.length === 0) continue;
-        pathListings.sort(
-          (a, b) =>
-            BASIS_ORDER[a.basis] - BASIS_ORDER[b.basis] ||
-            strength(b.quote) - strength(a.quote),
-        );
-        const lead = pathListings[0];
-        if (pathListings.length === 1) {
-          grouped.push(lead);
-          continue;
-        }
-        const paths = [
-          ...new Set(
-            pathListings.map((p) => {
-              try {
-                const path = new URL(p.url).pathname.replace(/\/$/, '') || '/';
-                return path;
-              } catch {
-                return p.url;
-              }
-            }),
-          ),
-        ].filter((p) => p !== '/');
-        const also =
-          paths.length > 0
-            ? ` Also listed: ${paths.slice(0, 6).join(', ')}.`
-            : '';
-        grouped.push({
-          ...lead,
-          title: short(
-            lead.title.replace(/^Website:\s*/i, '') || hostOf(lead.url),
-            100,
-          ),
-          statement: `${lead.statement}${also}`.trim(),
-        });
-      }
-      list.splice(0, list.length, ...grouped);
+      list.splice(0, list.length, ...collapseWebsiteFindingsByHost(list));
     }
 
     list.sort(
@@ -1721,6 +1767,12 @@ export function coverageLine(
         );
         const trail = accreditationQueryTrail(dossier);
         if (trail) parts.push(trail);
+      } else if (sectionId === 'memberships') {
+        parts.push(
+          'Dedicated membership queries ran against claimed organizations’ official sites when known. No matching public membership listing was returned for those queries. That is not proof the membership is false.',
+        );
+        const trail = membershipQueryTrail(dossier);
+        if (trail) parts.push(trail);
       } else {
         parts.push(TOPIC_SEARCHED_EMPTY);
       }
@@ -1737,6 +1789,14 @@ export function coverageLine(
     !parts.some((part) => /Queries run:/i.test(part))
   ) {
     const trail = accreditationQueryTrail(dossier);
+    if (trail) parts.push(trail);
+  }
+  if (
+    sectionId === 'memberships' &&
+    dossier &&
+    !parts.some((part) => /Queries run:/i.test(part))
+  ) {
+    const trail = membershipQueryTrail(dossier);
     if (trail) parts.push(trail);
   }
   if (dossier) {
@@ -1756,7 +1816,7 @@ function accreditationQueryTrail(
     .filter(
       (entry) =>
         entry.topic === 'university_accreditation' ||
-        /site:chea\.org|site:ope\.ed\.gov|site:accreditation\.apa\.org|site:apa\.org/.test(
+        /site:chea\.org|site:ope\.ed\.gov|site:accreditation\.apa\.org|site:apa\.org\/ed\/accreditation/.test(
           entry.query,
         ),
     )
@@ -1764,19 +1824,80 @@ function accreditationQueryTrail(
   if (queries.length === 0) return null;
   const unique = [...new Set(queries)].slice(0, 8);
   const hits = dossier.records
-    .filter(
-      (record) =>
-        record.match.level === 'strong' || record.match.level === 'possible',
-    )
     .filter((record) =>
       /chea\.org|ope\.ed\.gov|accreditation\.apa\.org|apa\.org\/ed\/accreditation/i.test(
         record.url,
       ),
     )
+    .filter((record) => {
+      // Official accreditor pages name schools, not the expert — accept when
+      // the queried institution appears in title/snippet/summary text.
+      if (
+        record.match.level === 'strong' ||
+        record.match.level === 'possible'
+      ) {
+        return true;
+      }
+      return officialAccreditorNamesInstitution(record, unique);
+    })
     .map((record) => record.url);
   const hitLine =
     hits.length > 0
       ? ` Result URL(s): ${[...new Set(hits)].slice(0, 5).join('; ')}.`
       : ' No official accreditation result URL was returned for those queries.';
+  return `Queries run: ${unique.join(' | ')}.${hitLine}`;
+}
+
+function officialAccreditorNamesInstitution(
+  record: WebRecord,
+  queries: readonly string[],
+): boolean {
+  const hay = `${record.title}\n${record.snippet ?? ''}\n${record.summary}`
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  for (const query of queries) {
+    const quoted = [...query.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    for (const name of quoted) {
+      if (name.length >= 6 && hay.includes(name.toLowerCase())) return true;
+    }
+  }
+  return institutionsFromText(hay).length > 0 && hay.length > 40;
+}
+
+const MEMBERSHIP_HOST =
+  /theaacn\.org|nanonline\.org|apa\.org|the-ins\.org|ins-organization\.org/i;
+
+/** Lists membership directory queries so the report shows what was searched. */
+function membershipQueryTrail(
+  dossier: WebResearchDossier | null | undefined,
+): string | null {
+  if (!dossier?.executedQueries?.length) return null;
+  const queries = dossier.executedQueries
+    .filter(
+      (entry) =>
+        entry.topic === 'memberships' ||
+        /site:theaacn\.org|site:nanonline\.org|site:apa\.org|site:the-ins\.org|site:ins-organization\.org/.test(
+          entry.query,
+        ),
+    )
+    .filter(
+      (entry) =>
+        !/accreditation\.apa\.org|apa\.org\/ed\/accreditation/.test(entry.query),
+    )
+    .map((entry) => entry.query);
+  if (queries.length === 0) return null;
+  const unique = [...new Set(queries)].slice(0, 8);
+  const hits = dossier.records
+    .filter((record) => MEMBERSHIP_HOST.test(record.url))
+    .filter((record) => !/apa\.org\/ed\/accreditation/i.test(record.url))
+    .filter(
+      (record) =>
+        record.match.level === 'strong' || record.match.level === 'possible',
+    )
+    .map((record) => record.url);
+  const hitLine =
+    hits.length > 0
+      ? ` Result URL(s): ${[...new Set(hits)].slice(0, 5).join('; ')}.`
+      : ' No official membership directory result URL was returned for those queries.';
   return `Queries run: ${unique.join(' | ')}.${hitLine}`;
 }

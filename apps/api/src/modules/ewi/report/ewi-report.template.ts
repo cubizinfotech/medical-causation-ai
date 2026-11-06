@@ -22,6 +22,37 @@ import {
 } from '../investigation/analysis/summary-lines';
 import type { CvCheck, CvComparison } from '../cv/cv.types';
 import { CV_LABEL_TEXT, cvComparisonCountSummary } from '../cv/cv-comparison';
+import type {
+  AccreditationDossier,
+  ProgramAccreditationAssessment,
+} from '../research/accreditation';
+import { ACCREDITATION_STATUS_LABEL } from '../research/accreditation';
+import type {
+  MembershipAssessment,
+  MembershipDossier,
+} from '../research/memberships';
+import { MEMBERSHIP_STATUS_LABEL } from '../research/memberships';
+import type {
+  DirectoryAdvertisingDossier,
+  DirectoryAssessment,
+} from '../research/directories';
+import {
+  DIRECTORY_STATUS_LABEL,
+  isAdvertisingDirectoryHost,
+} from '../research/directories';
+import type {
+  BoardCertificationAssessment,
+  BoardCertificationDossier,
+} from '../research/board-certifications';
+import { BOARD_CERTIFICATION_STATUS_LABEL } from '../research/board-certifications';
+import type {
+  AffiliationAssessment,
+  AffiliationDossier,
+} from '../research/affiliations';
+import {
+  AFFILIATION_STATUS_LABEL,
+  RELATIONSHIP_TYPE_LABEL,
+} from '../research/affiliations';
 import {
   evidenceStatusLine,
   findingLabel,
@@ -73,11 +104,16 @@ import {
   coverageLine,
   displayStructuredCoverage,
   findingsCoverageNote,
+  groupWebsitesByHost,
   isRoutedSection,
   isWebCoverageSummary,
+  normalizeFindingUrl,
   publicSearchNote,
   routeWebFindings,
   sectionVerification,
+  websiteInputsFromRoutedFindings,
+  type WebsiteGroupInput,
+  type WebsiteHostGroup,
 } from '@integrations/web-research';
 import type {
   ReportBlock,
@@ -233,7 +269,7 @@ export const EWI_REPORT_SECTIONS: EwiReportSectionSpec[] = [
   {
     id: 'ime',
     number: 21,
-    title: '21. IME/Advertising',
+    title: '21. Expert Witness Advertising',
     icon: 'megaphone',
   },
   {
@@ -378,8 +414,17 @@ export function buildEwiReportDocument(input: {
   professionalBackground?: ProfessionalBackgroundDossier;
   identity?: ExpertIdentityResolution | null;
   cvCheck?: CvCheck | null;
+  accreditation?: AccreditationDossier | null;
+  membershipAssessments?: MembershipDossier | null;
+  directoryAssessments?: DirectoryAdvertisingDossier | null;
+  boardCertificationAssessments?: BoardCertificationDossier | null;
+  affiliationAssessments?: AffiliationDossier | null;
   cvComparisonState?:
-    'compared' | 'not_uploaded' | 'not_read' | 'found_unreadable';
+    | 'compared'
+    | 'not_uploaded'
+    | 'not_read'
+    | 'found_unreadable'
+    | 'found_unparsed';
   /** Free text the attorney added to the intake form. */
   additionalContext?: string | null;
   /** Global web research: candidates, pages, coverage and limits. */
@@ -435,14 +480,32 @@ export function buildEwiReportDocument(input: {
             input.webResearch,
             input.expertName,
           ),
+          affiliationAssessments: input.affiliationAssessments ?? null,
+          boardCertificationAssessments:
+            input.boardCertificationAssessments ?? null,
+          membershipAssessments: input.membershipAssessments ?? null,
+          directoryAssessments: input.directoryAssessments ?? null,
+          accreditation: input.accreditation ?? null,
         });
       case 'background':
-        return backgroundSection(spec, tracker, input.identity ?? null);
+        return backgroundSection(
+          spec,
+          tracker,
+          input.identity ?? null,
+          input.affiliationAssessments ?? null,
+        );
       case 'inconsistencies':
         return inconsistenciesSection(spec, input);
       case 'cv-comparison':
         return cvComparisonSection(spec, input, tracker);
-      case 'education':
+      case 'education': {
+        const training = educationAffiliationsSection(
+          spec,
+          tracker,
+          input.cvCheck,
+          input.affiliationAssessments ?? null,
+        );
+        if (training) return training;
         return withCvStatements(
           evidenceSection(spec, tracker, {
             categories: ['education'],
@@ -450,18 +513,28 @@ export function buildEwiReportDocument(input: {
           input.cvCheck,
           ['education', 'training'],
         );
+      }
       case 'university-accreditation':
-        return evidenceSection(spec, tracker, {
-          // Stored category is `university` (alias of accreditation).
-          categories: ['university', 'accreditation'],
-          providers: ['university_accreditation'],
-          titleHints: ['accredit', 'CHEA', 'College Navigator', 'APA CoA'],
-        });
+        return universityAccreditationSection(
+          spec,
+          tracker,
+          input.accreditation ?? null,
+        );
       case 'licenses':
         return licensesSection(spec, tracker, input.identity ?? null);
       case 'board-actions':
         return boardActionsSection(spec, tracker);
-      case 'board-certifications':
+      case 'board-certifications': {
+        const assessed = boardCertificationsSection(
+          spec,
+          input.boardCertificationAssessments ?? null,
+          tracker,
+        );
+        if (
+          (input.boardCertificationAssessments?.assessments.length ?? 0) > 0
+        ) {
+          return assessed;
+        }
         return withCvStatements(
           evidenceSection(spec, tracker, {
             categories: ['board', 'board_certification', 'certification'],
@@ -470,17 +543,32 @@ export function buildEwiReportDocument(input: {
           input.cvCheck,
           ['board_certification'],
         );
-      case 'certification-orgs':
+      }
+      case 'certification-orgs': {
+        const fromAssessments = certificationOrgsFromAssessments(
+          spec,
+          input.boardCertificationAssessments ?? null,
+          tracker,
+        );
+        if (fromAssessments) return fromAssessments;
         return evidenceSection(spec, tracker, {
           categories: ['certification_organization'],
           titleHints: ['certification organization', 'abms', 'board of'],
         });
-      case 'memberships':
-        return withCvStatements(
-          membershipsSection(spec, professionalDossier, tracker),
-          input.cvCheck,
-          ['membership'],
+      }
+      case 'memberships': {
+        const assessed = membershipsSection(
+          spec,
+          professionalDossier,
+          tracker,
+          input.membershipAssessments ?? null,
         );
+        // Assessments already include each CV claim; avoid duplicating statements.
+        if ((input.membershipAssessments?.assessments.length ?? 0) > 0) {
+          return assessed;
+        }
+        return withCvStatements(assessed, input.cvCheck, ['membership']);
+      }
       case 'publications':
         return publicationsSection(
           spec,
@@ -513,23 +601,33 @@ export function buildEwiReportDocument(input: {
           tracker,
         );
       case 'websites':
-        return presenceGroupSection(
+        return expertWebsitesPlaceholder(spec, [
+          ...presenceDossier.websites,
+          ...presenceDossier.otherPublicSites,
+        ], tracker);
+      case 'ime': {
+        const assessed = advertisingDirectoriesSection(
           spec,
-          [...presenceDossier.websites, ...presenceDossier.otherPublicSites],
-          presenceDossier,
+          input.directoryAssessments ?? null,
           tracker,
         );
-      case 'ime':
+        if ((input.directoryAssessments?.assessments.length ?? 0) > 0) {
+          return assessed;
+        }
         return presenceGroupSection(
           spec,
           presenceDossier.ime,
           presenceDossier,
           tracker,
         );
+      }
       case 'directories':
         return presenceGroupSection(
           spec,
-          presenceDossier.directories,
+          presenceDossier.directories.filter(
+            (record) =>
+              !record.url || !isAdvertisingDirectoryHost(record.url),
+          ),
           presenceDossier,
           tracker,
         );
@@ -651,7 +749,15 @@ export function buildEwiReportDocument(input: {
           webLines: webSummaryLines(routedWeb, input.webResearch ?? null),
         });
       case 'source-index':
-        return sourceIndexSection(spec, input.evidence);
+        return sourceIndexSection(
+          spec,
+          input.evidence,
+          input.directoryAssessments ?? null,
+          input.boardCertificationAssessments ?? null,
+          input.affiliationAssessments ?? null,
+          input.membershipAssessments ?? null,
+          input.accreditation ?? null,
+        );
       default:
         return {
           id: spec.id,
@@ -660,16 +766,49 @@ export function buildEwiReportDocument(input: {
         };
     }
   });
+  const hasDirectoryAssessments =
+    (input.directoryAssessments?.assessments.length ?? 0) > 0;
+  const hasBoardCertAssessments =
+    (input.boardCertificationAssessments?.assessments.length ?? 0) > 0;
   const sections = built.map((section, index) => {
     const { icon, placement } = EWI_REPORT_SECTIONS[index];
-    return {
-      ...withWebFindings(
+    let merged: ReportSectionModel;
+    if (section.id === 'websites') {
+      merged = withGroupedExpertWebsites(
+        section,
+        routedWeb,
+        input.webResearch ?? null,
+        input.sourceStatuses ?? [],
+        [
+          ...(presenceDossier.websites ?? []),
+          ...(presenceDossier.otherPublicSites ?? []),
+        ],
+        input.expertName,
+      );
+    } else if (section.id === 'ime' && hasDirectoryAssessments) {
+      // Assessments are the authoritative §21 presentation; do not re-list
+      // the same registry hosts as raw web findings.
+      merged = section;
+    } else if (
+      (section.id === 'board-certifications' ||
+        section.id === 'certification-orgs') &&
+      hasBoardCertAssessments
+    ) {
+      merged = section;
+    } else {
+      merged = withWebFindings(
         section,
         routedWeb,
         input.webResearch ?? null,
         input.sourceStatuses ?? [],
         input.expertName,
-      ),
+        {
+          omitAdvertisingDirectoryHosts: section.id === 'directories',
+        },
+      );
+    }
+    return {
+      ...merged,
       ...(icon ? { icon } : {}),
       ...(placement ? { placement } : {}),
     };
@@ -828,8 +967,11 @@ const SECTION_SOURCES: Partial<Record<RoutedSectionId, string[]>> = {
     'expert_testimony',
   ],
   websites: ['expert_website'],
-  directories: [
-    'expert_directory',
+  directories: ['expert_directory', 'other_expert_directories'],
+  ime: [
+    'ime_websites',
+    'ime_advertising',
+    'advertising',
     'dri',
     'seak',
     'alm_law',
@@ -837,9 +979,7 @@ const SECTION_SOURCES: Partial<Record<RoutedSectionId, string[]>> = {
     'expertlaw',
     'expertpages',
     'expertwitness_com',
-    'other_expert_directories',
   ],
-  ime: ['ime_websites', 'ime_advertising', 'advertising'],
   videos: ['youtube', 'presentations'],
 };
 
@@ -1004,12 +1144,137 @@ function verificationBlocks(verification: WebVerification): ReportBlock[] {
  * Adds what the web run found for this section and replaces the generic
  * "nothing confirmed" line with what was searched and what limited it.
  */
+function expertWebsitesPlaceholder(
+  spec: EwiReportSectionSpec,
+  records: PresenceRecord[],
+  tracker: ClaimTracker,
+): ReportSectionModel {
+  markPresenceClaimed(tracker, records);
+  return {
+    id: spec.id,
+    title: spec.title,
+    blocks: [{ text: EMPTY, style: 'note' }],
+  };
+}
+
+/** §20: one card per host — presence + web findings merged. */
+function withGroupedExpertWebsites(
+  section: ReportSectionModel,
+  routed: Map<RoutedSectionId, RoutedFinding[]>,
+  dossier: WebResearchDossier | null,
+  statuses: ReportSourceStatus[],
+  presenceRecords: PresenceRecord[],
+  expertName?: string,
+): ReportSectionModel {
+  const inputs: WebsiteGroupInput[] = [];
+  for (const record of presenceRecords) {
+    if (!record.url) continue;
+    inputs.push({
+      url: record.url,
+      title: record.title || record.businessName || record.url,
+      summary:
+        record.summary ||
+        record.description ||
+        record.relevantClaims.join('; ') ||
+        '',
+      retrievedAt: record.retrievedAt,
+      owned:
+        record.kind === 'expert_website' ||
+        record.kind === 'professional_website' ||
+        record.kind === 'ime_website',
+    });
+  }
+  const routedFindings = (routed.get('websites') ?? []).filter(
+    (f) => f.matchLevel === 'strong',
+  );
+  inputs.push(...websiteInputsFromRoutedFindings(routedFindings));
+  const groups = groupWebsitesByHost(inputs);
+  const blocks: ReportBlock[] = [];
+  if (groups.length === 0) {
+    const coverage = structuredCoverage('websites', statuses);
+    blocks.push({
+      text: coverageLine(dossier, 'websites', coverage, expertName),
+      style: 'note',
+    });
+    return { ...section, blocks };
+  }
+  blocks.push({
+    text: 'Expert Websites lists each distinct website once. Related pages on the same domain appear underneath. Content from the expert’s own site is self-reported and is not independent credential verification.',
+    style: 'note',
+  });
+  for (const group of groups) {
+    blocks.push(...websiteHostGroupBlocks(group));
+  }
+  const coverage = structuredCoverage('websites', statuses);
+  const fromGeneral = findingsCoverageNote(dossier, 'websites');
+  if (fromGeneral) blocks.push({ text: fromGeneral, style: 'note' });
+  const limit = publicSearchNote(dossier, 'websites');
+  if (limit) blocks.push({ text: limit, style: 'note' });
+  for (const line of displayStructuredCoverage(dossier, 'websites', coverage)) {
+    if (/returned records in other sections/i.test(line)) continue;
+    blocks.push({ text: line, style: 'note' });
+  }
+  return { ...section, blocks };
+}
+
+function websiteHostGroupBlocks(group: WebsiteHostGroup): ReportBlock[] {
+  const blocks: ReportBlock[] = [
+    { text: `Expert Website: ${group.host}`, style: 'subheading' },
+    { text: `Ownership: ${group.ownershipLabel}`, noProof: true },
+    {
+      text: `Main URL: ${group.primaryUrl}`,
+      link: group.primaryUrl,
+      style: 'citation',
+    },
+  ];
+  if (group.primaryTitle) {
+    blocks.push({ text: `Primary page: ${group.primaryTitle}`, noProof: true });
+  }
+  if (group.summary) {
+    blocks.push({ text: group.summary });
+  }
+  if (group.retrievedAt) {
+    blocks.push({
+      text: `Retrieved: ${formatInvestigationDate(group.retrievedAt)}`,
+      style: 'citation',
+      noProof: true,
+    });
+  }
+  if (group.subpages.length > 0) {
+    blocks.push({ text: 'Relevant pages on this site:', style: 'note' });
+    for (const page of group.subpages) {
+      const desc = page.description
+        ? ` — ${page.description}`
+        : page.title && page.title !== page.path
+          ? ` — ${page.title}`
+          : '';
+      blocks.push({
+        text: `${page.path}${desc}`,
+        noProof: true,
+      });
+      blocks.push({
+        text: page.url,
+        link: page.url,
+        style: 'citation',
+      });
+    }
+  }
+  for (const note of group.selfReportedNotes) {
+    blocks.push({
+      text: `Self-reported on this site: ${note}`,
+      style: 'note',
+    });
+  }
+  return blocks;
+}
+
 function withWebFindings(
   section: ReportSectionModel,
   routed: Map<RoutedSectionId, RoutedFinding[]>,
   dossier: WebResearchDossier | null,
   statuses: ReportSourceStatus[],
   expertName?: string,
+  options?: { omitAdvertisingDirectoryHosts?: boolean },
 ): ReportSectionModel {
   if (!isRoutedSection(section.id)) return section;
   const own = section.blocks.filter((block) => block.text !== EMPTY);
@@ -1019,8 +1284,17 @@ function withWebFindings(
     .toLowerCase();
   const seenFinding = new Set<string>();
   const findings = (routed.get(section.id) ?? []).filter((finding) => {
-    if (existing.includes(finding.url.toLowerCase())) return false;
-    const key = `${finding.url}|${(finding.quote ?? finding.statement).toLowerCase().slice(0, 160)}`;
+    if (
+      options?.omitAdvertisingDirectoryHosts &&
+      isAdvertisingDirectoryHost(finding.url)
+    ) {
+      return false;
+    }
+    const urlKey = normalizeFindingUrl(finding.url);
+    if (existing.includes(finding.url.toLowerCase()) || existing.includes(urlKey)) {
+      return false;
+    }
+    const key = `${urlKey}|${(finding.quote ?? finding.statement).toLowerCase().slice(0, 160)}`;
     if (seenFinding.has(key)) return false;
     seenFinding.add(key);
     return true;
@@ -1042,7 +1316,8 @@ function withWebFindings(
     (findings.length > 0 ||
       own.length > 0 ||
       section.id === 'board-certifications' ||
-      section.id === 'licenses')
+      section.id === 'licenses' ||
+      section.id === 'memberships')
   ) {
     blocks.push(...verificationBlocks(verification));
   }
@@ -1052,7 +1327,9 @@ function withWebFindings(
     own.some((block) => block.style !== 'note' && block.style !== 'citation') ||
     Boolean(
       verification &&
-      (section.id === 'board-certifications' || section.id === 'licenses'),
+      (section.id === 'board-certifications' ||
+        section.id === 'licenses' ||
+        section.id === 'memberships'),
     );
   if (!hasFindingBlocks) {
     const emptyLine = coverageLine(dossier, section.id, coverage, expertName);
@@ -1128,6 +1405,7 @@ function backgroundSection(
   spec: EwiReportSectionSpec,
   tracker: ClaimTracker,
   identity: ExpertIdentityResolution | null,
+  affiliationAssessments: AffiliationDossier | null = null,
 ): ReportSectionModel {
   // NPI Registry items are claimed by category: its license list belongs in
   // the Licenses section.
@@ -1141,12 +1419,201 @@ function backgroundSection(
     return identity.status === 'confirmed';
   });
   const blocks = identityBlocks(identity);
+  const appointments = (affiliationAssessments?.assessments ?? []).filter(
+    (a) => a.entry.class === 'appointment',
+  );
+  if (appointments.length > 0) {
+    blocks.push({
+      text: 'Institutional appointments are assessed only against the named institution’s official faculty/staff directory or profile. Publication affiliations (OpenAlex), publishers, practicum brochures, and own-site restatements are not appointment proof. Self-reported or training evidence is not treated as a current faculty appointment.',
+      style: 'note',
+    });
+    for (const assessment of appointments) {
+      blocks.push(...affiliationAssessmentBlocks(assessment));
+    }
+  }
   if (items.length > 0) {
     blocks.push(...items.flatMap(findingBlocks));
   } else if (blocks.length === 0) {
     blocks.push({ text: EMPTY, style: 'note' });
   }
   return { id: spec.id, title: spec.title, blocks };
+}
+
+function educationAffiliationsSection(
+  spec: EwiReportSectionSpec,
+  tracker: ClaimTracker,
+  cvCheck: CvCheck | null | undefined,
+  affiliationAssessments: AffiliationDossier | null,
+): ReportSectionModel | null {
+  const training = (affiliationAssessments?.assessments ?? []).filter(
+    (a) => a.entry.class === 'training',
+  );
+  if (training.length === 0) return null;
+  const base = withCvStatements(
+    evidenceSection(spec, tracker, {
+      categories: ['education'],
+    }),
+    cvCheck,
+    ['education'],
+  );
+  const blocks: ReportBlock[] = [
+    {
+      text: 'Practicum, internship, residency, and fellowship placements are listed separately from degrees and accreditation. They are not faculty or staff appointments.',
+      style: 'note',
+    },
+    ...training.flatMap(affiliationAssessmentBlocks),
+    ...base.blocks,
+  ];
+  return { id: spec.id, title: spec.title, blocks };
+}
+
+function affiliationSummaryCaution(
+  dossier: AffiliationDossier | null | undefined,
+): string | null {
+  const assessments = dossier?.assessments ?? [];
+  if (assessments.length === 0) return null;
+  const currentFacultyVerified = assessments.some(
+    (a) =>
+      a.entry.class === 'appointment' &&
+      a.entry.timeframe !== 'historical' &&
+      (a.status === 'independently_verified' ||
+        a.status === 'partially_verified'),
+  );
+  if (currentFacultyVerified) return null;
+  const hasClaims = assessments.some(
+    (a) =>
+      a.entry.class === 'appointment' ||
+      a.status === 'self_reported' ||
+      a.status === 'training_or_practicum_confirmed',
+  );
+  if (!hasClaims) return null;
+  return 'Institutional affiliations stated on the CV that are only self-reported or supported by training/practicum evidence are not treated here as independently verified current faculty appointments. See Expert Background and Education.';
+}
+
+function boardSummaryCaution(
+  dossier: BoardCertificationDossier | null | undefined,
+): string | null {
+  const assessments = dossier?.assessments ?? [];
+  if (assessments.length === 0) return null;
+  const anyVerified = assessments.some(
+    (a) => a.status === 'verified' || a.status === 'partially_verified',
+  );
+  if (anyVerified) return null;
+  return 'Board certification claims that remain Self-Reported, Not Independently Verified, Not Checked, or Unable to Access are not treated here as independently confirmed. See Board Certifications.';
+}
+
+function membershipSummaryCaution(
+  dossier: MembershipDossier | null | undefined,
+): string | null {
+  const assessments = dossier?.assessments ?? [];
+  if (assessments.length === 0) return null;
+  const anyVerified = assessments.some(
+    (a) => a.status === 'verified' || a.status === 'partially_verified',
+  );
+  if (anyVerified) return null;
+  return 'Professional membership claims that remain Self-Reported or without an official directory confirmation are not treated here as independently confirmed. See Professional Memberships.';
+}
+
+function directorySummaryCaution(
+  dossier: DirectoryAdvertisingDossier | null | undefined,
+): string | null {
+  const assessments = dossier?.assessments ?? [];
+  if (assessments.length === 0) return null;
+  const anyFound = assessments.some((a) => a.status === 'profile_found');
+  if (anyFound) return null;
+  const unchecked = assessments.filter((a) => a.status === 'not_checked').length;
+  if (unchecked === assessments.length) {
+    return 'Expert-witness advertising directories were Not Checked in this run (dedicated directory search was unavailable). That is not a finding that no listings exist. See Expert Witness Advertising.';
+  }
+  return 'No independently confirmed expert-witness advertising directory profile was established in this run. Not Checked and Unable to Access are not negative findings. See Expert Witness Advertising.';
+}
+
+function accreditationSummaryCaution(
+  dossier: AccreditationDossier | null | undefined,
+): string | null {
+  const assessments = dossier?.assessments ?? [];
+  if (assessments.length === 0) return null;
+  const anyAccredited = assessments.some(
+    (a) =>
+      a.apaStatus === 'accredited_during_period' ||
+      a.apaStatus === 'currently_accredited' ||
+      a.institutionalStatus === 'accredited_during_period' ||
+      a.institutionalStatus === 'currently_accredited',
+  );
+  if (anyAccredited) return null;
+  return 'Degree accreditation assessments that remain unable to verify, insufficient details, or not applicable are not treated as proof a program was unaccredited. See University / APA Accreditation.';
+}
+
+function affiliationAssessmentBlocks(
+  assessment: AffiliationAssessment,
+): ReportBlock[] {
+  const entry = assessment.entry;
+  const inst =
+    assessment.institutionCanonical ??
+    entry.institution ??
+    'Institution not stated';
+  const typeLabel = RELATIONSHIP_TYPE_LABEL[entry.relationshipType];
+  const blocks: ReportBlock[] = [
+    {
+      text: `${inst}${entry.title ? ` — ${entry.title}` : ''}`,
+      style: 'subheading',
+    },
+    { text: `CV claim: ${entry.statement}`, noProof: true },
+  ];
+  if (entry.quote && entry.quote !== entry.statement) {
+    blocks.push({ text: `Quote: “${entry.quote}”`, style: 'citation' });
+  }
+  blocks.push({ text: `Relationship type: ${typeLabel}`, noProof: true });
+  blocks.push({
+    text: `Timeframe: ${entry.timeframe}${
+      entry.startYear || entry.endYear
+        ? ` (${[entry.startYear, entry.endYear ?? 'present']
+            .filter((v) => v != null)
+            .join('–')})`
+        : ''
+    }`,
+    noProof: true,
+  });
+  blocks.push({
+    text: `Verification status: ${AFFILIATION_STATUS_LABEL[assessment.status]}`,
+  });
+  blocks.push({ text: assessment.explanation });
+  if (assessment.evidence?.url) {
+    const label = assessment.evidence.trainingDocument
+      ? 'Training / practicum source'
+      : assessment.evidence.searchResultOnly
+        ? 'Search result URL (not treated as a verified profile page)'
+        : 'Official institutional evidence';
+    blocks.push({
+      text: `${label}: ${assessment.evidence.url}`,
+      link: assessment.evidence.url,
+      style: 'citation',
+    });
+    blocks.push({
+      text: `Identity match: ${assessment.evidence.identityLevel}`,
+      style: 'note',
+      noProof: true,
+    });
+  }
+  const retrieved = assessment.evidence?.retrievedAt ?? assessment.retrievedAt;
+  if (retrieved) {
+    blocks.push({
+      text: `Retrieved: ${formatInvestigationDate(retrieved)}`,
+      style: 'citation',
+      noProof: true,
+    });
+  }
+  if (assessment.queriesRun.length > 0) {
+    blocks.push({
+      text: `Queries: ${assessment.queriesRun.slice(0, 4).join(' · ')}`,
+      style: 'note',
+      noProof: true,
+    });
+  }
+  for (const limit of assessment.limitations) {
+    blocks.push({ text: limit, style: 'note' });
+  }
+  return blocks;
 }
 
 const IDENTITY_STATUS_TEXT: Record<ExpertIdentityResolution['status'], string> =
@@ -1379,9 +1846,18 @@ function summarySection(
     identity?: ExpertIdentityResolution | null;
     cvCheck?: CvCheck | null;
     cvComparisonState?:
-      'compared' | 'not_uploaded' | 'not_read' | 'found_unreadable';
+      | 'compared'
+      | 'not_uploaded'
+      | 'not_read'
+      | 'found_unreadable'
+      | 'found_unparsed';
     discrepancies: ExpertDiscrepancy[];
     websiteCvUrls?: string[];
+    affiliationAssessments?: AffiliationDossier | null;
+    boardCertificationAssessments?: BoardCertificationDossier | null;
+    membershipAssessments?: MembershipDossier | null;
+    directoryAssessments?: DirectoryAdvertisingDossier | null;
+    accreditation?: AccreditationDossier | null;
   },
 ): ReportSectionModel {
   const text =
@@ -1427,11 +1903,20 @@ function summarySection(
     text:
       conflictCount === 0
         ? input.cvCheck
-          ? `${findings} collected item(s). No confirmed inconsistency was identified. Unchecked CV claims and catalog misses are listed under CV Comparison; they are not counted as inconsistencies.`
-          : `${findings} collected item(s). No confirmed inconsistency was identified among compared sources. CV comparison was not performed, so this is not a finding that the expert has no CV discrepancies.`
-        : `${findings} collected item(s). ${conflictCount} confirmed inconsistency(ies) are listed under Inconsistencies in Background and CV Comparison.`,
+          ? `${findings} collected evidence item(s) (reportable research records, not unique Source Index rows or Source Links). No confirmed inconsistency was identified. Unchecked CV claims and catalog misses are listed under CV Comparison; they are not counted as inconsistencies.`
+          : `${findings} collected evidence item(s) (reportable research records, not unique Source Index rows or Source Links). No confirmed inconsistency was identified among compared sources. CV comparison was not performed, so this is not a finding that the expert has no CV discrepancies.`
+        : `${findings} collected evidence item(s) (reportable research records, not unique Source Index rows or Source Links). ${conflictCount} confirmed inconsistency(ies) are listed under Inconsistencies in Background and CV Comparison.`,
     style: 'note',
   });
+  for (const note of [
+    affiliationSummaryCaution(input.affiliationAssessments),
+    boardSummaryCaution(input.boardCertificationAssessments),
+    membershipSummaryCaution(input.membershipAssessments),
+    directorySummaryCaution(input.directoryAssessments),
+    accreditationSummaryCaution(input.accreditation),
+  ]) {
+    if (note) blocks.push({ text: note, style: 'note' });
+  }
   const webLines = input.webLines ?? [];
   const hasSubstance =
     webLines.length > 0 ||
@@ -1819,9 +2304,16 @@ export function publicCvUrlsFromWeb(
       continue;
     }
     const hay = `${record.url} ${record.title} ${record.summary}`.toLowerCase();
+    const driveCv =
+      /drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?)/i.test(record.url) &&
+      (/\b(curriculum vitae|\bcv\b|resume|education|licensure|publications)\b/.test(
+        hay,
+      ) ||
+        record.read === 'read');
     if (
       !/\b(curriculum vitae|\bcv\b|resume)\b/.test(hay) &&
-      !/\.pdf($|\?)/i.test(record.url)
+      !/\.pdf($|\?)/i.test(record.url) &&
+      !driveCv
     ) {
       continue;
     }
@@ -1886,15 +2378,23 @@ function summaryHeadline(lead: RoutedFinding): string {
 
 function cvOmissionLine(
   state:
-    'compared' | 'not_uploaded' | 'not_read' | 'found_unreadable' | undefined,
+    | 'compared'
+    | 'not_uploaded'
+    | 'not_read'
+    | 'found_unreadable'
+    | 'found_unparsed'
+    | undefined,
   websiteCvUrls: string[] = [],
 ): string {
   const urls = websiteCvUrls.length > 0 ? ` (${websiteCvUrls.join('; ')})` : '';
   if (state === 'not_read') {
     return `A CV was uploaded but could not be read. CV comparison was not performed.${websiteCvUrls.length > 0 ? ` A public CV or resume URL was also found${urls}.` : ''} That is not a finding that the expert has no CV discrepancies.`;
   }
+  if (state === 'found_unparsed') {
+    return `A public CV was located during web research${urls} and the document was retrieved, but usable claims could not be extracted for comparison. CV comparison was not performed. Upload a readable CV to compare. That is not a finding that the expert has no CV discrepancies.`;
+  }
   if (state === 'found_unreadable' || websiteCvUrls.length > 0) {
-    return `A public CV or resume URL was found during web research${urls}, but the file or page could not be read or parsed for comparison (login, CAPTCHA, empty PDF text, or thin page). CV comparison was not performed. Upload a readable CV to compare. That is not a finding that the expert has no CV discrepancies.`;
+    return `A public CV or resume URL was found during web research${urls}, but the file or page could not be read or parsed for comparison (login, CAPTCHA, empty PDF text, permission restriction, or thin page). CV comparison was not performed. Upload a readable CV to compare. That is not a finding that the expert has no CV discrepancies.`;
   }
   return `No CV was uploaded and no readable public CV was compared. CV comparison was not performed. That is not a finding that the expert has no CV discrepancies.`;
 }
@@ -1907,7 +2407,11 @@ function cvComparisonSection(
     analysis?: EwiAnalysisDocument;
     cvCheck?: CvCheck | null;
     cvComparisonState?:
-      'compared' | 'not_uploaded' | 'not_read' | 'found_unreadable';
+      | 'compared'
+      | 'not_uploaded'
+      | 'not_read'
+      | 'found_unreadable'
+      | 'found_unparsed';
     webResearch?: WebResearchDossier | null;
   },
   tracker: ClaimTracker,
@@ -1990,12 +2494,38 @@ function membershipsSection(
   spec: EwiReportSectionSpec,
   dossier: ProfessionalBackgroundDossier,
   tracker: ClaimTracker,
+  assessments: MembershipDossier | null = null,
 ): ReportSectionModel {
   const records = uniqueProfessionalRecords([
     ...dossier.memberships,
     ...dossier.organizations,
   ]);
   markProfessionalClaimed(tracker, records);
+  const assessed = assessments?.assessments ?? [];
+  if (assessed.length > 0) {
+    const blocks: ReportBlock[] = [
+      {
+        text: 'Per-claim membership assessments use official organization directories when publicly reachable. A missing listing or blocked directory is not proof the membership is false. Own-site statements alone are Self-Reported.',
+        style: 'note',
+      },
+    ];
+    for (const assessment of assessed) {
+      blocks.push(...membershipAssessmentBlocks(assessment));
+    }
+    for (const record of records) {
+      blocks.push(...professionalRecordBlocks(record));
+    }
+    if (assessments?.warnings?.length) {
+      for (const warning of assessments.warnings) {
+        blocks.push({ text: warning, style: 'note' });
+      }
+    }
+    blocks.push({
+      text: membershipCoverageFootnote(assessed),
+      style: 'note',
+    });
+    return { id: spec.id, title: spec.title, blocks };
+  }
   const blocks: ReportBlock[] = [
     {
       text: 'Claimed memberships are compared only against verified public membership information present in the packet. Missing verification is not proof of fraud.',
@@ -2003,7 +2533,13 @@ function membershipsSection(
     },
   ];
   if (records.length === 0) {
-    blocks.push({ text: EMPTY, style: 'note' });
+    if (assessments?.warnings?.length) {
+      for (const warning of assessments.warnings) {
+        blocks.push({ text: warning, style: 'note' });
+      }
+    } else {
+      blocks.push({ text: EMPTY, style: 'note' });
+    }
     return { id: spec.id, title: spec.title, blocks };
   }
   for (const record of records) {
@@ -2016,6 +2552,452 @@ function membershipsSection(
     }
   }
   return { id: spec.id, title: spec.title, blocks };
+}
+
+function membershipAssessmentBlocks(
+  assessment: MembershipAssessment,
+): ReportBlock[] {
+  const entry = assessment.entry;
+  const org =
+    assessment.organizationCanonical ??
+    entry.organization ??
+    'Organization not stated';
+  const typeLabel =
+    entry.designation ??
+    entry.membershipType.charAt(0).toUpperCase() +
+      entry.membershipType.slice(1);
+  const blocks: ReportBlock[] = [
+    { text: `${org} — ${typeLabel}`, style: 'subheading' },
+    { text: `CV claim: ${entry.statement}`, noProof: true },
+  ];
+  if (entry.quote && entry.quote !== entry.statement) {
+    blocks.push({ text: `Quote: “${entry.quote}”`, style: 'citation' });
+  }
+  if (entry.page != null) {
+    blocks.push({
+      text: `CV page: ${entry.page}`,
+      style: 'citation',
+      noProof: true,
+    });
+  }
+  if (entry.cvSourceUrl) {
+    blocks.push({
+      text: entry.cvSourceUrl,
+      link: entry.cvSourceUrl.startsWith('http') ? entry.cvSourceUrl : undefined,
+      style: 'citation',
+    });
+  }
+  if (assessment.officialWebsite) {
+    blocks.push({
+      text: `Official organization website: ${assessment.officialWebsite}`,
+      link: assessment.officialWebsite,
+      style: 'citation',
+    });
+  }
+  if (assessment.directoryUrl) {
+    blocks.push({
+      text: `Membership directory / verification page: ${assessment.directoryUrl}`,
+      link: assessment.directoryUrl,
+      style: 'citation',
+    });
+  }
+  if (assessment.access) {
+    blocks.push({
+      text: `Directory access: ${
+        assessment.access === 'public_directory'
+          ? 'Public directory (when reachable)'
+          : assessment.access === 'login_required'
+            ? 'Login or member access typically required'
+            : 'Access method unknown'
+      }`,
+      noProof: true,
+    });
+  }
+  blocks.push({
+    text: `Verification status: ${MEMBERSHIP_STATUS_LABEL[assessment.status]}`,
+  });
+  blocks.push({ text: assessment.explanation });
+  if (assessment.evidence?.url) {
+    blocks.push({
+      text: `Evidence: ${assessment.evidence.url}`,
+      link: assessment.evidence.url,
+      style: 'citation',
+    });
+    blocks.push({
+      text: `Identity match on directory page: ${assessment.evidence.identityLevel}`,
+      style: 'note',
+      noProof: true,
+    });
+  }
+  const retrieved =
+    assessment.evidence?.retrievedAt ?? assessment.retrievedAt;
+  if (retrieved) {
+    blocks.push({
+      text: `Retrieved: ${formatInvestigationDate(retrieved)}`,
+      style: 'citation',
+      noProof: true,
+    });
+  }
+  if (assessment.queriesRun.length > 0) {
+    blocks.push({
+      text: `Queries run: ${assessment.queriesRun.slice(0, 4).join(' | ')}`,
+      style: 'note',
+    });
+  }
+  for (const limitation of assessment.limitations) {
+    blocks.push({ text: limitation, style: 'note' });
+  }
+  return blocks;
+}
+
+function membershipCoverageFootnote(
+  assessments: MembershipAssessment[],
+): string {
+  const fromCv = assessments.length;
+  const searched = assessments.filter((a) => a.queriesRun.length > 0).length;
+  const verified = assessments.filter((a) => a.status === 'verified').length;
+  const loginBlocked = assessments.filter(
+    (a) => a.status === 'unable_to_access',
+  ).length;
+  const noMatch = assessments.filter(
+    (a) => a.status === 'no_matching_record',
+  ).length;
+  const selfReported = assessments.filter(
+    (a) => a.status === 'self_reported',
+  ).length;
+  return `Coverage: ${fromCv} organization claim(s) from the CV; ${searched} with dedicated queries; ${verified} verified; ${loginBlocked} unable to access; ${noMatch} no matching public record; ${selfReported} self-reported only. This is not a comprehensive search of every professional association.`;
+}
+
+function boardCertificationsSection(
+  spec: EwiReportSectionSpec,
+  dossier: BoardCertificationDossier | null,
+  tracker: ClaimTracker,
+): ReportSectionModel {
+  const assessed = dossier?.assessments ?? [];
+  markPresenceClaimed(tracker, []);
+  const blocks: ReportBlock[] = [
+    {
+      text: 'Each board certification claim is checked only against its mapped issuing organization. Professional memberships, licenses, and degrees are not treated as board certifications. A missing official listing is not proof the certification is false.',
+      style: 'note',
+    },
+  ];
+  for (const assessment of assessed) {
+    blocks.push(...boardCertificationAssessmentBlocks(assessment));
+  }
+  if (dossier?.warnings?.length) {
+    for (const warning of dossier.warnings) {
+      blocks.push({ text: warning, style: 'note' });
+    }
+  }
+  if (assessed.length > 0) {
+    blocks.push({
+      text: boardCertificationCoverageFootnote(assessed),
+      style: 'note',
+    });
+  } else {
+    blocks.push({ text: EMPTY, style: 'note' });
+  }
+  return { id: spec.id, title: spec.title, blocks };
+}
+
+function boardCertificationAssessmentBlocks(
+  assessment: BoardCertificationAssessment,
+): ReportBlock[] {
+  const entry = assessment.entry;
+  const credential =
+    entry.credentialName ??
+    (entry.statement.slice(0, 80) || 'Board certification');
+  const blocks: ReportBlock[] = [
+    { text: credential, style: 'subheading' },
+    { text: `CV claim: ${entry.statement}`, noProof: true },
+  ];
+  if (entry.quote && entry.quote !== entry.statement) {
+    blocks.push({ text: `Quote: “${entry.quote}”`, style: 'citation' });
+  }
+  if (entry.page != null) {
+    blocks.push({
+      text: `CV page: ${entry.page}`,
+      style: 'citation',
+      noProof: true,
+    });
+  }
+  blocks.push({
+    text: `Certifying organization: ${
+      assessment.boardCanonical ?? entry.boardName ?? 'Not identified'
+    }`,
+    noProof: true,
+  });
+  if (assessment.officialWebsite) {
+    blocks.push({
+      text: `Official board website: ${assessment.officialWebsite}`,
+      link: assessment.officialWebsite,
+      style: 'citation',
+    });
+  }
+  if (assessment.verificationUrl) {
+    blocks.push({
+      text: `Verification / directory URL: ${assessment.verificationUrl}`,
+      link: assessment.verificationUrl,
+      style: 'citation',
+    });
+  }
+  blocks.push({
+    text: `Verification status: ${BOARD_CERTIFICATION_STATUS_LABEL[assessment.status]}`,
+  });
+  blocks.push({ text: assessment.explanation });
+  if (entry.certificationDate) {
+    blocks.push({
+      text: `Certification date stated on CV: ${entry.certificationDate}`,
+      noProof: true,
+    });
+  }
+  if (entry.expirationOrStatus) {
+    blocks.push({
+      text: `Status/expiration stated on CV: ${entry.expirationOrStatus}`,
+      noProof: true,
+    });
+  }
+  if (assessment.evidence?.url) {
+    blocks.push({
+      text: assessment.evidence.searchResultOnly
+        ? `Search result URL (not treated as a verified profile page): ${assessment.evidence.url}`
+        : `Evidence: ${assessment.evidence.url}`,
+      link: assessment.evidence.url,
+      style: 'citation',
+    });
+    blocks.push({
+      text: `Identity match: ${assessment.evidence.identityLevel}`,
+      style: 'note',
+      noProof: true,
+    });
+  }
+  const retrieved =
+    assessment.evidence?.retrievedAt ?? assessment.retrievedAt;
+  if (retrieved) {
+    blocks.push({
+      text: `Retrieved: ${formatInvestigationDate(retrieved)}`,
+      style: 'citation',
+      noProof: true,
+    });
+  }
+  if (assessment.queriesRun.length > 0) {
+    blocks.push({
+      text: `Queries run: ${assessment.queriesRun.slice(0, 4).join(' | ')}`,
+      style: 'note',
+    });
+  } else {
+    blocks.push({
+      text: 'Search method: no dedicated official-board query ran for this claim in this assessment.',
+      style: 'note',
+    });
+  }
+  for (const limitation of assessment.limitations) {
+    blocks.push({ text: limitation, style: 'note' });
+  }
+  return blocks;
+}
+
+function boardCertificationCoverageFootnote(
+  assessments: BoardCertificationAssessment[],
+): string {
+  const total = assessments.length;
+  const verified = assessments.filter((a) => a.status === 'verified').length;
+  const partial = assessments.filter(
+    (a) => a.status === 'partially_verified',
+  ).length;
+  const selfReported = assessments.filter(
+    (a) => a.status === 'self_reported',
+  ).length;
+  const noMatch = assessments.filter(
+    (a) => a.status === 'no_matching_record',
+  ).length;
+  const blocked = assessments.filter(
+    (a) => a.status === 'unable_to_access',
+  ).length;
+  const insufficient = assessments.filter(
+    (a) => a.status === 'insufficient_information',
+  ).length;
+  return `Coverage: ${total} board certification claim(s); ${verified} verified; ${partial} partially verified; ${selfReported} self-reported; ${noMatch} no matching record; ${blocked} unable to access; ${insufficient} insufficient information to identify the issuing board. Unrelated boards were not searched.`;
+}
+
+function certificationOrgsFromAssessments(
+  spec: EwiReportSectionSpec,
+  dossier: BoardCertificationDossier | null,
+  tracker: ClaimTracker,
+): ReportSectionModel | null {
+  const assessed = (dossier?.assessments ?? []).filter(
+    (a) => a.boardCanonical || a.officialWebsite,
+  );
+  if (assessed.length === 0) return null;
+  markPresenceClaimed(tracker, []);
+  const seen = new Set<string>();
+  const blocks: ReportBlock[] = [
+    {
+      text: 'Certification organizations listed here are only those mapped from the expert’s board certification claims. Other boards were not searched.',
+      style: 'note',
+    },
+  ];
+  for (const assessment of assessed) {
+    const key = (
+      assessment.boardCanonical ??
+      assessment.officialWebsite ??
+      ''
+    ).toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    blocks.push({
+      text: assessment.boardCanonical ?? 'Certifying organization',
+      style: 'subheading',
+    });
+    if (assessment.officialWebsite) {
+      blocks.push({
+        text: assessment.officialWebsite,
+        link: assessment.officialWebsite,
+        style: 'citation',
+      });
+    }
+    blocks.push({
+      text: `Related claim status: ${BOARD_CERTIFICATION_STATUS_LABEL[assessment.status]}`,
+      style: 'note',
+    });
+  }
+  return { id: spec.id, title: spec.title, blocks };
+}
+
+function advertisingDirectoriesSection(
+  spec: EwiReportSectionSpec,
+  dossier: DirectoryAdvertisingDossier | null,
+  tracker: ClaimTracker,
+): ReportSectionModel {
+  const assessed = dossier?.assessments ?? [];
+  markPresenceClaimed(tracker, []);
+  const blocks: ReportBlock[] = [
+    {
+      text: 'Third-party expert witness and IME referral directories are checked independently of the expert’s own practice website. A missing public profile is not proof the expert has never advertised. Login-gated or blocked directories are reported as Unable to Access or Search Not Supported — never as “no listing.”',
+      style: 'note',
+    },
+  ];
+  for (const assessment of assessed) {
+    blocks.push(...directoryAssessmentBlocks(assessment));
+  }
+  if (dossier?.warnings?.length) {
+    for (const warning of dossier.warnings) {
+      blocks.push({ text: warning, style: 'note' });
+    }
+  }
+  if (assessed.length > 0) {
+    blocks.push({
+      text: directoryCoverageFootnote(assessed),
+      style: 'note',
+    });
+  } else {
+    blocks.push({ text: EMPTY, style: 'note' });
+  }
+  return { id: spec.id, title: spec.title, blocks };
+}
+
+function directoryAssessmentBlocks(
+  assessment: DirectoryAssessment,
+): ReportBlock[] {
+  const blocks: ReportBlock[] = [
+    { text: assessment.directoryName, style: 'subheading' },
+    {
+      text: `Directory website: ${assessment.homeUrl}`,
+      link: assessment.homeUrl,
+      style: 'citation',
+    },
+    {
+      text: `Research status: ${DIRECTORY_STATUS_LABEL[assessment.status]}`,
+    },
+    { text: assessment.explanation },
+    {
+      text: `Search method: ${
+        assessment.searchMethod === 'site_serp'
+          ? 'Site-scoped public web search'
+          : 'No usable public automated search through this system'
+      }`,
+      noProof: true,
+    },
+    {
+      text: `Directory access: ${
+        assessment.access === 'public_directory'
+          ? 'Public directory (when reachable)'
+          : assessment.access === 'login_required'
+            ? 'Login or member access typically required'
+            : 'Access method unknown'
+      }`,
+      noProof: true,
+    },
+  ];
+  if (assessment.profileUrl) {
+    blocks.push({
+      text: assessment.evidence?.searchResultOnly
+        ? `Search result URL (not treated as a verified profile page): ${assessment.profileUrl}`
+        : `Profile URL: ${assessment.profileUrl}`,
+      link: assessment.profileUrl,
+      style: 'citation',
+    });
+  }
+  if (assessment.evidence?.title) {
+    blocks.push({
+      text: `Profile / result title: ${assessment.evidence.title}`,
+      noProof: true,
+    });
+  }
+  if (assessment.evidence?.excerpt) {
+    blocks.push({
+      text: `Excerpt: ${assessment.evidence.excerpt.slice(0, 280)}`,
+      style: 'citation',
+    });
+  }
+  if (assessment.evidence) {
+    blocks.push({
+      text: `Identity match: ${assessment.evidence.identityLevel}`,
+      style: 'note',
+      noProof: true,
+    });
+  }
+  const retrieved = assessment.evidence?.retrievedAt ?? assessment.retrievedAt;
+  if (retrieved) {
+    blocks.push({
+      text: `Retrieved: ${formatInvestigationDate(retrieved)}`,
+      style: 'citation',
+      noProof: true,
+    });
+  }
+  if (assessment.queriesRun.length > 0) {
+    blocks.push({
+      text: `Queries run: ${assessment.queriesRun.slice(0, 4).join(' | ')}`,
+      style: 'note',
+    });
+  }
+  for (const limitation of assessment.limitations) {
+    blocks.push({ text: limitation, style: 'note' });
+  }
+  return blocks;
+}
+
+function directoryCoverageFootnote(
+  assessments: DirectoryAssessment[],
+): string {
+  const total = assessments.length;
+  const found = assessments.filter((a) => a.status === 'profile_found').length;
+  const none = assessments.filter(
+    (a) => a.status === 'no_matching_public_profile',
+  ).length;
+  const blocked = assessments.filter(
+    (a) => a.status === 'unable_to_access',
+  ).length;
+  const unsupported = assessments.filter(
+    (a) => a.status === 'search_not_supported',
+  ).length;
+  const potential = assessments.filter(
+    (a) => a.status === 'potential_match_unconfirmed',
+  ).length;
+  const notChecked = assessments.filter(
+    (a) => a.status === 'not_checked',
+  ).length;
+  return `Coverage: ${total} advertising directories assessed; ${found} profile found; ${none} no matching public profile; ${potential} potential unconfirmed; ${blocked} unable to access; ${unsupported} search not supported; ${notChecked} not checked. The expert’s own practice website is reported under Expert Websites, not as third-party advertising.`;
 }
 
 function publicationsSection(
@@ -2651,13 +3633,146 @@ function miscellaneousSection(
   };
 }
 
+function isOwnedWebsiteEvidence(item: ExpertEvidenceItem): boolean {
+  const cat = `${item.category ?? ''} ${item.sourceId ?? ''}`.toLowerCase();
+  return (
+    /expert_website|professional_website|ime_website/.test(cat) ||
+    (item.sourceId === 'web_search' &&
+      /expert_website|practice|profile/i.test(item.category ?? ''))
+  );
+}
+
+function hostKeyFromUrl(url: string): string | null {
+  try {
+    return new URL(normalizeFindingUrl(url)).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+function evidenceWithDirectoryAssessments(
+  evidence: ExpertEvidenceItem[],
+  assessments: DirectoryAdvertisingDossier | null | undefined,
+  boardAssessments?: BoardCertificationDossier | null,
+  affiliationAssessments?: AffiliationDossier | null,
+  membershipAssessments?: MembershipDossier | null,
+  accreditation?: AccreditationDossier | null,
+): ExpertEvidenceItem[] {
+  const extra: ExpertEvidenceItem[] = [];
+  for (const assessment of assessments?.assessments ?? []) {
+    if (!assessment.profileUrl) continue;
+    extra.push({
+      sourceId: assessment.directoryId,
+      category: assessment.evidence?.searchResultOnly
+        ? 'expert_directory_search_result'
+        : 'expert_directory',
+      title: `${assessment.directoryName}${
+        assessment.evidence?.searchResultOnly ? ' (search result)' : ' profile'
+      }`,
+      summary: assessment.explanation,
+      url: assessment.profileUrl,
+      retrievedAt: assessment.evidence?.retrievedAt ?? assessment.retrievedAt,
+      access: 'public',
+    });
+  }
+  for (const assessment of boardAssessments?.assessments ?? []) {
+    const url = assessment.evidence?.url ?? assessment.verificationUrl;
+    if (!url) continue;
+    extra.push({
+      sourceId: assessment.entry.boardId ?? 'board_certification',
+      category: assessment.evidence?.searchResultOnly
+        ? 'board_certification_search_result'
+        : 'board_certification',
+      title: `${assessment.boardCanonical ?? 'Board'}${
+        assessment.evidence?.searchResultOnly
+          ? ' (search result)'
+          : ' verification'
+      }`,
+      summary: assessment.explanation,
+      url,
+      retrievedAt: assessment.evidence?.retrievedAt ?? assessment.retrievedAt,
+      access: 'public',
+    });
+  }
+  for (const assessment of affiliationAssessments?.assessments ?? []) {
+    const url = assessment.evidence?.url;
+    if (!url) continue;
+    const training = assessment.evidence?.trainingDocument;
+    extra.push({
+      sourceId: 'institutional_affiliation',
+      category: training
+        ? 'training_practicum_source'
+        : assessment.evidence?.searchResultOnly
+          ? 'affiliation_search_result'
+          : 'institutional_affiliation',
+      title: `${assessment.institutionCanonical ?? 'Institution'}${
+        training
+          ? ' (training / practicum)'
+          : assessment.evidence?.searchResultOnly
+            ? ' (search result)'
+            : ' affiliation'
+      }`,
+      summary: assessment.explanation,
+      url,
+      retrievedAt: assessment.evidence?.retrievedAt ?? assessment.retrievedAt,
+      access: 'public',
+    });
+  }
+  for (const assessment of membershipAssessments?.assessments ?? []) {
+    const url =
+      assessment.evidence?.url ??
+      assessment.directoryUrl ??
+      assessment.officialWebsite;
+    if (!url) continue;
+    extra.push({
+      sourceId: 'professional_membership',
+      category: assessment.evidence
+        ? 'professional_membership'
+        : 'professional_membership_directory',
+      title: `${assessment.organizationCanonical ?? assessment.entry.organization ?? 'Membership'}${
+        assessment.evidence ? ' membership' : ' directory'
+      }`,
+      summary: assessment.explanation,
+      url,
+      retrievedAt: assessment.evidence?.retrievedAt ?? assessment.retrievedAt,
+      access: 'public',
+    });
+  }
+  for (const assessment of accreditation?.assessments ?? []) {
+    for (const hit of [
+      assessment.apaEvidence,
+      assessment.institutionalEvidence,
+    ]) {
+      if (!hit?.url) continue;
+      extra.push({
+        sourceId: 'university_accreditation',
+        category:
+          hit.kind === 'apa_program'
+            ? 'apa_program_accreditation'
+            : 'institutional_accreditation',
+        title: `${assessment.entry.institution ?? 'Institution'} (${hit.kind === 'apa_program' ? 'APA CoA' : 'institutional'})`,
+        summary: assessment.explanation,
+        url: hit.url,
+        retrievedAt: hit.retrievedAt,
+        access: 'public',
+      });
+    }
+  }
+  return [...evidence, ...extra];
+}
+
 function sourceIndexSection(
   spec: EwiReportSectionSpec,
   evidence: ExpertEvidenceItem[],
+  directoryAssessments?: DirectoryAdvertisingDossier | null,
+  boardCertificationAssessments?: BoardCertificationDossier | null,
+  affiliationAssessments?: AffiliationDossier | null,
+  membershipAssessments?: MembershipDossier | null,
+  accreditation?: AccreditationDossier | null,
 ): ReportSectionModel {
   const blocks: ReportBlock[] = [
     {
-      text: 'Source index of collected items. Links are included when present. Restricted items list title and link only; PDF storage is not claimed unless legally permitted and actually performed.',
+      text: 'Source Index lists unique display rows for supporting URLs (owned-website hosts grouped; assessment evidence URLs included once). This is not the same metric as “collected evidence items” in the Executive Summary (reportable research records) or the separate Source Links export (unique http(s) URLs). Restricted items list title and link only; PDF storage is not claimed unless legally permitted and actually performed. Training brochures are labeled separately from appointment sources.',
       style: 'note',
     },
     {
@@ -2665,18 +3780,79 @@ function sourceIndexSection(
       style: 'note',
     },
   ];
-  if (evidence.length === 0) {
+  const indexed = evidenceWithDirectoryAssessments(
+    evidence,
+    directoryAssessments,
+    boardCertificationAssessments,
+    affiliationAssessments,
+    membershipAssessments,
+    accreditation,
+  );
+  if (indexed.length === 0) {
     blocks.push({ text: 'No source links were collected.', style: 'note' });
     return { id: spec.id, title: spec.title, blocks };
   }
   const seenUrl = new Set<string>();
-  let index = 0;
-  for (const item of evidence) {
-    const urlKey = (item.url ?? '').trim().toLowerCase();
+  const ownedByHost = new Map<string, ExpertEvidenceItem[]>();
+  const other: ExpertEvidenceItem[] = [];
+  for (const item of indexed) {
+    const raw = (item.url ?? '').trim();
+    const urlKey = raw ? normalizeFindingUrl(raw) : '';
     if (urlKey) {
       if (seenUrl.has(urlKey)) continue;
       seenUrl.add(urlKey);
     }
+    if (item.url && isOwnedWebsiteEvidence(item)) {
+      const host = hostKeyFromUrl(item.url);
+      if (host) {
+        const bucket = ownedByHost.get(host) ?? [];
+        bucket.push(item);
+        ownedByHost.set(host, bucket);
+        continue;
+      }
+    }
+    other.push(item);
+  }
+  let index = 0;
+  for (const [host, items] of [...ownedByHost.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    index += 1;
+    const primary = items[0];
+    const access =
+      primary.access === 'restricted'
+        ? 'restricted (body not stored; PDF not saved)'
+        : sourceAccessLabel(primary);
+    blocks.push({
+      text: `${index}. [expert website] ${host} — access: ${access}`,
+      style: 'item',
+    });
+    if (primary.url) {
+      blocks.push({ text: primary.url, link: primary.url, style: 'citation' });
+    }
+    const paths = items
+      .slice(1)
+      .map((item) => {
+        try {
+          return new URL(item.url!).pathname.replace(/\/$/, '') || '/';
+        } catch {
+          return item.url ?? '';
+        }
+      })
+      .filter((p) => p && p !== '/');
+    if (paths.length > 0) {
+      blocks.push({
+        text: `Also: ${[...new Set(paths)].slice(0, 8).join(', ')}`,
+        style: 'note',
+      });
+      for (const item of items.slice(1).slice(0, 8)) {
+        if (item.url) {
+          blocks.push({ text: item.url, link: item.url, style: 'citation' });
+        }
+      }
+    }
+  }
+  for (const item of other) {
     index += 1;
     const access =
       item.access === 'restricted'
@@ -2790,6 +3966,137 @@ function evidenceSection(
         ? [{ text: EMPTY, style: 'note' }]
         : items.flatMap(findingBlocks),
   };
+}
+
+/** §10: one block group per CV degree when assessments exist. */
+function universityAccreditationSection(
+  spec: EwiReportSectionSpec,
+  tracker: ClaimTracker,
+  dossier: AccreditationDossier | null,
+): ReportSectionModel {
+  const legacy = evidenceSection(spec, tracker, {
+    categories: ['university', 'accreditation'],
+    providers: ['university_accreditation'],
+    titleHints: ['accredit', 'CHEA', 'College Navigator', 'APA CoA'],
+  });
+  const assessments = dossier?.assessments ?? [];
+  if (assessments.length === 0) {
+    return legacy;
+  }
+  const blocks: ReportBlock[] = [
+    {
+      text: 'Per-degree accreditation assessments use official APA CoA program listings and CHEA / U.S. Department of Education institutional sources when retrieved. A missing listing is not proof a school or program was unaccredited.',
+      style: 'note',
+    },
+  ];
+  for (const assessment of assessments) {
+    blocks.push(...accreditationAssessmentBlocks(assessment));
+  }
+  const legacyOwn = legacy.blocks.filter((block) => block.text !== EMPTY);
+  for (const block of legacyOwn) blocks.push(block);
+  if (dossier?.warnings?.length) {
+    for (const warning of dossier.warnings) {
+      blocks.push({ text: warning, style: 'note' });
+    }
+  }
+  return { id: spec.id, title: spec.title, blocks };
+}
+
+function accreditationAssessmentBlocks(
+  assessment: ProgramAccreditationAssessment,
+): ReportBlock[] {
+  const entry = assessment.entry;
+  const degreeLabel =
+    entry.degreeName ??
+    entry.program ??
+    entry.fieldOfStudy ??
+    entry.degreeKind ??
+    'Education entry';
+  const institution = entry.institution ?? 'Institution not stated';
+  const period = formatEducationPeriod(entry);
+  const blocks: ReportBlock[] = [
+    {
+      text: `${degreeLabel} — ${institution}`,
+      style: 'subheading',
+    },
+    {
+      text: `CV claim: ${entry.statement}`,
+      noProof: true,
+    },
+  ];
+  if (entry.quote && entry.quote !== entry.statement) {
+    blocks.push({ text: `Quote: “${entry.quote}”`, style: 'citation' });
+  }
+  if (entry.page != null) {
+    blocks.push({
+      text: `CV page: ${entry.page}`,
+      style: 'citation',
+      noProof: true,
+    });
+  }
+  if (entry.cvSourceUrl) {
+    blocks.push({
+      text: entry.cvSourceUrl,
+      link: entry.cvSourceUrl.startsWith('http') ? entry.cvSourceUrl : undefined,
+      style: 'citation',
+    });
+  }
+  blocks.push({
+    text: `Degree / program: ${entry.degreeName ?? 'not stated'}${
+      entry.program || entry.fieldOfStudy
+        ? ` / ${entry.program ?? entry.fieldOfStudy}`
+        : ''
+    }`,
+    noProof: true,
+  });
+  blocks.push({ text: `Attendance / graduation period: ${period}`, noProof: true });
+  blocks.push({
+    text: `APA CoA result: ${ACCREDITATION_STATUS_LABEL[assessment.apaStatus]}`,
+  });
+  if (assessment.institutionalStatus) {
+    blocks.push({
+      text: `Institutional (CHEA/USDE) result: ${ACCREDITATION_STATUS_LABEL[assessment.institutionalStatus]}`,
+    });
+  }
+  blocks.push({ text: assessment.explanation });
+  const evidenceUrl =
+    assessment.apaEvidence?.url ?? assessment.institutionalEvidence?.url;
+  if (evidenceUrl) {
+    blocks.push({
+      text: `Evidence: ${evidenceUrl}`,
+      link: evidenceUrl,
+      style: 'citation',
+    });
+  }
+  const retrieved =
+    assessment.apaEvidence?.retrievedAt ??
+    assessment.institutionalEvidence?.retrievedAt ??
+    assessment.retrievedAt;
+  if (retrieved) {
+    blocks.push({
+      text: `Retrieved: ${formatInvestigationDate(retrieved)}`,
+      style: 'citation',
+      noProof: true,
+    });
+  }
+  for (const limitation of assessment.limitations) {
+    blocks.push({ text: limitation, style: 'note' });
+  }
+  return blocks;
+}
+
+function formatEducationPeriod(entry: {
+  startYear: number | null;
+  endYear: number | null;
+  graduationYear: number | null;
+}): string {
+  if (entry.startYear && entry.endYear && entry.startYear !== entry.endYear) {
+    return `${entry.startYear}–${entry.endYear}`;
+  }
+  if (entry.graduationYear) return `Graduated ${entry.graduationYear}`;
+  if (entry.endYear) return `Ended ${entry.endYear}`;
+  if (entry.startYear) return `Started ${entry.startYear}`;
+  return 'Not stated on CV';
 }
 
 function professionalGroupSection(
