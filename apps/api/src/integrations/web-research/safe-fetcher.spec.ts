@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-base-to-string -- test doubles */
 import { SafeFetcher, isPrivateAddress } from './safe-fetcher';
+import { extractPdfText } from './pdf-text';
 
 jest.mock('./pdf-text', () => ({
   extractPdfText: jest.fn(async () => ({
@@ -378,10 +379,7 @@ describe('SafeFetcher', () => {
   });
 
   it('rejects corrupted PDF bytes', async () => {
-    const { extractPdfText } = jest.requireMock('./pdf-text') as {
-      extractPdfText: jest.Mock;
-    };
-    extractPdfText.mockRejectedValueOnce(new Error('bad pdf'));
+    jest.mocked(extractPdfText).mockRejectedValueOnce(new Error('bad pdf'));
     const fake = fakeFetch((url) => {
       if (url.endsWith('/robots.txt')) return new Response('', { status: 404 });
       return new Response(Buffer.from('%PDF-1.4 corrupted-not-a-real-file'), {

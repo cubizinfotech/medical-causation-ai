@@ -77,14 +77,20 @@ describe('affiliation assessment scenarios', () => {
       expertName: 'Jane Expert',
       specialty: 'Clinical Neuropsychology',
       city: 'Tampa, FL',
-      search: async () => [
-        { url: USF_FACULTY.url, title: USF_FACULTY.title, snippet: 'faculty' },
-      ],
-      fetchPage: async () => ({
-        url: USF_FACULTY.url,
-        title: USF_FACULTY.title,
-        text: USF_FACULTY.text,
-      }),
+      search: () =>
+        Promise.resolve([
+          {
+            url: USF_FACULTY.url,
+            title: USF_FACULTY.title,
+            snippet: 'faculty',
+          },
+        ]),
+      fetchPage: () =>
+        Promise.resolve({
+          url: USF_FACULTY.url,
+          title: USF_FACULTY.title,
+          text: USF_FACULTY.text,
+        }),
     });
     expect(dossier.assessments[0].status).toBe('independently_verified');
     expect(dossier.assessments[0].evidence?.url).toContain('usf.edu');
@@ -103,18 +109,20 @@ describe('affiliation assessment scenarios', () => {
       expertName: 'Jane Expert',
       specialty: 'Clinical Neuropsychology',
       city: 'Tampa, FL',
-      search: async () => [
-        {
+      search: () =>
+        Promise.resolve([
+          {
+            url: HOSPITAL_STAFF.url,
+            title: HOSPITAL_STAFF.title,
+            snippet: 'staff',
+          },
+        ]),
+      fetchPage: () =>
+        Promise.resolve({
           url: HOSPITAL_STAFF.url,
           title: HOSPITAL_STAFF.title,
-          snippet: 'staff',
-        },
-      ],
-      fetchPage: async () => ({
-        url: HOSPITAL_STAFF.url,
-        title: HOSPITAL_STAFF.title,
-        text: HOSPITAL_STAFF.text,
-      }),
+          text: HOSPITAL_STAFF.text,
+        }),
     });
     expect(dossier.assessments[0].status).toBe('independently_verified');
   });
@@ -127,20 +135,27 @@ describe('affiliation assessment scenarios', () => {
           relationshipType: 'historical_appointment',
           startYear: 2008,
           endYear: 2012,
-          statement: 'Assistant Professor, University of South Florida, 2008–2012',
+          statement:
+            'Assistant Professor, University of South Florida, 2008–2012',
         }),
       ],
       expertName: 'Jane Expert',
       specialty: 'Clinical Neuropsychology',
       city: 'Tampa, FL',
-      search: async () => [
-        { url: USF_FACULTY.url, title: USF_FACULTY.title, snippet: 'faculty' },
-      ],
-      fetchPage: async () => ({
-        url: USF_FACULTY.url,
-        title: USF_FACULTY.title,
-        text: USF_FACULTY.text,
-      }),
+      search: () =>
+        Promise.resolve([
+          {
+            url: USF_FACULTY.url,
+            title: USF_FACULTY.title,
+            snippet: 'faculty',
+          },
+        ]),
+      fetchPage: () =>
+        Promise.resolve({
+          url: USF_FACULTY.url,
+          title: USF_FACULTY.title,
+          text: USF_FACULTY.text,
+        }),
     });
     expect(dossier.assessments[0].status).toBe(
       'historical_appointment_verified',
@@ -164,10 +179,11 @@ describe('affiliation assessment scenarios', () => {
         }),
       ],
       expertName: 'Jane Expert',
-      search: async () => [
-        { url: brochure.url, title: brochure.title, snippet: brochure.text },
-      ],
-      fetchPage: async () => brochure,
+      search: () =>
+        Promise.resolve([
+          { url: brochure.url, title: brochure.title, snippet: brochure.text },
+        ]),
+      fetchPage: () => Promise.resolve(brochure),
     });
     expect(dossier.assessments[0].status).toBe(
       'training_or_practicum_confirmed',
@@ -233,17 +249,19 @@ describe('affiliation assessment scenarios', () => {
       expertName: 'Jane Expert',
       specialty: 'Clinical Neuropsychology',
       city: 'Tampa, FL',
-      search: async () => [
-        {
+      search: () =>
+        Promise.resolve([
+          {
+            url: 'https://openalex.org/authors/A123',
+            title: 'Jane Expert',
+            snippet: 'University of South Florida',
+          },
+        ]),
+      fetchPage: () =>
+        Promise.resolve({
           url: 'https://openalex.org/authors/A123',
-          title: 'Jane Expert',
-          snippet: 'University of South Florida',
-        },
-      ],
-      fetchPage: async () => ({
-        url: 'https://openalex.org/authors/A123',
-        text: 'Jane Expert, University of South Florida, Clinical Neuropsychology, Tampa',
-      }),
+          text: 'Jane Expert, University of South Florida, Clinical Neuropsychology, Tampa',
+        }),
     });
     expect(dossier.assessments[0].status).not.toBe('independently_verified');
     expect(dossier.assessments[0].evidence?.url ?? '').not.toMatch(/openalex/i);
@@ -255,14 +273,16 @@ describe('affiliation assessment scenarios', () => {
       expertName: 'Jane Expert',
       specialty: 'Clinical Neuropsychology',
       city: 'Tampa, FL',
-      search: async () => [
-        { url: USF_FACULTY.url, title: 'John Expert', snippet: 'faculty' },
-      ],
-      fetchPage: async () => ({
-        url: USF_FACULTY.url,
-        title: 'John Expert — USF',
-        text: 'John Expert, Ph.D., Professor, Clinical Neuropsychology, Tampa, FL, University of South Florida',
-      }),
+      search: () =>
+        Promise.resolve([
+          { url: USF_FACULTY.url, title: 'John Expert', snippet: 'faculty' },
+        ]),
+      fetchPage: () =>
+        Promise.resolve({
+          url: USF_FACULTY.url,
+          title: 'John Expert — USF',
+          text: 'John Expert, Ph.D., Professor, Clinical Neuropsychology, Tampa, FL, University of South Florida',
+        }),
     });
     expect(dossier.assessments[0].status).toBe('no_matching_record');
   });
@@ -271,15 +291,17 @@ describe('affiliation assessment scenarios', () => {
     const dossier = await assessInstitutionalAffiliations({
       entries: [entry({ statement: 'Professor, University of South Florida' })],
       expertName: 'Jane Expert',
-      search: async () => [
-        { url: USF_FACULTY.url, title: 'Faculty', snippet: 'directory' },
-      ],
-      fetchPage: async () => ({
-        url: USF_FACULTY.url,
-        text: 'Please sign in to view the faculty directory.',
-        loginRequired: true,
-        restricted: true,
-      }),
+      search: () =>
+        Promise.resolve([
+          { url: USF_FACULTY.url, title: 'Faculty', snippet: 'directory' },
+        ]),
+      fetchPage: () =>
+        Promise.resolve({
+          url: USF_FACULTY.url,
+          text: 'Please sign in to view the faculty directory.',
+          loginRequired: true,
+          restricted: true,
+        }),
     });
     expect(dossier.assessments[0].status).toBe('unable_to_access');
   });
@@ -291,17 +313,19 @@ describe('affiliation assessment scenarios', () => {
       specialty: 'Clinical Neuropsychology',
       city: 'Tampa, FL',
       ownSiteHosts: ['janeexpert.com'],
-      search: async () => [
-        {
+      search: () =>
+        Promise.resolve([
+          {
+            url: 'https://janeexpert.com/about',
+            title: 'About',
+            snippet: 'Professor at University of South Florida',
+          },
+        ]),
+      fetchPage: () =>
+        Promise.resolve({
           url: 'https://janeexpert.com/about',
-          title: 'About',
-          snippet: 'Professor at University of South Florida',
-        },
-      ],
-      fetchPage: async () => ({
-        url: 'https://janeexpert.com/about',
-        text: 'Jane Expert is Clinical Assistant Professor at University of South Florida, Clinical Neuropsychology, Tampa',
-      }),
+          text: 'Jane Expert is Clinical Assistant Professor at University of South Florida, Clinical Neuropsychology, Tampa',
+        }),
     });
     expect(dossier.assessments[0].status).toBe('self_reported');
   });
@@ -497,8 +521,7 @@ describe('affiliation assessment scenarios', () => {
     expect(extracted.some((c) => c.category === 'training')).toBe(true);
     expect(
       extracted.some(
-        (c) =>
-          c.category === 'appointment' && /Professor/i.test(c.statement),
+        (c) => c.category === 'appointment' && /Professor/i.test(c.statement),
       ),
     ).toBe(true);
 
@@ -568,14 +591,15 @@ describe('affiliation assessment scenarios', () => {
       expertName: 'Jane Expert',
       specialty: 'Clinical Neuropsychology',
       city: 'Tampa, FL',
-      search: async () => [
-        {
-          url: USF_FACULTY.url,
-          title: 'Jane Expert — USF Faculty',
-          snippet:
-            'Jane Expert, Clinical Neuropsychology, Tampa, University of South Florida faculty',
-        },
-      ],
+      search: () =>
+        Promise.resolve([
+          {
+            url: USF_FACULTY.url,
+            title: 'Jane Expert — USF Faculty',
+            snippet:
+              'Jane Expert, Clinical Neuropsychology, Tampa, University of South Florida faculty',
+          },
+        ]),
       // No fetchPage → search result only
     });
     expect(dossier.assessments[0].status).toBe('potential_match_unconfirmed');

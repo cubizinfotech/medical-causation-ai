@@ -327,7 +327,8 @@ export function finalizeCvClaims(
  * re-emitted as Self-Reported.
  */
 export function isJunkCvClaim(claim: Omit<CvClaim, 'id'>): boolean {
-  const hay = `${claim.statement} ${claim.quote} ${claim.details.title ?? ''}`.toLowerCase();
+  const hay =
+    `${claim.statement} ${claim.quote} ${claim.details.title ?? ''}`.toLowerCase();
   if (
     /\b(curriculum vitae|personal information|business address|business telephone|business facsimile|e-?mail address)\b/.test(
       hay,
@@ -393,11 +394,11 @@ const MEMBERSHIP_LINE =
   /\b((?:Member|Fellow|Member of|Membership)\s+(?:of\s+)?(?:the\s+)?[A-Z][^.\n]{8,100})/gi;
 
 const APPOINTMENT_LINE =
-  /\b((?:Clinical|Assistant|Associate|Adjunct|Full|Visiting)?\s*(?:Professor|Faculty|Instructor|Attending|Director|Chief)\b\s*[,:\-]?\s*[^.\n]{4,140})/gi;
+  /\b((?:Clinical|Assistant|Associate|Adjunct|Full|Visiting)?\s*(?:Professor|Faculty|Instructor|Attending|Director|Chief)\b\s*[,:-]?\s*[^.\n]{4,140})/gi;
 
 /** Practicum / internship / residency / fellowship training sites. */
 const TRAINING_LINE =
-  /\b((?:Predoctoral|Postdoctoral|Clinical)?\s*(?:Practicum|Internship|Intern(?:ship)?|Externship|Residency|Fellowship|Clinical training)\s*[,:\-]?\s*[^.\n]{4,140})/gi;
+  /\b((?:Predoctoral|Postdoctoral|Clinical)?\s*(?:Practicum|Internship|Intern(?:ship)?|Externship|Residency|Fellowship|Clinical training)\s*[,:-]?\s*[^.\n]{4,140})/gi;
 
 const TRAINING_DOMINANT =
   /\b(practicum|internship|intern\b|externship|residency|fellowship|clinical training|training site|site supervisor)\b/i;

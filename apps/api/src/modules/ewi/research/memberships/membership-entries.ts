@@ -71,7 +71,7 @@ function pickOrganization(
   }
   // "AACN — Member" / "National Academy of Neuropsychology (Member)"
   const paren = statement.match(
-    /^(.{6,120}?)\s*[\(–—-]\s*(?:member|fellow|affiliate)/i,
+    /^(.{6,120}?)\s*[(–—-]\s*(?:member|fellow|affiliate)/i,
   );
   if (paren?.[1]) return paren[1].replace(/\s+/g, ' ').trim().slice(0, 160);
   return null;
@@ -95,7 +95,10 @@ function looksLikeNonMembership(claim: CvClaim): boolean {
     return true;
   }
   // Education / employment without membership cue as the primary framing.
-  if (NOT_MEMBERSHIP.test(hay) && !/\b(member|fellow of|membership)\b/i.test(hay)) {
+  if (
+    NOT_MEMBERSHIP.test(hay) &&
+    !/\b(member|fellow of|membership)\b/i.test(hay)
+  ) {
     return true;
   }
   // Training fellowship at a university.
@@ -151,7 +154,9 @@ export function membershipEntriesFromClaims(
     const draft: Omit<MembershipEntry, 'id'> = {
       organization,
       membershipType:
-        membershipType === 'unknown' && organization ? 'member' : membershipType,
+        membershipType === 'unknown' && organization
+          ? 'member'
+          : membershipType,
       statusText: pickStatus(statement),
       startYear,
       endYear,

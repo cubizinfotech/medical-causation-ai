@@ -17,18 +17,16 @@ describe('google-drive', () => {
     expect(
       googleDriveFileId(`https://drive.google.com/file/d/${id}/preview`),
     ).toBe(id);
+    expect(googleDriveFileId(`https://drive.google.com/open?id=${id}`)).toBe(
+      id,
+    );
     expect(
-      googleDriveFileId(`https://drive.google.com/open?id=${id}`),
-    ).toBe(id);
-    expect(
-      googleDriveFileId(
-        `https://drive.google.com/uc?export=download&id=${id}`,
-      ),
+      googleDriveFileId(`https://drive.google.com/uc?export=download&id=${id}`),
     ).toBe(id);
     expect(isGoogleDriveFileUrl('https://example.com/cv.pdf')).toBe(false);
-    expect(googleDriveFileId('https://drive.google.com/drive/folders/abc')).toBe(
-      null,
-    );
+    expect(
+      googleDriveFileId('https://drive.google.com/drive/folders/abc'),
+    ).toBe(null);
   });
 
   it('resolves to the export download URL', () => {
@@ -61,11 +59,18 @@ describe('google-drive', () => {
     const id = '1PublicTestFileIdABCDEFGHIJK';
     const pdf = Buffer.from(
       '%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n' +
-        'CURRICULUM VITAE Jane Expert Ph.D. Education University 2001 '.repeat(3),
+        'CURRICULUM VITAE Jane Expert Ph.D. Education University 2001 '.repeat(
+          3,
+        ),
     );
     const calls: string[] = [];
     const fetchImpl = ((input: string | URL | Request) => {
-      const url = String(input);
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
       calls.push(url);
       if (url.includes('uc?export=download')) {
         return Promise.resolve(
@@ -94,7 +99,12 @@ describe('google-drive', () => {
   it('marks login HTML as restricted, not a PDF', async () => {
     const id = '1PrivateFileIdABCDEFGHIJKLMN';
     const fetchImpl = ((input: string | URL | Request) => {
-      const url = String(input);
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
       if (url.includes('uc?export=download')) {
         return Promise.resolve(
           new Response(

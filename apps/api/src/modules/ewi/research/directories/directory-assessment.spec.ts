@@ -16,9 +16,7 @@ const CORE = DIRECTORY_REGISTRY.filter((d) =>
   ['jurispro', 'seak', 'expertpages', 'dri'].includes(d.id),
 );
 
-function only(
-  ...ids: string[]
-): readonly RegisteredAdvertisingDirectory[] {
+function only(...ids: string[]): readonly RegisteredAdvertisingDirectory[] {
   return DIRECTORY_REGISTRY.filter((d) => ids.includes(d.id));
 }
 
@@ -65,16 +63,16 @@ describe('directory registry', () => {
     expect(isAdvertisingDirectoryHost('https://jurispro.com/expert/1')).toBe(
       true,
     );
-    expect(
-      isAdvertisingDirectoryHost('https://practice.example/about'),
-    ).toBe(false);
+    expect(isAdvertisingDirectoryHost('https://practice.example/about')).toBe(
+      false,
+    );
     expect(directoryById('dri')?.searchMethod).toBe('none');
   });
 
   it('10. third-party directory is not treated as an owned practice host helper', () => {
-    expect(isAdvertisingDirectoryHost('https://www.seakexperts.com/experts/x')).toBe(
-      true,
-    );
+    expect(
+      isAdvertisingDirectoryHost('https://www.seakexperts.com/experts/x'),
+    ).toBe(true);
     expect(isAdvertisingDirectoryHost('https://drpractice.example/')).toBe(
       false,
     );
@@ -254,9 +252,7 @@ describe('assessDirectoryListingsFromMaterials', () => {
         searchAttempted: true,
       },
     );
-    expect(dossier.assessments[0].status).toBe(
-      'potential_match_unconfirmed',
-    );
+    expect(dossier.assessments[0].status).toBe('potential_match_unconfirmed');
     expect(dossier.assessments[0].status).not.toBe('profile_found');
   });
 
@@ -291,24 +287,26 @@ describe('assessDirectoryListings async', () => {
       specialty: 'Clinical Neuropsychology',
       city: 'Tampa, FL',
       directories: only('jurispro'),
-      search: async () => [
-        {
-          url: 'https://www.jurispro.com/expert/jane-expert',
-          title: 'Jane Expert',
-          snippet: 'Jane Expert neuropsychology',
-        },
-        {
-          url: 'http://jurispro.com/expert/jane-expert/',
-          title: 'Jane Expert dup',
-          snippet: 'duplicate',
-        },
-      ],
-      fetchPage: async (url) => ({
-        url,
-        title: 'Jane Expert — JurisPro',
-        text: JURISPRO_STRONG.text,
-        retrievedAt: '2026-11-06T00:00:00.000Z',
-      }),
+      search: () =>
+        Promise.resolve([
+          {
+            url: 'https://www.jurispro.com/expert/jane-expert',
+            title: 'Jane Expert',
+            snippet: 'Jane Expert neuropsychology',
+          },
+          {
+            url: 'http://jurispro.com/expert/jane-expert/',
+            title: 'Jane Expert dup',
+            snippet: 'duplicate',
+          },
+        ]),
+      fetchPage: (url) =>
+        Promise.resolve({
+          url,
+          title: 'Jane Expert — JurisPro',
+          text: JURISPRO_STRONG.text,
+          retrievedAt: '2026-11-06T00:00:00.000Z',
+        }),
     });
     expect(dossier.assessments[0].status).toBe('profile_found');
     expect(dossier.assessments[0].evidence?.searchResultOnly).toBe(false);
